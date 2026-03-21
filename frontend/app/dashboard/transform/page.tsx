@@ -24,6 +24,11 @@ interface AnalysisData {
   design_tokens: Record<string, unknown>
 }
 
+interface TransformData {
+  refined_ui: Record<string, unknown>
+  code: string
+}
+
 function BrowserFrame({ children, label, accent = false }: { children: React.ReactNode; label: string; accent?: boolean }) {
   return (
     <div className="flex flex-col gap-2 flex-1 min-w-0">
@@ -50,13 +55,26 @@ function BrowserFrame({ children, label, accent = false }: { children: React.Rea
 
 export default function TransformPage() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
+  const [transform, setTransform] = useState<TransformData | null>(null)
   const [scOpen, setScOpen] = useState(false)
+  const [codeOpen, setCodeOpen] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     const stored = sessionStorage.getItem('refineui_analysis')
     if (stored) { try { setAnalysis(JSON.parse(stored)) } catch { /* */ } }
+    const storedTransform = sessionStorage.getItem('refineui_transform')
+    if (storedTransform) { try { setTransform(JSON.parse(storedTransform)) } catch { /* */ } }
   }, [])
+
+  function handleCopyCode() {
+    if (!transform?.code) return
+    navigator.clipboard.writeText(transform.code).then(() => {
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 2000)
+    })
+  }
 
   if (!analysis) {
     return (
@@ -154,35 +172,59 @@ export default function TransformPage() {
           </div>
         </div>
 
-        {/* ── SECONDARY: Heatmaps (small) ── */}
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-center mb-4" style={{ color: 'rgba(255,255,255,0.2)' }}>Predicted Attention Analysis</p>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-4xl mx-auto">
-            {[
-              { label: 'Original UI', gradient: 'radial-gradient(ellipse at 45% 35%, rgba(255,0,0,0.5) 0%, rgba(255,100,0,0.25) 20%, transparent 45%), radial-gradient(ellipse at 30% 65%, rgba(255,80,0,0.4) 0%, transparent 40%)' },
-              { label: 'Refined UI', gradient: 'radial-gradient(ellipse at 35% 30%, rgba(80,0,255,0.35) 0%, transparent 45%), radial-gradient(ellipse at 65% 50%, rgba(255,0,0,0.25) 0%, transparent 35%), radial-gradient(ellipse at 50% 75%, rgba(0,50,255,0.25) 0%, transparent 40%)' },
-            ].map((hm) => (
-              <div key={hm.label} className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="px-4 pt-3 pb-2">
-                  <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>Heatmap: {hm.label}</span>
-                </div>
-                <div className="px-3 pb-3">
-                  <div className="relative rounded-lg overflow-hidden" style={{ background: '#0a0820', aspectRatio: '16/7' }}>
-                    <div className="absolute inset-0 p-3 opacity-20">
-                      <div className="flex gap-2 h-full">
-                        <div className="w-10 space-y-1">{[1,2,3,4].map(n => <div key={n} className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.1)' }} />)}</div>
-                        <div className="flex-1 space-y-1.5">
-                          <div className="h-3 w-1/2 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                          <div className="grid grid-cols-3 gap-1">{[1,2,3].map(n => <div key={n} className="h-10 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: hm.gradient, mixBlendMode: 'screen' }} />
-                  </div>
-                </div>
+        {/* ── Generated Code ── */}
+        {transform?.code && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
+            {/* Header row */}
+            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: codeOpen ? '1px solid rgba(124,58,237,0.15)' : 'none' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.5)' }} />
+                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.6)' }}>Generated Component Code</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)' }}>React + Tailwind</span>
               </div>
-            ))}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyCode}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-medium transition-all"
+                  style={{ background: codeCopied ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)', border: codeCopied ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,255,255,0.07)', color: codeCopied ? '#86efac' : 'rgba(204,195,216,0.5)' }}
+                >
+                  {codeCopied ? '✓ Copied' : 'Copy'}
+                </button>
+                <button
+                  onClick={() => setCodeOpen(!codeOpen)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-medium transition-all"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(204,195,216,0.5)' }}
+                >
+                  {codeOpen ? 'Collapse' : 'View Code'}
+                </button>
+              </div>
+            </div>
+            {/* Code block */}
+            {codeOpen && (
+              <div className="overflow-auto" style={{ maxHeight: '400px' }}>
+                <pre className="p-5 text-[11px] leading-relaxed" style={{ color: 'rgba(204,195,216,0.75)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  <code>{transform.code}</code>
+                </pre>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* ── Heatmap CTA ── */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => router.push('/dashboard/simulation')}
+            className="flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm text-white transition-all active:scale-[0.98]"
+            style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)', boxShadow: '0 0 30px rgba(124,58,237,0.08)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.2)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.12)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.25)' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" />
+            </svg>
+            <span>Analyse UX Heatmaps</span>
+            <span style={{ color: 'rgba(168,85,247,0.5)', fontSize: '12px' }}>→</span>
+          </button>
         </div>
       </div>
 
