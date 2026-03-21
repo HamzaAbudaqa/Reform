@@ -25,3 +25,8 @@ npm-debug.log*
 # typescript
 tsconfig.tsbuildinfo
 next-env.d.ts
+
+# python
+__pycache__/
+*.pyc
+.venv/
