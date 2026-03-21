@@ -593,10 +593,8 @@ export default function TransformPage() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [transform, setTransform] = useState<TransformData | null>(null)
   const [scOpen, setScOpen] = useState(false)
-<<<<<<< HEAD
   const [codeOpen, setCodeOpen] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
-=======
   const [commits, setCommits] = useState<CommitEntry[]>(INITIAL_COMMITS)
   const [changeStatus, setChangeStatus] = useState<'pending' | 'accepted' | 'rejected'>('pending')
   const [showSuggestModal, setShowSuggestModal] = useState(false)
@@ -605,7 +603,6 @@ export default function TransformPage() {
   const [codeEdit, setCodeEdit] = useState('')
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [selectedCommit, setSelectedCommit] = useState<CommitEntry | null>(null)
->>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
   const router = useRouter()
   const { data: session } = useSession()
 
@@ -642,8 +639,15 @@ export default function TransformPage() {
     const stored = sessionStorage.getItem('refineui_analysis')
     if (stored) { try { setAnalysis(JSON.parse(stored)) } catch { /* */ } }
     const storedTransform = sessionStorage.getItem('refineui_transform')
-<<<<<<< HEAD
-    if (storedTransform) { try { setTransform(JSON.parse(storedTransform)) } catch { /* */ } }
+    if (storedTransform) {
+      try {
+        const t = JSON.parse(storedTransform)
+        setTransform(t)
+        if (t.result) { setTransformResult(t.result); setCodeAnalysis(t.codeAnalysis) }
+        if (t.target) { setSelectedTarget(t.target); setRepoName(t.repoName) }
+        if (t.branch) { setRepoBranch(t.branch || 'main'); setPipelineStep('complete') }
+      } catch { /* */ }
+    }
   }, [])
 
   function handleCopyCode() {
@@ -652,16 +656,6 @@ export default function TransformPage() {
       setCodeCopied(true)
       setTimeout(() => setCodeCopied(false), 2000)
     })
-=======
-    if (storedTransform) {
-      try {
-        const t = JSON.parse(storedTransform)
-        setTransformResult(t.result); setCodeAnalysis(t.codeAnalysis)
-        setSelectedTarget(t.target); setRepoName(t.repoName)
-        setRepoBranch(t.branch || 'main'); setPipelineStep('complete')
-      } catch { /* */ }
-    }
-  }, [])
 
   const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
 
@@ -840,7 +834,6 @@ export default function TransformPage() {
       prev.map(c => c.hash === commit.hash && c.msg === commit.msg ? { ...c, status: 'accepted', color: '#22c55e' } : c)
     )
     setSelectedCommit({ ...commit, status: 'accepted', color: '#22c55e' })
->>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
   }
 
   if (!analysis) {
@@ -1071,17 +1064,6 @@ export default function TransformPage() {
           )}
         </div>
 
-<<<<<<< HEAD
-        {/* ── Generated Code ── */}
-        {transform?.code && (
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
-            {/* Header row */}
-            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: codeOpen ? '1px solid rgba(124,58,237,0.15)' : 'none' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.5)' }} />
-                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.6)' }}>Generated Component Code</span>
-                <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)' }}>React + Tailwind</span>
-=======
         {/* ── SECONDARY: Heatmaps (small) ── */}
         <div>
           <div className="flex items-center justify-center gap-3 mb-5">
@@ -1113,7 +1095,20 @@ export default function TransformPage() {
                     <div className="absolute inset-0 pointer-events-none" style={{ background: hm.gradient, mixBlendMode: 'screen' }} />
                   </div>
                 </div>
->>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Generated Code ── */}
+        {transform?.code && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
+            {/* Header row */}
+            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: codeOpen ? '1px solid rgba(124,58,237,0.15)' : 'none' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.5)' }} />
+                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.6)' }}>Generated Component Code</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)' }}>React + Tailwind</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
