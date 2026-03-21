@@ -46,13 +46,40 @@ class Components(BaseModel):
     forms_controls: ComponentPatterns
 
 
+class Typography(BaseModel):
+    font_family: str
+    font_mono: str
+    scale: list[str]
+    weight_normal: str
+    weight_medium: str
+    weight_bold: str
+
+
+class ShadowTokens(BaseModel):
+    sm: str
+    md: str
+    lg: str
+
+
+class BorderTokens(BaseModel):
+    default: str
+
+
+class MotionTokens(BaseModel):
+    duration_fast: str
+    duration_normal: str
+    easing: str
+
+
 class DesignTokens(BaseModel):
     theme: str
     colors: dict[str, str]
+    typography: Typography
     border_radius: str
     spacing_scale: list[str]
-    shadow_style: str
-    border_style: str
+    shadow: ShadowTokens
+    border: BorderTokens
+    motion: MotionTokens
     density: str
 
 

@@ -1,6 +1,12 @@
 SITE_EXTRACTION_GOAL = """Analyze this website's UI/UX design. Return ONLY a JSON object with exactly these 8 keys. No markdown fences. No explanation. Just the JSON.
 
-Use short snake_case identifiers, not sentences. Example: "dark_graphite_background" not "The background is dark".
+CRITICAL RULES:
+- All design tokens must be directly usable in code (no descriptive phrases).
+- Colors must be real hex values sampled from the rendered page.
+- Shadows must be valid CSS box-shadow values.
+- Borders must be valid CSS border shorthand values.
+- Font families must be real font names observed on the page.
+- Use short snake_case identifiers for pattern lists, not sentences.
 
 {
   "page_type": "single_string_identifier",
@@ -24,7 +30,14 @@ Use short snake_case identifiers, not sentences. Example: "dark_graphite_backgro
     "forms_controls": ["pattern_1", "pattern_2"]
   },
 
-  "typography": "font_family_base_size_scale_description",
+  "typography": {
+    "font_family": "Actual font name, fallback, sans-serif",
+    "font_mono": "Actual mono font, monospace",
+    "scale": ["12px", "14px", "16px", "20px", "24px", "32px", "48px"],
+    "weight_normal": "400",
+    "weight_medium": "500",
+    "weight_bold": "700"
+  },
 
   "design_tokens": {
     "theme": "dark | light | mixed",
@@ -33,13 +46,28 @@ Use short snake_case identifiers, not sentences. Example: "dark_graphite_backgro
       "surface": "#hex",
       "text_primary": "#hex",
       "text_secondary": "#hex",
-      "accent": "#hex",
-      "border": "rgba(...)"
+      "accent_primary": "#hex",
+      "accent_secondary": "#hex",
+      "success": "#hex",
+      "warning": "#hex",
+      "error": "#hex",
+      "border": "rgba(r,g,b,a)"
     },
-    "border_radius": "value",
-    "spacing_scale": ["4px", "8px", "16px", "24px", "32px"],
-    "shadow_style": "descriptor",
-    "border_style": "descriptor",
+    "border_radius": "6px",
+    "spacing_scale": ["4px", "8px", "12px", "16px", "24px", "32px"],
+    "shadow": {
+      "sm": "0 1px 2px rgba(...)",
+      "md": "0 4px 8px rgba(...)",
+      "lg": "0 8px 24px rgba(...)"
+    },
+    "border": {
+      "default": "1px solid rgba(...)"
+    },
+    "motion": {
+      "duration_fast": "150ms",
+      "duration_normal": "200ms",
+      "easing": "ease-out"
+    },
     "density": "compact | comfortable | spacious"
   },
 
@@ -55,7 +83,7 @@ Use short snake_case identifiers, not sentences. Example: "dark_graphite_backgro
   ]
 }
 
-Fill every key. If a component type is not visible on the page, use ["not_present"]. Inspect colors from the actual rendered page. List 3-6 items per array."""
+Fill every key. If a component type is not visible on the page, use ["not_present"]. Inspect colors from the actual rendered page. List 3-6 items per array. All shadow, border, and motion values must be valid CSS."""
 
 
 def build_aggregation_prompt(
@@ -119,13 +147,36 @@ Return ONLY valid JSON (no markdown, no explanation, no text outside the JSON) m
       "surface": "#hex",
       "text_primary": "#hex",
       "text_secondary": "#hex",
-      "accent": "#hex",
+      "accent_primary": "#hex",
+      "accent_secondary": "#hex",
+      "success": "#hex",
+      "warning": "#hex",
+      "error": "#hex",
       "border": "rgba(...)"
     }},
+    "typography": {{
+      "font_family": "font name, fallback, sans-serif",
+      "font_mono": "mono font, monospace",
+      "scale": ["12px", "14px", "16px", "20px", "24px", "32px", "48px"],
+      "weight_normal": "400",
+      "weight_medium": "500",
+      "weight_bold": "700"
+    }},
     "border_radius": "value",
-    "spacing_scale": ["4px", "8px", "16px", "24px", "32px", "48px"],
-    "shadow_style": "descriptor",
-    "border_style": "descriptor",
+    "spacing_scale": ["4px", "8px", "12px", "16px", "24px", "32px"],
+    "shadow": {{
+      "sm": "0 1px 2px rgba(...)",
+      "md": "0 4px 8px rgba(...)",
+      "lg": "0 8px 24px rgba(...)"
+    }},
+    "border": {{
+      "default": "1px solid rgba(...)"
+    }},
+    "motion": {{
+      "duration_fast": "150ms",
+      "duration_normal": "200ms",
+      "easing": "ease-out"
+    }},
     "density": "compact|comfortable|spacious"
   }},
   "flows": {{
@@ -152,5 +203,9 @@ RULES:
 - 4-6 items per pattern list
 - 4-6 recommendations, prioritized: high = layout + spacing first
 - 3-5 items in avoid list — specific anti-patterns that break the target style
-- Design tokens must be concrete inferred values, not descriptions
+- ALL design tokens must be concrete, code-usable values — no descriptive phrases
+- Shadow values must be valid CSS box-shadow
+- Border values must be valid CSS border shorthand
+- Typography must include real font names observed across the analyzed sites
+- Colors must include accent_primary, accent_secondary, success, warning, error
 - Return ONLY the JSON object"""
