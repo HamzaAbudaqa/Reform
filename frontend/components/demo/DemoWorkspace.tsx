@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TransformState, StylePreset } from '@/types'
@@ -9,9 +10,18 @@ import BeforeAfterCanvas from './BeforeAfterCanvas'
 import ControlsPanel from './ControlsPanel'
 
 export default function DemoWorkspace() {
+  const searchParams = useSearchParams()
   const [state, setState] = useState<TransformState>('empty')
   const [preset, setPreset] = useState<StylePreset>('railway')
   const [repoUrl, setRepoUrl] = useState('')
+
+  useEffect(() => {
+    const repo = searchParams.get('repo')
+    if (repo) {
+      setRepoUrl(repo)
+      setState('uploaded')
+    }
+  }, [searchParams])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   const handleSubmit = () => {
