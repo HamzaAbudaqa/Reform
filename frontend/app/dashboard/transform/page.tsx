@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Editor from '@monaco-editor/react'
+import FlowDemoCard from '@/components/demo/FlowDemoCard'
 
 interface CommitEntry {
   hash: string
@@ -974,12 +975,18 @@ export default function TransformPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`data:image/png;base64,${transformResult.before_screenshot}`} alt="Before — real screenshot" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
                 ) : (
-                  <div className="flex items-center justify-center p-8" style={{ minHeight: '280px', background: '#0d0c16' }}>
-                    <div className="text-center max-w-xs">
-                      <svg className="mx-auto mb-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(245,158,11,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Preview unavailable</p>
-                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{transformResult.preview_error || 'Make sure your app is running locally'}</p>
-                    </div>
+                  <div className="relative" style={{ height: '280px' }}>
+                    <FlowDemoCard
+                      steps={[
+                        { label: 'Navigate to section', target: 'sidebar:Workspace', duration: 1200 },
+                        { label: 'Find settings', target: 'nav:Settings', duration: 1000 },
+                        { label: 'Open page', target: 'card:2', duration: 1100 },
+                        { label: 'Locate option', target: 'sidebar:Deploy', duration: 1300 },
+                        { label: 'Confirm action', target: 'modal:confirm', duration: 1400 },
+                      ]}
+                      variant="before"
+                      caption={`Current flow in ${selectedTarget.split('/').pop() || 'page'}`}
+                    />
                   </div>
                 )}
               </BrowserFrame>
@@ -991,12 +998,15 @@ export default function TransformPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`data:image/png;base64,${transformResult.after_screenshot}`} alt="After — improved version" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
                 ) : (
-                  <div className="flex items-center justify-center p-8" style={{ minHeight: '280px', background: '#0d0c16' }}>
-                    <div className="text-center max-w-xs">
-                      <svg className="mx-auto mb-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Preview unavailable</p>
-                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Code changes generated — preview requires running app</p>
-                    </div>
+                  <div className="relative" style={{ height: '280px' }}>
+                    <FlowDemoCard
+                      steps={[
+                        { label: 'One action', target: 'cta:deploy', duration: 800 },
+                        { label: 'Done', target: 'card:1', duration: 600 },
+                      ]}
+                      variant="after"
+                      caption="Streamlined flow after Reform"
+                    />
                   </div>
                 )}
               </BrowserFrame>
