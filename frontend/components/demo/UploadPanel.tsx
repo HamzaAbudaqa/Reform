@@ -81,7 +81,7 @@ export default function UploadPanel({ state, onUpload, onRemove, fileName }: Pro
       {/* Try example button */}
       {state === 'empty' && (
         <button
-          onClick={onUpload}
+          onClick={() => onUpload()}
           className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-500 hover:text-indigo-400 transition-colors py-1.5 rounded-lg hover:bg-indigo-500/5 border border-transparent hover:border-indigo-500/20"
         >
           <Sparkles size={11} />

@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.analyze_competitors import router as competitors_router
 from app.routes.discover_competitors import router as discovery_router
@@ -15,6 +16,14 @@ app = FastAPI(
     title="RefineUI Analysis Service",
     description="TinyFish-powered competitor UI/UX analysis for RefineUI",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://refineui-chi.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(competitors_router)
