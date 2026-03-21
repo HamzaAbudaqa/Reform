@@ -55,6 +55,9 @@ async def transform_code_endpoint(req: CodeTransformRequest):
             target_file=req.target_file,
             design_intelligence=req.design_intelligence,
             user_intent=req.user_intent,
+            repo_clone_url=req.repo_clone_url,
+            branch=req.branch,
+            access_token=req.access_token,
         )
         return CodeTransformResponse(**result)
     except ValueError as e:
