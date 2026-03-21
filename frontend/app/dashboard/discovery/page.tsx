@@ -4,6 +4,31 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useProgress } from '@/components/dashboard/ProgressContext'
 
+// Set to true to skip API calls and use mock data for local testing
+const MOCK_MODE = true
+
+const MOCK_DISCOVERY: DiscoveryData = {
+  project_category: 'SaaS / Developer Tools',
+  competitors: [
+    { name: 'Linear', url: 'https://linear.app', reason: 'Modern issue tracking with sleek UI', relevance: 0.95 },
+    { name: 'Notion', url: 'https://notion.so', reason: 'All-in-one workspace with clean design', relevance: 0.88 },
+    { name: 'Vercel', url: 'https://vercel.com', reason: 'Developer-focused deployment platform', relevance: 0.85 },
+    { name: 'Railway', url: 'https://railway.app', reason: 'Minimal deployment UI', relevance: 0.82 },
+    { name: 'Supabase', url: 'https://supabase.com', reason: 'Open source Firebase alternative', relevance: 0.78 },
+  ],
+  selected_for_analysis: ['https://linear.app', 'https://vercel.com', 'https://railway.app', 'https://notion.so', 'https://supabase.com'],
+}
+
+const MOCK_ANALYSIS = {
+  meta: { project_style_goal: 'minimal, dark, developer-focused', description: 'Mock analysis for local testing' },
+  sources: MOCK_DISCOVERY.selected_for_analysis.map(url => ({ url, page_type: 'landing' })),
+  design_tokens: {
+    colors: { primary: '#7c3aed', background: '#0d0c16', surface: '#13111c', text: '#ffffff' },
+    typography: { fontFamily: 'Inter', baseFontSize: '14px' },
+    spacing: { unit: '4px' },
+  },
+}
+
 const QUESTIONS = [
   { key: 'product_type', label: 'What are you building?', placeholder: 'e.g., Dashboard, Mobile app, SaaS platform', optional: false },
   { key: 'industry', label: 'What industry or field?', placeholder: 'e.g., Fintech, Healthcare, Education, DevTools', optional: false },
@@ -54,9 +79,19 @@ export default function DiscoveryPage() {
   }
 
   async function handleFullPipeline() {
-    const description = QUESTIONS.map(q => `${q.label} ${answers[q.key] || ''}`).join('. ')
     setLoading(true); setError('')
     startProgress('Running full analysis pipeline...')
+
+    if (MOCK_MODE) {
+      setLoadingStatus('Mock mode: skipping crawl...')
+      sessionStorage.setItem('refineui_discovery', JSON.stringify(MOCK_DISCOVERY))
+      sessionStorage.setItem('refineui_analysis', JSON.stringify(MOCK_ANALYSIS))
+      sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
+      finishProgress(); setDiscovery(MOCK_DISCOVERY); setCompleted(true); setLoading(false)
+      return
+    }
+
+    const description = QUESTIONS.map(q => `${q.label} ${answers[q.key] || ''}`).join('. ')
     try {
       setLoadingStatus('Finding competitors in your space...')
       updateProgress(10)
