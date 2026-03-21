@@ -74,7 +74,7 @@ Start directly with the import line or component definitions."""
             messages=[
                 {
                     "role": "user",
-                    "content": f"In under 8 words, summarize this code edit request as a git commit message (no period): {req.suggestion}",
+                    "content": f"""Generate a Git commit title for this UI change. RULES: 3-7 words only, no punctuation, no code terms (no className, div, Tailwind, etc.), focus on user-level impact, action-oriented. Examples: "Improve layout spacing consistency", "Fix background height issues", "Enhance CTA visibility". Change: {req.suggestion}""",
                 }
             ],
         )

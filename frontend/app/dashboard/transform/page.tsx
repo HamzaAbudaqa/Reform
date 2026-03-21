@@ -642,10 +642,10 @@ export default function TransformPage() {
     if (storedTransform) {
       try {
         const t = JSON.parse(storedTransform)
-        setTransform(t)
-        if (t.result) { setTransformResult(t.result); setCodeAnalysis(t.codeAnalysis) }
-        if (t.target) { setSelectedTarget(t.target); setRepoName(t.repoName) }
-        if (t.branch) { setRepoBranch(t.branch || 'main'); setPipelineStep('complete') }
+        setTransform(JSON.parse(storedTransform))
+        setTransformResult(t.result); setCodeAnalysis(t.codeAnalysis)
+        setSelectedTarget(t.target); setRepoName(t.repoName)
+        setRepoBranch(t.branch || 'main'); setPipelineStep('complete')
       } catch { /* */ }
     }
   }, [])
@@ -656,6 +656,7 @@ export default function TransformPage() {
       setCodeCopied(true)
       setTimeout(() => setCodeCopied(false), 2000)
     })
+  }
 
   const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
 
@@ -696,7 +697,9 @@ export default function TransformPage() {
       const result: TransformResult = await res.json()
       setTransformResult(result); setPipelineStep('complete')
       sessionStorage.setItem('refineui_transform', JSON.stringify({ result, codeAnalysis: codeAnalysisResult, target, repoName: repo.full_name, branch: repo.default_branch || 'main' }))
-      const newCommit: CommitEntry = { hash: Math.random().toString(16).slice(2, 8), msg: `refactor: ${result.transformed_files[0]?.diff_summary?.slice(0, 50) || 'UI transformation'}`, color: '#f59e0b', status: 'pending', code: result.transformed_files[0]?.updated_code, suggestion: userIntent || 'Applied design intelligence' }
+      const firstImpact = result.change_annotations[0]?.ux_impact?.split(',')[0]?.split('.')[0]?.trim()
+      const commitLabel = firstImpact || result.transformed_files[0]?.diff_summary?.split('.')[0]?.trim()?.slice(0, 50) || 'Improve UI layout and polish'
+      const newCommit: CommitEntry = { hash: Math.random().toString(16).slice(2, 8), msg: commitLabel, color: '#f59e0b', status: 'pending', code: result.transformed_files[0]?.updated_code, suggestion: userIntent || 'Applied design intelligence' }
       setCommits(prev => [newCommit, ...prev]); setScOpen(true)
     } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Transform failed'); setPipelineStep('idle') }
   }
@@ -707,7 +710,12 @@ export default function TransformPage() {
       setCommitLoading(true); setPipelineError('')
       try {
         const tf = transformResult.transformed_files[0]
-        const commitMsg = `reform: ${transformResult.change_summary.slice(0, 3).join('; ') || tf.diff_summary || 'UI improvements'}`
+        // Build a clean, human-readable commit title from change annotations
+        const impactParts = transformResult.change_annotations.slice(0, 2).map(a => a.ux_impact).filter(Boolean)
+        const commitTitle = impactParts.length > 0
+          ? impactParts[0].split(',')[0].split('.')[0].trim()
+          : tf.diff_summary?.split('.')[0]?.trim() || 'Improve UI layout and polish'
+        const commitMsg = `reform: ${commitTitle.slice(0, 60)}`
         const res = await fetch('http://localhost:8000/commit-to-github', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ repo_name: repoName, branch: repoBranch, file_path: selectedTarget, new_content: tf.updated_code, commit_message: commitMsg, access_token: session.accessToken }),
@@ -724,7 +732,8 @@ export default function TransformPage() {
     setCommits(prev => {
       const hasPending = prev.some(c => c.status === 'pending')
       if (hasPending) return prev.map(c => c.status === 'pending' ? { ...c, status: 'accepted' as const, color: '#22c55e', hash: realHash } : c)
-      return [{ hash: realHash, msg: `reform: ${transformResult?.transformed_files[0]?.diff_summary?.slice(0, 50) || 'UI improvements'}`, color: '#22c55e', status: 'accepted', code: transformResult?.transformed_files[0]?.updated_code } as CommitEntry, ...prev]
+      const fallbackLabel = transformResult?.change_annotations[0]?.ux_impact?.split(',')[0]?.split('.')[0]?.trim() || transformResult?.transformed_files[0]?.diff_summary?.split('.')[0]?.trim()?.slice(0, 50) || 'Improve UI layout and polish'
+      return [{ hash: realHash, msg: fallbackLabel, color: '#22c55e', status: 'accepted', code: transformResult?.transformed_files[0]?.updated_code } as CommitEntry, ...prev]
     })
     setScOpen(true)
   }
@@ -1062,42 +1071,6 @@ export default function TransformPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ── SECONDARY: Heatmaps (small) ── */}
-        <div>
-          <div className="flex items-center justify-center gap-3 mb-5">
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06))' }} />
-            <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Predicted Attention Analysis</p>
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.06), transparent)' }} />
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-4xl mx-auto">
-            {[
-              { label: 'Original UI', gradient: 'radial-gradient(ellipse at 45% 35%, rgba(255,0,0,0.5) 0%, rgba(255,100,0,0.25) 20%, transparent 45%), radial-gradient(ellipse at 30% 65%, rgba(255,80,0,0.4) 0%, transparent 40%)', accent: false },
-              { label: 'Refined UI', gradient: 'radial-gradient(ellipse at 35% 30%, rgba(80,0,255,0.35) 0%, transparent 45%), radial-gradient(ellipse at 65% 50%, rgba(255,0,0,0.25) 0%, transparent 35%), radial-gradient(ellipse at 50% 75%, rgba(0,50,255,0.25) 0%, transparent 40%)', accent: true },
-            ].map((hm) => (
-              <div key={hm.label} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: hm.accent ? '1px solid rgba(168,85,247,0.1)' : '1px solid rgba(255,255,255,0.06)', boxShadow: hm.accent ? '0 0 30px rgba(124,58,237,0.05)' : 'none' }}>
-                <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-                  <span className="text-[11px] font-medium" style={{ color: hm.accent ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.4)' }}>Heatmap: {hm.label}</span>
-                  {hm.accent && <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.08)', color: 'rgba(168,85,247,0.5)', border: '1px solid rgba(168,85,247,0.12)' }}>IMPROVED</span>}
-                </div>
-                <div className="px-3 pb-3">
-                  <div className="relative rounded-lg overflow-hidden" style={{ background: '#0a0820', aspectRatio: '16/7' }}>
-                    <div className="absolute inset-0 p-3 opacity-20">
-                      <div className="flex gap-2 h-full">
-                        <div className="w-10 space-y-1">{[1,2,3,4].map(n => <div key={n} className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.1)' }} />)}</div>
-                        <div className="flex-1 space-y-1.5">
-                          <div className="h-3 w-1/2 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                          <div className="grid grid-cols-3 gap-1">{[1,2,3].map(n => <div key={n} className="h-10 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: hm.gradient, mixBlendMode: 'screen' }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* ── Generated Code ── */}
