@@ -5,10 +5,6 @@ import { useSession, signIn, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
 
-const SUGGESTIONS = [
-  'Refine a Next.js dashboard to Railway style',
-  'Apply minimal preset to my admin panel',
-]
 
 interface GithubRepo {
   id: number
@@ -347,25 +343,6 @@ export default function NewPage() {
                   borderBottom: '1px solid rgba(255,255,255,0.08)',
                 }}
               />
-
-              {/* AI suggestions */}
-              {!query && (
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '8px 0' }}>
-                  {SUGGESTIONS.map((s) => (
-                    <div
-                      key={s}
-                      className="flex items-center gap-3 px-5 py-2.5 cursor-pointer"
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(124,58,237,0.08)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="1.5">
-                        <path d="M12 3l1.912 5.813a2 2 0 001.272 1.272L21 12l-5.816 1.916a2 2 0 00-1.272 1.272L12 21l-1.912-5.812a2 2 0 00-1.272-1.272L3 12l5.816-1.915a2 2 0 001.272-1.272L12 3z"/>
-                      </svg>
-                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>{s}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               {/* Options */}
               <div style={{ padding: '8px 0' }}>
