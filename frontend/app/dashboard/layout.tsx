@@ -43,7 +43,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen" style={{ background: '#13111c' }}>
-      <InteractiveBackground />
+      {pathname !== '/dashboard/transform' && <InteractiveBackground />}
       <GlobalProgressBar />
 
       {/* Navbar — matches landing page exactly */}
