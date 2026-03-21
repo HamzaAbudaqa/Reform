@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const SUGGESTIONS = [
   'Refine a Next.js dashboard to Railway style',
@@ -99,15 +100,7 @@ export default function NewPage() {
       >
         <div className="flex items-center gap-3">
           <Link href="/">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
-                <circle cx="6" cy="6" r="3.5" />
-                <circle cx="6" cy="6" r="1.5" fill="rgba(255,255,255,0.4)" />
-              </svg>
-            </div>
+            <Image src="/reform_logo.png" alt="Reform" width={28} height={28} className="rounded-full cursor-pointer" />
           </Link>
           <div className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
             <span>/</span>

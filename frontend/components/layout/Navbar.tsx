@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function Navbar() {
   return (
@@ -11,19 +12,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-8 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:shadow-lg"
-            style={{
-              background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-              boxShadow: '0 0 12px rgba(124,58,237,0.3)',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
-              <circle cx="7" cy="7" r="4" />
-              <circle cx="7" cy="7" r="2" fill="rgba(255,255,255,0.4)" />
-            </svg>
-          </div>
-          <span className="font-semibold text-white text-[15px] tracking-tight">Reform</span>
+          <Image src="/reform_logo.png" alt="Reform" width={32} height={32} className="rounded-full" />
         </Link>
 
         {/* Right side */}
