@@ -3,7 +3,7 @@ import os
 
 from tinyfish import TinyFish
 
-from app.prompts.competitor_analysis_prompt import SITE_EXTRACTION_GOAL
+from app.backend.prompts.competitor_analysis_prompt import SITE_EXTRACTION_GOAL
 
 logger = logging.getLogger(__name__)
 

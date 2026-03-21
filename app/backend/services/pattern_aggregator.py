@@ -4,9 +4,9 @@ import os
 
 import anthropic
 
-from app.prompts.competitor_analysis_prompt import build_aggregation_prompt
-from app.schemas.competitors import CompetitorAnalysisResponse
-from app.services.mock_competitors import MOCK_RESPONSE
+from app.backend.prompts.competitor_analysis_prompt import build_aggregation_prompt
+from app.backend.schemas.competitors import CompetitorAnalysisResponse
+from app.backend.services.mock_competitors import MOCK_RESPONSE
 
 logger = logging.getLogger(__name__)
 

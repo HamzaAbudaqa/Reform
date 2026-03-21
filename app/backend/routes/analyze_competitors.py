@@ -2,8 +2,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from app.schemas.competitors import CompetitorAnalysisResponse, CompetitorRequest
-from app.services.competitor_analyzer import analyze_competitors
+from app.backend.schemas.competitors import CompetitorAnalysisResponse, CompetitorRequest
+from app.backend.services.competitor_analyzer import analyze_competitors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
