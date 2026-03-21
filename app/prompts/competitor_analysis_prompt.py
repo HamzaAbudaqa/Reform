@@ -1,24 +1,61 @@
-SITE_EXTRACTION_GOAL = """Analyze this website's UI/UX design in detail. Extract and return the following as structured data:
+SITE_EXTRACTION_GOAL = """Analyze this website's UI/UX design. Return ONLY a JSON object with exactly these 8 keys. No markdown fences. No explanation. Just the JSON.
 
-1. **Page type**: What kind of page is this? (e.g., marketing site, dashboard, docs, landing page, pricing page)
+Use short snake_case identifiers, not sentences. Example: "dark_graphite_background" not "The background is dark".
 
-2. **Layout structure**: How is the page laid out? Describe the hero section, content sections, grid patterns, sidebar usage, and overall flow.
+{
+  "page_type": "single_string_identifier",
 
-3. **Visual style**: Describe the color palette, background treatment (light/dark/gradient), border and shadow usage, accent colors, and overall visual tone (minimal, premium, playful, corporate, etc).
+  "layout": [
+    "pattern_identifier_1",
+    "pattern_identifier_2"
+  ],
 
-4. **Component patterns**: List the key UI components visible — navbar style, card designs, button styles, form elements, panels, modals, code blocks, etc. Be specific about their styling.
+  "visual_style": [
+    "pattern_identifier_1",
+    "pattern_identifier_2"
+  ],
 
-5. **Typography**: Describe the font choices, heading hierarchy, text sizes, weights, and spacing.
+  "components": {
+    "navbar": ["pattern_1", "pattern_2"],
+    "hero": ["pattern_1", "pattern_2"],
+    "cards": ["pattern_1", "pattern_2"],
+    "buttons": ["pattern_1", "pattern_2"],
+    "workspace": ["pattern_1", "pattern_2"],
+    "forms_controls": ["pattern_1", "pattern_2"]
+  },
 
-6. **Spacing rhythm**: Is the spacing tight/dense or airy? Is it consistent? Describe the general padding and margin patterns.
+  "typography": "font_family_base_size_scale_description",
 
-7. **CTA/button patterns**: How are primary and secondary actions styled? Colors, shapes, hover effects.
+  "design_tokens": {
+    "theme": "dark | light | mixed",
+    "colors": {
+      "background": "#hex",
+      "surface": "#hex",
+      "text_primary": "#hex",
+      "text_secondary": "#hex",
+      "accent": "#hex",
+      "border": "rgba(...)"
+    },
+    "border_radius": "value",
+    "spacing_scale": ["4px", "8px", "16px", "24px", "32px"],
+    "shadow_style": "descriptor",
+    "border_style": "descriptor",
+    "density": "compact | comfortable | spacious"
+  },
 
-8. **Dashboard/devtool motifs**: If applicable, describe any developer-tool-like patterns — terminal aesthetics, code styling, data density, settings panels.
+  "ux_flow": [
+    "step_1_action",
+    "step_2_action",
+    "step_3_action"
+  ],
 
-9. **Overall UX quality**: Rate the information clarity, visual hierarchy, readability, and navigation flow.
+  "ux_quality": [
+    "observation_identifier_1",
+    "observation_identifier_2"
+  ]
+}
 
-Return all findings as a single structured JSON object with these keys: page_type, layout, visual_style, components, typography, spacing, cta_patterns, devtool_motifs, ux_quality."""
+Fill every key. If a component type is not visible on the page, use ["not_present"]. Inspect colors from the actual rendered page. List 3-6 items per array."""
 
 
 def build_aggregation_prompt(
@@ -33,41 +70,87 @@ def build_aggregation_prompt(
     goal_section = ""
     if style_goal:
         goal_section = f"""
-The user wants to achieve this style direction: "{style_goal}"
-Weight your recommendations toward this goal."""
+STYLE GOAL: "{style_goal}"
+You MUST bias all pattern extraction and recommendations toward this goal.
+If the goal references specific products (e.g., "github_railway_hybrid"), weight patterns from those products accordingly."""
 
-    return f"""You are a senior UI/UX design consultant. You have been given design analyses of multiple competitor websites. Your job is to synthesize these into a unified design direction.
+    return f"""You are a senior design system architect. You have raw design analyses from multiple competitor websites. Your job is to synthesize them into a unified, reusable design intelligence output.
 {goal_section}
 
 Here are the individual site analyses:
 {sites_text}
 
-Return ONLY valid JSON (no markdown, no explanation) matching this exact structure:
+Return ONLY valid JSON (no markdown, no explanation, no text outside the JSON) matching this EXACT structure:
 
 {{
+  "meta": {{
+    "project_style_goal": "{style_goal or 'none_specified'}",
+    "description": "one-line description of the synthesized design direction",
+    "confidence": {{
+      "layout_patterns": 0.0,
+      "visual_style": 0.0,
+      "ux_flow": 0.0
+    }}
+  }},
   "sources": [
     {{
       "url": "the site URL",
-      "page_type": "type of page",
-      "summary": "one-line summary of the site's design character"
+      "page_type": "specific page type identifier",
+      "summary": "one-line design character summary using structured terms"
     }}
   ],
-  "patterns": {{
-    "layout": ["list of layout patterns observed across sites"],
-    "visual_style": ["list of visual style patterns"],
-    "components": ["list of component patterns"],
-    "ux_observations": ["list of UX quality observations"]
+  "global_patterns": {{
+    "layout": ["pattern_name_as_identifier"],
+    "visual_style": ["pattern_name_as_identifier"],
+    "ux_principles": ["principle_as_identifier"]
   }},
-  "recommended_direction": {{
-    "theme": "short theme name based on the style goal",
-    "guidelines": ["actionable design guidelines that blend the best of the analyzed sites"]
-  }}
+  "components": {{
+    "navbar": {{ "patterns": [] }},
+    "hero": {{ "patterns": [] }},
+    "cards": {{ "patterns": [] }},
+    "buttons": {{ "patterns": [] }},
+    "workspace": {{ "patterns": [] }},
+    "forms_controls": {{ "patterns": [] }}
+  }},
+  "design_tokens": {{
+    "theme": "dark|light|mixed",
+    "colors": {{
+      "background": "#hex",
+      "surface": "#hex",
+      "text_primary": "#hex",
+      "text_secondary": "#hex",
+      "accent": "#hex",
+      "border": "rgba(...)"
+    }},
+    "border_radius": "value",
+    "spacing_scale": ["4px", "8px", "16px", "24px", "32px", "48px"],
+    "shadow_style": "descriptor",
+    "border_style": "descriptor",
+    "density": "compact|comfortable|spacious"
+  }},
+  "flows": {{
+    "primary_user_flow": ["step1", "step2", "step3"],
+    "interaction_patterns": ["pattern_identifier"],
+    "layout_flow_mapping": {{
+      "section_name": "flow_role"
+    }}
+  }},
+  "recommendations": [
+    {{
+      "priority": "high|medium|low",
+      "target": "specific_component_or_area",
+      "action": "concrete_actionable_instruction"
+    }}
+  ],
+  "avoid": ["anti_pattern_identifier"]
 }}
 
-Rules:
-- Be specific and actionable, not generic
-- Reference real patterns you saw in the analyses
-- Guidelines should be implementable by a frontend developer
-- Keep each list item concise (one line)
-- Return 4-6 items per pattern list
-- Return 4-6 guidelines"""
+RULES:
+- Use short structured identifiers, NOT sentences (e.g., "left_aligned_hero_with_cta" not "The hero section is left-aligned with a call to action")
+- Find COMMON patterns across sites, ignore outliers
+- Confidence scores: 0.0-1.0 based on how consistent the pattern is across sources
+- 4-6 items per pattern list
+- 4-6 recommendations, prioritized: high = layout + spacing first
+- 3-5 items in avoid list — specific anti-patterns that break the target style
+- Design tokens must be concrete inferred values, not descriptions
+- Return ONLY the JSON object"""

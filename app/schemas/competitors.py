@@ -6,25 +6,74 @@ class CompetitorRequest(BaseModel):
     style_goal: str = ""
 
 
+# --- Response schema ---
+
+
+class ConfidenceScores(BaseModel):
+    layout_patterns: float
+    visual_style: float
+    ux_flow: float
+
+
+class Meta(BaseModel):
+    project_style_goal: str
+    description: str
+    confidence: ConfidenceScores
+
+
 class SourceAnalysis(BaseModel):
     url: str
     page_type: str
     summary: str
 
 
-class DesignPatterns(BaseModel):
+class GlobalPatterns(BaseModel):
     layout: list[str]
     visual_style: list[str]
-    components: list[str]
-    ux_observations: list[str]
+    ux_principles: list[str]
 
 
-class RecommendedDirection(BaseModel):
+class ComponentPatterns(BaseModel):
+    patterns: list[str]
+
+
+class Components(BaseModel):
+    navbar: ComponentPatterns
+    hero: ComponentPatterns
+    cards: ComponentPatterns
+    buttons: ComponentPatterns
+    workspace: ComponentPatterns
+    forms_controls: ComponentPatterns
+
+
+class DesignTokens(BaseModel):
     theme: str
-    guidelines: list[str]
+    colors: dict[str, str]
+    border_radius: str
+    spacing_scale: list[str]
+    shadow_style: str
+    border_style: str
+    density: str
+
+
+class Flows(BaseModel):
+    primary_user_flow: list[str]
+    interaction_patterns: list[str]
+    layout_flow_mapping: dict[str, str]
+
+
+class Recommendation(BaseModel):
+    priority: str  # "high", "medium", "low"
+    target: str
+    action: str
 
 
 class CompetitorAnalysisResponse(BaseModel):
+    meta: Meta
     sources: list[SourceAnalysis]
-    patterns: DesignPatterns
-    recommended_direction: RecommendedDirection
+    global_patterns: GlobalPatterns
+    components: Components
+    design_tokens: DesignTokens
+    flows: Flows
+    recommendations: list[Recommendation]
+    avoid: list[str]
