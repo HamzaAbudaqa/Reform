@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { ProgressProvider, useProgress } from '@/components/dashboard/ProgressContext'
 import InteractiveBackground from '@/components/landing/InteractiveBackground'
@@ -48,22 +49,22 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       {/* Navbar — matches landing page exactly */}
       <header className="fixed top-0 left-0 right-0 z-50 px-6 py-3 flex justify-between items-center" style={{ background: 'rgba(19,17,28,0.8)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="white"><circle cx="6" cy="6" r="3.5" /><circle cx="6" cy="6" r="1.5" fill="rgba(255,255,255,0.4)" /></svg>
-            </div>
-            <span className="text-sm font-semibold text-white">Reform</span>
+          <Link href="/">
+            <Image src="/reform_logo.png" alt="Reform" width={160} height={50} className="object-contain" />
           </Link>
 
           <nav className="flex items-center gap-1">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.map((item, i) => {
               const isActive = pathname === item.href
               const isLocked = item.href === '/dashboard/discovery' && progressState.active
-              if (isLocked) return <div key={item.href} className="px-3 py-1.5 text-[12px] font-medium opacity-20" style={{ color: 'rgba(255,255,255,0.5)' }}>{item.label}</div>
               return (
-                <Link key={item.href} href={item.href} className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors" style={isActive ? { background: 'rgba(255,255,255,0.06)', color: 'white' } : { color: 'rgba(255,255,255,0.35)' }}>
-                  {item.label}
-                </Link>
+                <div key={item.href} className="flex items-center gap-1">
+                  {i > 0 && <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '16px' }}>→</span>}
+                  {isLocked
+                    ? <div className="px-3 py-1.5 text-[12px] font-medium opacity-20" style={{ color: 'rgba(255,255,255,0.5)' }}>{item.label}</div>
+                    : <Link href={item.href} className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors" style={isActive ? { background: 'rgba(255,255,255,0.06)', color: 'white' } : { color: 'rgba(255,255,255,0.35)' }}>{item.label}</Link>
+                  }
+                </div>
               )
             })}
           </nav>
