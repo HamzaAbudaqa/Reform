@@ -100,7 +100,7 @@ export default function NewPage() {
       >
         <div className="flex items-center gap-3">
           <Link href="/">
-            <Image src="/reform_logo.png" alt="Reform" width={28} height={28} className="rounded-full cursor-pointer" />
+            <Image src="/reform_logo.png" alt="Reform" width={160} height={50} className="object-contain cursor-pointer" />
           </Link>
           <div className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
             <span>/</span>

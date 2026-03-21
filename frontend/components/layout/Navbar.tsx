@@ -12,7 +12,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-8 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
-          <Image src="/reform_logo.png" alt="Reform" width={32} height={32} className="rounded-full" />
+          <Image src="/reform_logo.png" alt="Reform" width={180} height={56} className="object-contain" />
         </Link>
 
         {/* Right side */}
