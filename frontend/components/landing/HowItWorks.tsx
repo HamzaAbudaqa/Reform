@@ -40,7 +40,7 @@ const SECTIONS = [
     tag: 'Compare',
     headline: 'Side-by-side. The improvement is obvious.',
     body: 'A live before/after view shows exactly what changed. No abstract AI output — a clear visual diff between what your UI was and what it becomes. Stakeholders get it immediately.',
-    detail: 'Quality score: 34 → 91.',
+    detail: 'Cleaner spacing · Better hierarchy · Consistent design',
     visual: (
       <div className="grid grid-cols-2 gap-3">
         {['Before', 'After'].map((label, i) => (
