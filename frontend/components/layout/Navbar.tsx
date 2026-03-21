@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 const NAV_LINKS = [
   { label: 'Product', href: '#features' },
@@ -14,24 +13,12 @@ const NAV_LINKS = [
 ] as const
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-
-  useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 24)
-    window.addEventListener('scroll', handler, { passive: true })
-    return () => window.removeEventListener('scroll', handler)
-  }, [])
 
   return (
     <nav
-      className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-        scrolled
-          ? 'backdrop-blur-xl border-b'
-          : 'bg-transparent'
-      )}
-      style={scrolled ? { background: 'rgba(19,17,28,0.85)', borderColor: 'rgba(255,255,255,0.06)' } : {}}
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl border-b transition-all duration-300"
+      style={{ background: 'rgba(19,17,28,0.9)', borderColor: 'rgba(255,255,255,0.06)' }}
     >
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
         {/* Logo */}

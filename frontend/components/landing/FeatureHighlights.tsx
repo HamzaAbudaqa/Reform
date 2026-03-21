@@ -11,7 +11,7 @@ export default function FeatureHighlights() {
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setVisible(true) },
-      { threshold: 0.3 }
+      { threshold: 0.1 }
     )
     observer.observe(el)
     return () => observer.disconnect()
