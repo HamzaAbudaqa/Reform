@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
+
 const SECTIONS = [
   {
     tag: 'Analyze',
@@ -11,7 +13,6 @@ const SECTIONS = [
         className="rounded-xl overflow-hidden"
         style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}
       >
-        {/* Mock terminal / repo scan */}
         <div
           className="px-4 py-2.5 border-b flex items-center gap-2"
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
@@ -58,7 +59,6 @@ const SECTIONS = [
               }}
             >
               <div className="p-3 space-y-2">
-                {/* Mock UI skeleton rows */}
                 {[60, 40, 80, 55].map((w, j) => (
                   <div
                     key={j}
@@ -113,7 +113,7 @@ const SECTIONS = [
         <div className="p-4 font-mono text-[10.5px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
           <div><span style={{ color: '#c084fc' }}>export default function</span> <span style={{ color: '#67e8f9' }}>Dashboard</span>() {'{'}</div>
           <div className="pl-4"><span style={{ color: '#c084fc' }}>return</span> (</div>
-          <div className="pl-8">&lt;<span style={{ color: '#86efac' }}>div</span> <span style={{ color: '#fcd34d' }}>className</span>=<span style={{ color: '#f9a8d4' }}>"flex gap-6 p-8"</span>&gt;</div>
+          <div className="pl-8">&lt;<span style={{ color: '#86efac' }}>div</span> <span style={{ color: '#fcd34d' }}>className</span>=<span style={{ color: '#f9a8d4' }}>&quot;flex gap-6 p-8&quot;</span>&gt;</div>
           <div className="pl-12">&lt;<span style={{ color: '#86efac' }}>Sidebar</span> /&gt;</div>
           <div className="pl-12">&lt;<span style={{ color: '#86efac' }}>MainContent</span> /&gt;</div>
           <div className="pl-8">&lt;/<span style={{ color: '#86efac' }}>div</span>&gt;</div>
@@ -125,13 +125,114 @@ const SECTIONS = [
   },
 ]
 
-export default function HowItWorks() {
+// Smooth easeOutCubic for fluid motion
+function ease(t: number) {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+// Each section reveals and fades independently based on scroll position
+function ScrollRevealBlock({
+  children,
+  isLast,
+}: {
+  children: React.ReactNode
+  isLast: boolean
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const progressRef = useRef(0)
+  const displayRef = useRef(0)
+  const rafRef = useRef<number>(0)
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el = ref.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const wh = window.innerHeight
+
+      // Reveal: top enters viewport from 95% → 50%
+      const revealRaw = (wh * 0.95 - rect.top) / (wh * 0.45)
+      const reveal = Math.max(0, Math.min(1, revealRaw))
+
+      // Fade: bottom approaches top of viewport
+      let fade = 1
+      if (!isLast) {
+        // Non-last: fade when bottom goes from 25% → -5% of viewport
+        const fadeRaw = (rect.bottom - wh * -0.05) / (wh * 0.3)
+        fade = Math.max(0, Math.min(1, fadeRaw))
+      } else {
+        // Last: hold much longer, only fade when almost entirely scrolled past
+        const fadeRaw = (rect.bottom - wh * -0.3) / (wh * 0.2)
+        fade = Math.max(0, Math.min(1, fadeRaw))
+      }
+
+      progressRef.current = Math.min(reveal, fade)
+    }
+
+    // Smooth interpolation loop — lerps toward target for silky motion
+    const animate = () => {
+      displayRef.current += (progressRef.current - displayRef.current) * 0.12
+      const p = ease(displayRef.current)
+
+      const el = ref.current
+      if (el) {
+        el.style.opacity = `${0.08 + p * 0.92}`
+        el.style.transform = `translateY(${(1 - p) * 28}px)`
+      }
+
+      rafRef.current = requestAnimationFrame(animate)
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    rafRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [isLast])
+
   return (
-    <section id="features" className="pt-32 pb-16" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+    <div ref={ref} style={{ willChange: 'opacity, transform' }}>
+      {children}
+    </div>
+  )
+}
+
+export default function HowItWorks() {
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [headerVisible, setHeaderVisible] = useState(false)
+
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setHeaderVisible(true) },
+      { threshold: 0.3 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <section
+      id="features"
+      className="pt-32 pb-16"
+      style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+    >
       <div className="max-w-7xl mx-auto px-6">
 
-        {/* Section label */}
-        <div className="text-center mb-20">
+        {/* Section header */}
+        <div
+          ref={headerRef}
+          className="text-center mb-20"
+          style={{
+            opacity: headerVisible ? 1 : 0,
+            transform: headerVisible ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1), transform 1s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
           <div
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-6"
             style={{
@@ -159,47 +260,45 @@ export default function HowItWorks() {
         {/* Alternating sections */}
         <div className="space-y-28">
           {SECTIONS.map((section, i) => (
-            <div
-              key={i}
-              className={`grid grid-cols-1 md:grid-cols-2 gap-16 items-center ${i % 2 === 1 ? 'md:[&>*:first-child]:order-2' : ''}`}
-            >
-              {/* Text side */}
-              <div>
-                <div
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium mb-5"
-                  style={{
-                    background: 'rgba(124,58,237,0.08)',
-                    border: '1px solid rgba(124,58,237,0.15)',
-                    color: '#a855f7',
-                  }}
-                >
-                  {section.tag}
+            <ScrollRevealBlock key={i} isLast={i === SECTIONS.length - 1}>
+              <div
+                className={`grid grid-cols-1 md:grid-cols-2 gap-16 items-center ${i % 2 === 1 ? 'md:[&>*:first-child]:order-2' : ''}`}
+              >
+                <div>
+                  <div
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium mb-5"
+                    style={{
+                      background: 'rgba(124,58,237,0.08)',
+                      border: '1px solid rgba(124,58,237,0.15)',
+                      color: '#a855f7',
+                    }}
+                  >
+                    {section.tag}
+                  </div>
+                  <h3
+                    className="font-bold tracking-tight mb-4 leading-snug"
+                    style={{ fontSize: 'clamp(22px, 3vw, 32px)', color: '#ffffff' }}
+                  >
+                    {section.headline}
+                  </h3>
+                  <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.75, marginBottom: '20px' }}>
+                    {section.body}
+                  </p>
+                  <div
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.3)',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {section.detail}
+                  </div>
                 </div>
-                <h3
-                  className="font-bold tracking-tight mb-4 leading-snug"
-                  style={{ fontSize: 'clamp(22px, 3vw, 32px)', color: '#ffffff' }}
-                >
-                  {section.headline}
-                </h3>
-                <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.75, marginBottom: '20px' }}>
-                  {section.body}
-                </p>
-                <div
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px]"
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: 'rgba(255,255,255,0.3)',
-                    fontFamily: 'monospace',
-                  }}
-                >
-                  {section.detail}
-                </div>
+                <div>{section.visual}</div>
               </div>
-
-              {/* Visual side */}
-              <div>{section.visual}</div>
-            </div>
+            </ScrollRevealBlock>
           ))}
         </div>
       </div>
