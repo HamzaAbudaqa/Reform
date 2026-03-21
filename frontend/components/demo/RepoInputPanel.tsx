@@ -100,7 +100,7 @@ export default function RepoInputPanel({ state, repoUrl, onRepoUrl, onSubmit, on
           </button>
 
           <div className="text-[10px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.18)' }}>
-            Paste a public GitHub repo URL. RefineUI will scan the frontend and suggest a redesign.
+            Paste a public GitHub repo URL. Reform will scan the frontend and suggest a redesign.
           </div>
         </>
       ) : (
