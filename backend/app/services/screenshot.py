@@ -1,0 +1,26 @@
+import asyncio
+import base64
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+async def _take_screenshot_async(url: str) -> bytes:
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=30000)
+            await page.wait_for_timeout(1500)
+            screenshot = await page.screenshot(type="png", full_page=False)
+            return screenshot
+        finally:
+            await browser.close()
+
+
+def take_screenshot_b64(url: str) -> str:
+    """Take a screenshot of a URL and return base64-encoded PNG."""
+    logger.info("Taking screenshot of %s", url)
+    screenshot_bytes = asyncio.run(_take_screenshot_async(url))
+    return base64.b64encode(screenshot_bytes).decode("utf-8")

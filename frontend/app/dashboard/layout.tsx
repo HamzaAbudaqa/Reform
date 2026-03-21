@@ -9,6 +9,7 @@ import InteractiveBackground from '@/components/landing/InteractiveBackground'
 const NAV_ITEMS = [
   { href: '/dashboard/discovery', label: 'Project Discovery' },
   { href: '/dashboard/transform', label: 'UI Transformation' },
+  { href: '/dashboard/simulation', label: 'UX Heatmaps' },
 ]
 
 function GlobalProgressBar() {

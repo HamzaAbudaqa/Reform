@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useProgress } from '@/components/dashboard/ProgressContext'
 
 // Set to true to skip API calls and use mock data for local testing
@@ -52,7 +52,13 @@ export default function DiscoveryPage() {
   const [completed, setCompleted] = useState(false)
   const [discovery, setDiscovery] = useState<DiscoveryData | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const repo = searchParams.get('repo')
   const { startProgress, updateProgress, finishProgress } = useProgress()
+
+  useEffect(() => {
+    if (repo) sessionStorage.setItem('refineui_repo', repo)
+  }, [repo])
 
   useEffect(() => {
     const storedDiscovery = sessionStorage.getItem('refineui_discovery')
@@ -87,6 +93,7 @@ export default function DiscoveryPage() {
       sessionStorage.setItem('refineui_discovery', JSON.stringify(MOCK_DISCOVERY))
       sessionStorage.setItem('refineui_analysis', JSON.stringify(MOCK_ANALYSIS))
       sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
+      if (!sessionStorage.getItem('refineui_repo')) sessionStorage.setItem('refineui_repo', 'https://github.com/anthropics/anthropic-quickstarts')
       finishProgress(); setDiscovery(MOCK_DISCOVERY); setCompleted(true); setLoading(false)
       return
     }
@@ -104,6 +111,16 @@ export default function DiscoveryPage() {
       const analyzeRes = await fetch('http://localhost:8000/analyze-competitors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: discoveryData.selected_for_analysis, style_goal: '' }) })
       if (!analyzeRes.ok) throw new Error('Analysis failed')
       const analysis = await analyzeRes.json()
+
+      setLoadingStatus('Generating UI transformation...')
+      updateProgress(75)
+      try {
+        const transformRes = await fetch('http://localhost:8000/transform-ui', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(analysis) })
+        if (transformRes.ok) {
+          const transformData = await transformRes.json()
+          sessionStorage.setItem('refineui_transform', JSON.stringify(transformData))
+        }
+      } catch { /* non-fatal — transform is bonus */ }
 
       updateProgress(90); setLoadingStatus('Pipeline complete!')
       sessionStorage.setItem('refineui_discovery', JSON.stringify(discoveryData))
