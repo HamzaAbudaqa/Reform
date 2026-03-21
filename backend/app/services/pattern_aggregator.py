@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def aggregate_patterns(
     site_analyses: list[dict], style_goal: str
 ) -> CompetitorAnalysisResponse:
-    """Take raw TinyFish outputs and synthesize them into a unified analysis."""
+    """Synthesize raw TinyFish outputs into unified design intelligence."""
     prompt = build_aggregation_prompt(site_analyses, style_goal)
 
     try:
@@ -30,6 +30,7 @@ def aggregate_patterns(
         )
 
         raw = message.content[0].text.strip()
+        # Strip markdown fences if present
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1]
             if raw.endswith("```"):
@@ -40,5 +41,5 @@ def aggregate_patterns(
         return CompetitorAnalysisResponse(**data)
 
     except Exception as e:
-        logger.warning("Aggregation failed (%s), using mock response", e)
+        logger.warning("Aggregation failed (%s), returning mock response", e)
         return CompetitorAnalysisResponse(**MOCK_RESPONSE)
