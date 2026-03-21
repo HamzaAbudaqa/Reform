@@ -66,3 +66,12 @@ body {
     border-image: linear-gradient(135deg, #6366f1, #8b5cf6) 1;
   }
 }
+
+@keyframes ai-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}
+
+.ai-shimmer {
+  animation: ai-shimmer 4s ease-in-out infinite;
+}
