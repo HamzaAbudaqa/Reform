@@ -9,11 +9,11 @@ import RepoInputPanel from './RepoInputPanel'
 import BeforeAfterCanvas from './BeforeAfterCanvas'
 import ControlsPanel from './ControlsPanel'
 
-export default function DemoWorkspace() {
+export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: string } = {}) {
   const searchParams = useSearchParams()
-  const [state, setState] = useState<TransformState>('empty')
+  const [state, setState] = useState<TransformState>(initialRepoUrl ? 'uploaded' : 'empty')
   const [preset, setPreset] = useState<StylePreset>('railway')
-  const [repoUrl, setRepoUrl] = useState('')
+  const [repoUrl, setRepoUrl] = useState(initialRepoUrl ?? '')
 
   useEffect(() => {
     const repo = searchParams.get('repo')

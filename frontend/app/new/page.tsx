@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const SUGGESTIONS = [
   'Refine a Next.js dashboard to Railway style',
@@ -99,15 +100,7 @@ export default function NewPage() {
       >
         <div className="flex items-center gap-3">
           <Link href="/">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
-                <circle cx="6" cy="6" r="3.5" />
-                <circle cx="6" cy="6" r="1.5" fill="rgba(255,255,255,0.4)" />
-              </svg>
-            </div>
+            <Image src="/reform_logo.png" alt="Reform" width={160} height={50} className="object-contain cursor-pointer" />
           </Link>
           <div className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
             <span>/</span>
@@ -201,7 +194,7 @@ export default function NewPage() {
                       <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 px-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.2)', background: '#13111c' }}>or paste a public URL</span>
                     </div>
                     <Link
-                      href={`/?repo=${encodeURIComponent(query || 'https://github.com/vercel/next.js')}#demo`}
+                      href={`/dashboard?repo=${encodeURIComponent(query || 'https://github.com/vercel/next.js')}`}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium"
                       style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: 'white' }}
                     >
@@ -220,7 +213,7 @@ export default function NewPage() {
                 {session && !loadingRepos && filteredRepos.map((repo) => (
                   <Link
                     key={repo.id}
-                    href={`/?repo=${encodeURIComponent(`https://github.com/${repo.full_name}`)}#demo`}
+                    href={`/dashboard?repo=${encodeURIComponent(`https://github.com/${repo.full_name}`)}`}
                     className="flex items-center justify-between px-4 py-3 cursor-pointer transition-colors"
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}

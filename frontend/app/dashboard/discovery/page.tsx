@@ -1,0 +1,280 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useProgress } from '@/components/dashboard/ProgressContext'
+
+const QUESTIONS = [
+  { key: 'product_type', label: 'What are you building?', placeholder: 'e.g., Dashboard, Mobile app, SaaS platform', optional: false },
+  { key: 'industry', label: 'What industry or field?', placeholder: 'e.g., Fintech, Healthcare, Education, DevTools', optional: false },
+  { key: 'target_audience', label: 'Who is your target user?', placeholder: 'e.g., Developers, Small business owners, Students', optional: false },
+  { key: 'core_feature', label: 'What is the core feature?', placeholder: 'e.g., AI code completion, Invoice management', optional: false },
+  { key: 'competitors_known', label: 'Name any competitors you already know', placeholder: 'e.g., Linear, Notion, Stripe, Figma', optional: true },
+]
+
+interface DiscoveryData {
+  project_category: string
+  competitors: { name: string; url: string; reason: string; relevance: number }[]
+  selected_for_analysis: string[]
+}
+
+export default function DiscoveryPage() {
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [currentStep, setCurrentStep] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [loadingStatus, setLoadingStatus] = useState('')
+  const [error, setError] = useState('')
+  const [completed, setCompleted] = useState(false)
+  const [discovery, setDiscovery] = useState<DiscoveryData | null>(null)
+  const router = useRouter()
+  const { startProgress, updateProgress, finishProgress } = useProgress()
+
+  useEffect(() => {
+    const storedDiscovery = sessionStorage.getItem('refineui_discovery')
+    const storedAnswers = sessionStorage.getItem('refineui_answers')
+    if (storedDiscovery && storedAnswers) {
+      setDiscovery(JSON.parse(storedDiscovery))
+      setAnswers(JSON.parse(storedAnswers))
+      setCompleted(true)
+    }
+  }, [])
+
+  const currentQ = QUESTIONS[currentStep]
+  const isLastStep = currentStep === QUESTIONS.length - 1
+  const isOptional = currentQ?.optional
+
+  function handleNext() {
+    if (!isOptional && !answers[currentQ.key]?.trim()) return
+    if (isLastStep) handleFullPipeline()
+    else setCurrentStep(currentStep + 1)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); handleNext() }
+  }
+
+  async function handleFullPipeline() {
+    const description = QUESTIONS.map(q => `${q.label} ${answers[q.key] || ''}`).join('. ')
+    setLoading(true); setError('')
+    startProgress('Running full analysis pipeline...')
+    try {
+      setLoadingStatus('Finding competitors in your space...')
+      updateProgress(10)
+      const discoverRes = await fetch('http://localhost:8000/discover-competitors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_description: description, style_goal: '' }) })
+      if (!discoverRes.ok) throw new Error('Discovery failed')
+      const discoveryData = await discoverRes.json()
+
+      setLoadingStatus(`Analyzing ${discoveryData.selected_for_analysis.length} sites with TinyFish...`)
+      updateProgress(35)
+      const analyzeRes = await fetch('http://localhost:8000/analyze-competitors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: discoveryData.selected_for_analysis, style_goal: '' }) })
+      if (!analyzeRes.ok) throw new Error('Analysis failed')
+      const analysis = await analyzeRes.json()
+
+      updateProgress(90); setLoadingStatus('Pipeline complete!')
+      sessionStorage.setItem('refineui_discovery', JSON.stringify(discoveryData))
+      sessionStorage.setItem('refineui_analysis', JSON.stringify(analysis))
+      sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
+      finishProgress(); setDiscovery(discoveryData); setCompleted(true); setLoading(false)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Pipeline failed')
+      finishProgress(); setLoading(false)
+    }
+  }
+
+  // ── COMPLETED ──
+  if (completed && discovery) {
+    return (
+      <div className="flex items-start justify-center px-6 py-12">
+        <div className="w-full max-w-4xl space-y-6">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white mb-3">Project Discovery</h1>
+            <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
+                <span className="text-[11px] font-medium" style={{ color: '#86efac' }}>Complete</span>
+              </div>
+              <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{discovery.project_category} · {discovery.competitors.length} competitors</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            {/* Project Brief */}
+            <div className="lg:col-span-3 rounded-xl p-6" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h3 className="text-[11px] font-medium uppercase tracking-wider mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>Project Brief</h3>
+              <div className="space-y-0">
+                {QUESTIONS.map((q) => (
+                  <div key={q.key} className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{q.label}</span>
+                    <span className="text-[13px] font-medium text-white">{answers[q.key] || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Competitors + CTA */}
+            <div className="lg:col-span-2 space-y-5">
+              <div className="rounded-xl p-6" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>Top Competitors</h3>
+                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{discovery.selected_for_analysis.length} analyzed</span>
+                </div>
+                <div className="space-y-0">
+                  {discovery.competitors.slice(0, 5).map((c, i) => (
+                    <div key={i} className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: 'rgba(168,85,247,0.7)' }}>{i + 1}</span>
+                        <span className="text-[13px] font-medium text-white">{c.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>{(c.relevance * 100).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => router.push('/dashboard/transform')}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.2)' }}
+              >
+                View Transformation →
+              </button>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: 'Competitors Found', value: discovery.competitors.length.toString(), sub: 'in category' },
+              { label: 'Sites Analyzed', value: discovery.selected_for_analysis.length.toString(), sub: 'with TinyFish' },
+              { label: 'Avg Relevance', value: `${Math.round(discovery.competitors.slice(0, 5).reduce((a, c) => a + c.relevance, 0) / 5 * 100)}%`, sub: 'top 5 match' },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
+                <p className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>{stat.label}</p>
+                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>{stat.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Full competitor list */}
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>All Discovered Competitors</h3>
+              <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>{discovery.competitors.length} total</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {discovery.competitors.slice(0, 15).map((c, i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', borderRight: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[9px] font-mono w-4 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.15)' }}>{i + 1}</span>
+                    <span className="text-[12px] font-medium text-white truncate">{c.name}</span>
+                  </div>
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-mono flex-shrink-0 ml-2" style={{ color: 'rgba(168,85,247,0.5)' }}>
+                    {c.url.replace('https://', '').replace(/\/$/, '').substring(0, 20)}
+                  </a>
+                </div>
+              ))}
+            </div>
+            {discovery.competitors.length > 15 && (
+              <div className="px-5 py-2 text-center" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.15)' }}>+ {discovery.competitors.length - 15} more competitors discovered</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── LOADING ──
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-full mx-auto mb-5 animate-spin" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} />
+          <p className="text-white font-medium mb-1">{loadingStatus}</p>
+          <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>TinyFish visits each site in a real browser.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── QUESTIONNAIRE ──
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] px-6">
+      <div className="w-full max-w-lg">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-white mb-2">Project Discovery</h1>
+          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Answer a few questions to find the best design references.</p>
+        </div>
+
+        {/* Progress */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>Question {currentStep + 1} of {QUESTIONS.length}</span>
+          <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>{Math.round(((currentStep + 1) / QUESTIONS.length) * 100)}%</span>
+        </div>
+        <div className="w-full h-[2px] rounded-full mb-8" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((currentStep + 1) / QUESTIONS.length) * 100}%`, background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }} />
+        </div>
+
+        {/* Question */}
+        <div className="rounded-xl p-6" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <label className="block text-white font-semibold text-lg mb-4">{currentQ.label}</label>
+          <input
+            autoFocus
+            type="text"
+            placeholder={currentQ.placeholder}
+            value={answers[currentQ.key] || ''}
+            onChange={(e) => setAnswers({ ...answers, [currentQ.key]: e.target.value })}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent px-4 py-3 text-sm outline-none rounded-lg"
+            style={{ color: 'white', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}
+          />
+
+          <div className="flex items-center gap-3 mt-5">
+            {currentStep > 0 && (
+              <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 rounded-lg text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                Back
+              </button>
+            )}
+            <button
+              onClick={handleNext}
+              disabled={!isOptional && !answers[currentQ.key]?.trim()}
+              className="px-5 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.98]"
+              style={{
+                background: (isOptional || answers[currentQ.key]?.trim()) ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
+                color: (isOptional || answers[currentQ.key]?.trim()) ? 'white' : 'rgba(255,255,255,0.2)',
+                boxShadow: (isOptional || answers[currentQ.key]?.trim()) ? '0 0 20px rgba(124,58,237,0.15)' : 'none',
+              }}
+            >
+              {isLastStep ? 'Discover Competitors' : 'Next'}
+            </button>
+            {isOptional && !answers[currentQ.key]?.trim() && (
+              <button onClick={handleNext} className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>Skip</button>
+            )}
+            <span className="text-[10px] ml-auto" style={{ color: 'rgba(255,255,255,0.15)' }}>Enter ↵</span>
+          </div>
+        </div>
+
+        {/* Previous answers */}
+        {currentStep > 0 && (
+          <div className="mt-6 space-y-1">
+            {QUESTIONS.slice(0, currentStep).map((q) => (
+              <div key={q.key} className="flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => setCurrentStep(QUESTIONS.indexOf(q))}>
+                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{q.label}</span>
+                <span className="text-[11px] font-medium text-white">{answers[q.key]}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 px-4 py-3 rounded-lg text-[12px]" style={{ background: 'rgba(239,68,68,0.08)', color: 'rgba(239,68,68,0.7)', border: '1px solid rgba(239,68,68,0.1)' }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

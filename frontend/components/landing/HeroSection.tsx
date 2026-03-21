@@ -209,22 +209,13 @@ export default function HeroSection() {
           </Link>
         </div>
 
-        {/* Feature tags */}
-        <div className="flex items-center justify-center gap-6 mb-16">
-          {['Analyze', 'Compare', 'Redesign', 'Export'].map((tag, i) => (
-            <div key={tag} className="flex items-center gap-2">
-              {i > 0 && (
-                <div className="w-1 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
-              )}
-              <span
-                className="text-xs font-medium"
-                style={{ color: 'rgba(255,255,255,0.35)' }}
-              >
-                {tag}
-              </span>
-            </div>
-          ))}
-        </div>
+        {/* Insight line */}
+        <p
+          className="text-[13px] tracking-wide mb-16"
+          style={{ color: 'rgba(255,255,255,0.25)' }}
+        >
+          Cleaner spacing · Better hierarchy · Consistent design
+        </p>
 
         {/* Hero product preview */}
         <div className="relative" style={{ marginBottom: '40px' }}>

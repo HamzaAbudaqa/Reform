@@ -3,3 +3,4 @@ uvicorn==0.34.2
 anthropic==0.52.0
 tinyfish>=0.1.0
 pydantic==2.11.1
+python-dotenv>=1.0.0
