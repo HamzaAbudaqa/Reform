@@ -50,7 +50,7 @@ function HeroBrowserFrame({
             </div>
           </div>
         </div>
-        <div className="overflow-hidden" style={{ height: '200px', background: '#0d0c16' }}>
+        <div className="overflow-hidden" style={{ height: '195px', background: '#0d0c16' }}>
           <div
             style={{
               width: '900px',
@@ -181,12 +181,16 @@ export default function HeroSection() {
         >
           With the all-in-one{' '}
           <span
+            className="ai-shimmer"
             style={{
-              color: 'rgba(255,255,255,0.8)',
-              textDecoration: 'underline',
-              textDecorationStyle: 'wavy',
-              textUnderlineOffset: '4px',
-              textDecorationColor: 'rgba(139,92,246,0.5)',
+              background: 'linear-gradient(90deg, #b49aff, #d4c4ff, #f0e6ff, #d4c4ff, #b49aff)',
+              backgroundSize: '200% 100%',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              fontWeight: 600,
+              fontSize: '1.05em',
+              letterSpacing: '-0.01em',
             }}
           >
             AI-powered
@@ -223,7 +227,7 @@ export default function HeroSection() {
         </div>
 
         {/* Hero product preview */}
-        <div className="relative" style={{ marginBottom: '-2px' }}>
+        <div className="relative" style={{ marginBottom: '40px' }}>
           {/* Glow behind preview */}
           <div
             className="absolute -inset-8 pointer-events-none"
@@ -233,10 +237,9 @@ export default function HeroSection() {
           />
 
           <div
-            className="relative rounded-t-2xl overflow-hidden"
+            className="relative rounded-2xl overflow-hidden"
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
-              borderBottom: 'none',
               background: 'rgba(255,255,255,0.03)',
               backdropFilter: 'blur(8px)',
             }}
@@ -262,7 +265,7 @@ export default function HeroSection() {
               </div>
             </div>
 
-            <div className="flex gap-4 p-5">
+            <div className="flex gap-4 px-6 pt-7 pb-24">
               <HeroBrowserFrame label="Before">
                 <MockDashboardBefore />
               </HeroBrowserFrame>
@@ -293,25 +296,6 @@ export default function HeroSection() {
               </HeroBrowserFrame>
             </div>
 
-            {/* Bottom stats bar */}
-            <div
-              className="px-5 py-3 border-t flex items-center justify-between"
-              style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-            >
-              <div className="flex items-center gap-5">
-                {[
-                  { label: 'Issues fixed', value: '7' },
-                  { label: 'Quality score', value: '34 → 91' },
-                  { label: 'Preset', value: 'Railway' },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-1.5">
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{item.label}:</span>
-                    <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>{item.value}</span>
-                  </div>
-                ))}
-              </div>
-              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Generated in 2.4s</span>
-            </div>
           </div>
         </div>
       </div>
