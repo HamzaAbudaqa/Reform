@@ -26,6 +26,7 @@ export default function DiscoveryPage() {
   const [error, setError] = useState('')
   const [completed, setCompleted] = useState(false)
   const [discovery, setDiscovery] = useState<DiscoveryData | null>(null)
+  const [showNotification, setShowNotification] = useState(false)
   const router = useRouter()
   const { startProgress, updateProgress, finishProgress } = useProgress()
 
@@ -74,7 +75,7 @@ export default function DiscoveryPage() {
       sessionStorage.setItem('refineui_discovery', JSON.stringify(discoveryData))
       sessionStorage.setItem('refineui_analysis', JSON.stringify(analysis))
       sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
-      finishProgress(); setDiscovery(discoveryData); setCompleted(true); setLoading(false)
+      finishProgress(); setDiscovery(discoveryData); setCompleted(true); setLoading(false); setShowNotification(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Pipeline failed')
       finishProgress(); setLoading(false)
@@ -85,6 +86,28 @@ export default function DiscoveryPage() {
   if (completed && discovery) {
     return (
       <div className="flex items-start justify-center px-6 py-12">
+        {/* Success notification popup */}
+        {showNotification && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+            <div className="rounded-2xl p-8 max-w-md w-full mx-4 text-center animate-in fade-in zoom-in duration-300" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(168,85,247,0.2)', boxShadow: '0 0 60px rgba(124,58,237,0.15)' }}>
+              <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Analysis Complete!</h2>
+              <p className="text-[14px] mb-6" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: '1.6' }}>
+                We&apos;ve successfully analyzed your competitors, let us help you beat them.
+              </p>
+              <button
+                onClick={() => setShowNotification(false)}
+                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.25)' }}
+              >
+                Let&apos;s Go
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="w-full max-w-4xl space-y-6">
           {/* Header */}
           <div className="text-center mb-8">
@@ -120,7 +143,7 @@ export default function DiscoveryPage() {
                   <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{discovery.selected_for_analysis.length} analyzed</span>
                 </div>
                 <div className="space-y-0">
-                  {discovery.competitors.slice(0, 5).map((c, i) => (
+                  {discovery.competitors.slice(0, 3).map((c, i) => (
                     <div key={i} className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                       <div className="flex items-center gap-2.5">
                         <span className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: 'rgba(168,85,247,0.7)' }}>{i + 1}</span>
@@ -147,7 +170,7 @@ export default function DiscoveryPage() {
             {[
               { label: 'Competitors Found', value: discovery.competitors.length.toString(), sub: 'in category' },
               { label: 'Sites Analyzed', value: discovery.selected_for_analysis.length.toString(), sub: 'with TinyFish' },
-              { label: 'Avg Relevance', value: `${Math.round(discovery.competitors.slice(0, 5).reduce((a, c) => a + c.relevance, 0) / 5 * 100)}%`, sub: 'top 5 match' },
+              { label: 'Avg Relevance', value: `${Math.round(discovery.competitors.slice(0, 3).reduce((a, c) => a + c.relevance, 0) / 3 * 100)}%`, sub: 'top 3 match' },
             ].map((stat) => (
               <div key={stat.label} className="rounded-xl p-4 text-center" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
