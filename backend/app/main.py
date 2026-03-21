@@ -2,8 +2,8 @@ import logging
 
 from fastapi import FastAPI
 
-from app.backend.routes.analyze_competitors import router as competitors_router
-from app.backend.routes.transform_ui import router as transform_router
+from app.routes.analyze_competitors import router as competitors_router
+from app.routes.transform_ui import router as transform_router
 
 logging.basicConfig(
     level=logging.INFO,

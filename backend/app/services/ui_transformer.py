@@ -4,8 +4,8 @@ import os
 
 import anthropic
 
-from app.backend.prompts.ui_transform_prompt import build_code_generation_prompt
-from app.backend.schemas.ui_transform import (
+from app.prompts.ui_transform_prompt import build_code_generation_prompt
+from app.schemas.ui_transform import (
     DesignIntelligence,
     PanelConfig,
     RefinedButtonSpec,

@@ -1,10 +1,10 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.backend.schemas.competitors import CompetitorAnalysisResponse
-from app.backend.services.mock_competitors import MOCK_RESPONSE, mock_site_analysis
-from app.backend.services.pattern_aggregator import aggregate_patterns
-from app.backend.services.tinyfish_client import extract_site_data
+from app.schemas.competitors import CompetitorAnalysisResponse
+from app.services.mock_competitors import MOCK_RESPONSE, mock_site_analysis
+from app.services.pattern_aggregator import aggregate_patterns
+from app.services.tinyfish_client import extract_site_data
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from app.backend.schemas.ui_transform import DesignIntelligence, UITransformResponse
-from app.backend.services.ui_transformer import transform_ui
+from app.schemas.ui_transform import DesignIntelligence, UITransformResponse
+from app.services.ui_transformer import transform_ui
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
