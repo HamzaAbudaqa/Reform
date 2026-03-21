@@ -72,14 +72,19 @@ class CodeTransformRequest(BaseModel):
     target_file: str  # primary file to refactor
     design_intelligence: dict  # CompetitorAnalysisResponse as dict
     user_intent: str = ""  # e.g. "make this more modern"
+    repo_clone_url: str = ""  # e.g. "https://github.com/user/repo.git" for cloning
+    branch: str = "main"
+    access_token: str = ""  # GitHub token for private repos
 
 
 class CodeTransformResponse(BaseModel):
     transformed_files: list[TransformedFile]
     change_annotations: list[ChangeAnnotation]
     change_summary: list[str]  # bullet list of improvements
-    before_html: str  # static HTML approximation of original
-    after_html: str  # static HTML approximation of transformed
+    before_screenshot: str  # base64 PNG of real BEFORE (or empty if failed)
+    after_screenshot: str  # base64 PNG of AFTER with CSS improvements (or empty)
+    preview_route: str  # which route was rendered
+    preview_error: str = ""  # non-empty if preview failed
 
 
 # ─── GitHub Commit Writeback ─────────────────────────────────────────────────

@@ -36,11 +36,13 @@ interface ChangeAnnotation { region: string; change_type: string; description: s
 interface TransformResult {
   transformed_files: { path: string; original_code: string; updated_code: string; diff_summary: string }[]
   change_annotations: ChangeAnnotation[]; change_summary: string[]
-  before_html: string; after_html: string
+  before_screenshot: string; after_screenshot: string
+  preview_route: string; preview_error?: string
 }
 interface GithubRepo {
   id: number; full_name: string; name: string; private: boolean
   language: string | null; updated_at: string; default_branch: string
+  homepage: string | null; html_url: string
 }
 type PipelineStep = 'idle' | 'ingesting' | 'analyzing' | 'transforming' | 'complete'
 
@@ -625,7 +627,7 @@ export default function TransformPage() {
   useEffect(() => {
     if (session?.accessToken && repos.length === 0 && pipelineStep === 'idle') {
       setLoadingRepos(true)
-      fetch('https://api.github.com/user/repos?sort=updated&per_page=30&type=owner', {
+      fetch('https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=owner,collaborator', {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       })
         .then(r => r.json())
@@ -691,7 +693,7 @@ export default function TransformPage() {
     try {
       const res = await fetch('http://localhost:8000/transform-code', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files, target_file: target, design_intelligence: analysis, user_intent: userIntent }),
+        body: JSON.stringify({ files, target_file: target, design_intelligence: analysis, user_intent: userIntent, repo_clone_url: `https://github.com/${repo.full_name}.git`, branch: repo.default_branch || 'main', access_token: session?.accessToken || '' }),
       })
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Transform failed') }
       const result: TransformResult = await res.json()
@@ -957,21 +959,46 @@ export default function TransformPage() {
                 <a href={commitResult.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium" style={{ color: 'rgba(168,85,247,0.7)' }}>View commit &rarr;</a>
               </div>
             )}
+            {/* Route being rendered */}
+            {transformResult.preview_route && !transformResult.preview_error && (
+              <div className="rounded-lg px-4 py-2 mb-4 max-w-4xl mx-auto flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Rendering actual route:</span>
+                <span className="text-[11px] font-mono" style={{ color: 'rgba(168,85,247,0.6)' }}>{transformResult.preview_route}</span>
+              </div>
+            )}
+
+            {/* Before / After preview cards — always visible */}
             <div className="flex flex-col lg:flex-row gap-6">
               <BrowserFrame label="Before">
-                <div className="relative">
-                  <iframe srcDoc={transformResult.before_html} className="w-full border-0" style={{ minHeight: '320px', background: '#09090b', pointerEvents: 'none' }} sandbox="" tabIndex={-1} title="Before preview" />
-                  <div className="absolute inset-0" style={{ pointerEvents: 'auto', cursor: 'default' }} />
-                </div>
+                {transformResult.before_screenshot ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`data:image/png;base64,${transformResult.before_screenshot}`} alt="Before — real screenshot" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
+                ) : (
+                  <div className="flex items-center justify-center p-8" style={{ minHeight: '280px', background: '#0d0c16' }}>
+                    <div className="text-center max-w-xs">
+                      <svg className="mx-auto mb-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(245,158,11,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Preview unavailable</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{transformResult.preview_error || 'Make sure your app is running locally'}</p>
+                    </div>
+                  </div>
+                )}
               </BrowserFrame>
               <div className="hidden lg:flex items-center justify-center">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.3)' }}><span className="text-white text-lg">&rarr;</span></div>
               </div>
               <BrowserFrame label="After" accent>
-                <div className="relative">
-                  <iframe srcDoc={transformResult.after_html} className="w-full border-0" style={{ minHeight: '320px', background: '#09090b', pointerEvents: 'none' }} sandbox="" tabIndex={-1} title="After preview" />
-                  <div className="absolute inset-0" style={{ pointerEvents: 'auto', cursor: 'default' }} />
-                </div>
+                {transformResult.after_screenshot ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`data:image/png;base64,${transformResult.after_screenshot}`} alt="After — improved version" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
+                ) : (
+                  <div className="flex items-center justify-center p-8" style={{ minHeight: '280px', background: '#0d0c16' }}>
+                    <div className="text-center max-w-xs">
+                      <svg className="mx-auto mb-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Preview unavailable</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Code changes generated — preview requires running app</p>
+                    </div>
+                  </div>
+                )}
               </BrowserFrame>
             </div>
             {transformResult.change_annotations.length > 0 && (
