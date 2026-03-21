@@ -123,20 +123,26 @@ def build_code_transform_prompt(
 Return a JSON object with this exact structure:
 {{
   "updated_code": "the complete refactored file content",
-  "diff_summary": "2-3 sentence summary of what changed",
+  "diff_summary": "1 sentence, plain English, no code terms. Example: 'Improved page layout and visual consistency'",
   "change_annotations": [
     {{
-      "region": "name of the UI section changed",
+      "region": "human-readable section name like 'Hero section', 'Navigation bar', 'Page layout' — NOT code terms like 'body element' or 'div container'",
       "change_type": "layout|spacing|component|visual",
-      "description": "what was changed",
-      "ux_impact": "why this improves the UX"
+      "description": "Plain English description a designer would write. NO code terms, NO class names, NO HTML tags. BAD: 'Added min-h-screen Tailwind utility to body className'. GOOD: 'Made the page fill the full screen height'",
+      "ux_impact": "User-facing benefit in plain English. BAD: 'Improves developer experience'. GOOD: 'Eliminates white gaps on short pages'"
     }}
   ],
   "change_summary": [
-    "bullet point 1: what improved and why",
-    "bullet point 2: what improved and why"
+    "Plain English improvement a non-developer would understand. NO backticks, NO code terms, NO class names, NO HTML tags. BAD: 'Added min-h-screen to the body element'. GOOD: 'Pages now fill the full screen height, preventing blank gaps at the bottom'"
   ]
 }}
+
+CRITICAL LANGUAGE RULES for change_annotations, change_summary, and diff_summary:
+- Write as if explaining to a product manager or designer, NOT a developer
+- NEVER use: className, div, span, Tailwind, CSS, px, rem, hex, tag, element, utility, component name
+- NEVER use backticks or code formatting
+- Focus on WHAT THE USER SEES, not what the code does
+- Use words like: section, area, button, heading, spacing, alignment, contrast, visibility
 
 Return ONLY valid JSON — no markdown fences, no explanation."""
 
