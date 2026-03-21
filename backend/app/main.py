@@ -12,6 +12,7 @@ from app.routes.suggest_edit import router as suggest_router
 from app.routes.voice import router as voice_router
 from app.routes.voice_chat import router as voice_chat_router
 from app.routes.transcribe import router as transcribe_router
+from app.routes.code_pipeline import router as code_pipeline_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +40,7 @@ app.include_router(suggest_router)
 app.include_router(voice_router)
 app.include_router(voice_chat_router)
 app.include_router(transcribe_router)
+app.include_router(code_pipeline_router)
 
 
 @app.get("/health")
