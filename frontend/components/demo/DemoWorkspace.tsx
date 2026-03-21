@@ -8,10 +8,10 @@ import RepoInputPanel from './RepoInputPanel'
 import BeforeAfterCanvas from './BeforeAfterCanvas'
 import ControlsPanel from './ControlsPanel'
 
-export default function DemoWorkspace() {
-  const [state, setState] = useState<TransformState>('empty')
+export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: string } = {}) {
+  const [state, setState] = useState<TransformState>(initialRepoUrl ? 'uploaded' : 'empty')
   const [preset, setPreset] = useState<StylePreset>('railway')
-  const [repoUrl, setRepoUrl] = useState('')
+  const [repoUrl, setRepoUrl] = useState(initialRepoUrl ?? '')
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   const handleSubmit = () => {

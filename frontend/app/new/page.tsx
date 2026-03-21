@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import DemoWorkspace from '@/components/demo/DemoWorkspace'
 
 const SUGGESTIONS = [
   'Refine a Next.js dashboard to Railway style',
@@ -29,7 +30,8 @@ function GitHubIcon({ size = 16, color = 'currentColor' }: { size?: number; colo
 export default function NewPage() {
   const { data: session, status } = useSession()
   const [query, setQuery] = useState('')
-  const [view, setView] = useState<'main' | 'github' | 'creating'>('main')
+  const [view, setView] = useState<'main' | 'github' | 'creating' | 'workspace'>('main')
+  const [selectedRepo, setSelectedRepo] = useState('')
   const [repos, setRepos] = useState<GithubRepo[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [creatingRepo, setCreatingRepo] = useState(false)
@@ -152,8 +154,22 @@ export default function NewPage() {
       {/* Main content */}
       <div className="flex-1 flex items-center justify-center p-6">
 
-        {/* ── GitHub repo view ── */}
-        {view === 'github' ? (
+        {/* ── Workspace view ── */}
+        {view === 'workspace' ? (
+          <div className="w-full max-w-[1280px]">
+            <DemoWorkspace initialRepoUrl={selectedRepo} />
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={() => { setView('main'); setQuery(''); setSelectedRepo('') }}
+                className="text-xs transition-colors"
+                style={{ color: 'rgba(255,255,255,0.25)' }}
+              >
+                ← Back to project selection
+              </button>
+            </div>
+          </div>
+
+        ) : view === 'github' ? (
           <div className="w-full max-w-lg">
             <div className="text-center mb-8">
               <div
@@ -200,13 +216,16 @@ export default function NewPage() {
                       <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
                       <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 px-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.2)', background: '#13111c' }}>or paste a public URL</span>
                     </div>
-                    <Link
-                      href={`/?repo=${encodeURIComponent(query || 'https://github.com/vercel/next.js')}#demo`}
+                    <button
+                      onClick={() => {
+                        setSelectedRepo(query || 'https://github.com/vercel/next.js')
+                        setView('workspace')
+                      }}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium"
                       style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: 'white' }}
                     >
                       Refine →
-                    </Link>
+                    </button>
                   </div>
                 )}
 
@@ -218,11 +237,14 @@ export default function NewPage() {
                 )}
 
                 {session && !loadingRepos && filteredRepos.map((repo) => (
-                  <Link
+                  <div
                     key={repo.id}
-                    href={`/?repo=${encodeURIComponent(`https://github.com/${repo.full_name}`)}#demo`}
                     className="flex items-center justify-between px-4 py-3 cursor-pointer transition-colors"
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                    onClick={() => {
+                      setSelectedRepo(`https://github.com/${repo.full_name}`)
+                      setView('workspace')
+                    }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
@@ -242,7 +264,7 @@ export default function NewPage() {
                         Private
                       </span>
                     )}
-                  </Link>
+                  </div>
                 ))}
 
                 {/* Create new repo (logged in only) */}
