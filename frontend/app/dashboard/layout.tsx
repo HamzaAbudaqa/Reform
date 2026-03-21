@@ -44,13 +44,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen" style={{ background: '#13111c' }}>
-      <InteractiveBackground />
+      {pathname !== '/dashboard/transform' && <InteractiveBackground />}
       <GlobalProgressBar />
 
       {/* Navbar — matches landing page exactly */}
       <header className="fixed top-0 left-0 right-0 z-50 px-6 py-3 flex justify-between items-center" style={{ background: 'rgba(19,17,28,0.8)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex items-center gap-8">
-          <Link href="/">
+          <Link href="/" className="flex items-center gap-2.5">
             <Image src="/reform_logo.png" alt="Reform" width={160} height={50} className="object-contain" />
           </Link>
 
@@ -73,11 +73,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-center gap-3">
           <button onClick={() => { sessionStorage.removeItem('refineui_analysis'); sessionStorage.removeItem('refineui_discovery'); sessionStorage.removeItem('refineui_answers'); window.location.href = '/dashboard/discovery' }} className="px-3 py-1.5 rounded-lg text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            + New
+            Start New Analysis
           </button>
-          <div className="w-7 h-7 rounded-full" style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
-            <div className="w-full h-full flex items-center justify-center text-white text-[10px] font-semibold">R</div>
-          </div>
         </div>
       </header>
 
