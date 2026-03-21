@@ -18,7 +18,7 @@ interface AnalysisResult {
   before: { annotations: Annotation[]; ux_score: number }
   after: { annotations: Annotation[]; ux_score: number; ai_forecast: number }
   analytics: { roi: string; engagement_change: string; confidence: string; insight: string }
-  html_preview?: string
+  after_screenshot_b64?: string
 }
 
 // ── UX Simulation data ─────────────────────────────────────────────
@@ -33,28 +33,22 @@ const DEFAULT_SCREENS = [
 const HEATMAP_TYPES = [
   { key: 'attention', label: 'Attention' },
   { key: 'click', label: 'Click' },
-  { key: 'scroll', label: 'Scroll' },
+  { key: 'scroll', label: 'Content Density' },
   { key: 'eye', label: 'Eye Tracking' },
-  { key: 'dropoff', label: 'Drop-off' },
-  { key: 'rageclicks', label: 'Rage Click' },
 ]
 
 const ANALYTICS_FALLBACK: Record<string, { roi: string; engagement: string; engagementRaw: number; confidence: string; confidenceRaw: number; insight: string }> = {
-  attention:  { roi: '+34%', engagement: '+28%', engagementRaw: 28, confidence: '94.2%', confidenceRaw: 94, insight: 'Primary CTA achieves 88% visual saliency within 2s. Consolidating layout clusters reduces cognitive load.' },
-  click:      { roi: '+22%', engagement: '+19%', engagementRaw: 19, confidence: '91.5%', confidenceRaw: 91, insight: 'Click concentration shifted to conversion zones. Navigation clicks down 18%, intent clicks up 22%.' },
-  scroll:     { roi: '+15%', engagement: '+31%', engagementRaw: 31, confidence: '89.0%', confidenceRaw: 89, insight: 'Users scroll 31% deeper on transformed design. Content fold restructuring improved depth.' },
-  eye:        { roi: '+41%', engagement: '+37%', engagementRaw: 37, confidence: '96.1%', confidenceRaw: 96, insight: 'Eye tracking predicts 1.8x more fixations on key CTAs. F-pattern improved to Z-pattern.' },
-  dropoff:    { roi: '+27%', engagement: '+24%', engagementRaw: 24, confidence: '92.8%', confidenceRaw: 92, insight: 'Drop-off point moved from 35% to 68% scroll depth. Friction reduction improved retention.' },
-  rageclicks: { roi: '+18%', engagement: '+14%', engagementRaw: 14, confidence: '88.3%', confidenceRaw: 88, insight: 'Rage click zones reduced by 76%. Frustration points eliminated in checkout and auth flows.' },
+  attention: { roi: '+34%', engagement: '+28%', engagementRaw: 28, confidence: '94.2%', confidenceRaw: 94, insight: 'Primary CTA achieves 88% visual saliency within 2s. Consolidating layout clusters reduces cognitive load.' },
+  click:     { roi: '+22%', engagement: '+19%', engagementRaw: 19, confidence: '91.5%', confidenceRaw: 91, insight: 'Click concentration shifted to conversion zones. Navigation clicks down 18%, intent clicks up 22%.' },
+  scroll:    { roi: '+15%', engagement: '+31%', engagementRaw: 31, confidence: '89.0%', confidenceRaw: 89, insight: 'Content density restructuring improves readability. Chunking reduced cognitive load by an estimated 31%.' },
+  eye:       { roi: '+41%', engagement: '+37%', engagementRaw: 37, confidence: '96.1%', confidenceRaw: 96, insight: 'Eye tracking predicts 1.8x more fixations on key CTAs. F-pattern improved to Z-pattern.' },
 }
 
 const SCORES_FALLBACK: Record<string, { beforeEng: string; afterEng: string }> = {
-  attention:  { beforeEng: '52', afterEng: '86' },
-  click:      { beforeEng: '61', afterEng: '83' },
-  scroll:     { beforeEng: '44', afterEng: '75' },
-  eye:        { beforeEng: '57', afterEng: '94' },
-  dropoff:    { beforeEng: '48', afterEng: '79' },
-  rageclicks: { beforeEng: '39', afterEng: '77' },
+  attention: { beforeEng: '52', afterEng: '86' },
+  click:     { beforeEng: '61', afterEng: '83' },
+  scroll:    { beforeEng: '44', afterEng: '75' },
+  eye:       { beforeEng: '57', afterEng: '94' },
 }
 
 // ── Annotation colours ─────────────────────────────────────────────
@@ -72,15 +66,9 @@ const CARD_H = 116 // approximate rendered height
 function AnnotatedPreview({
   screenshotB64,
   annotations,
-  uxScore,
-  showForecast,
-  forecastScore,
 }: {
   screenshotB64: string
   annotations: Annotation[]
-  uxScore: number
-  showForecast: boolean
-  forecastScore?: number
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -220,19 +208,6 @@ function AnnotatedPreview({
           </div>
         )}
 
-        {/* UX Score badge */}
-        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, zIndex: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 8, background: 'rgba(15,13,24,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(74,68,85,0.3)' }}>
-            <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(204,195,216,0.5)' }}>UX Score</span>
-            <span style={{ fontSize: '14px', fontWeight: 900, color: '#d2bbff' }}>{uxScore}</span>
-          </div>
-          {showForecast && forecastScore !== undefined && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 8, background: 'rgba(15,13,24,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(124,58,237,0.25)' }}>
-              <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(204,195,216,0.5)' }}>AI Forecast</span>
-              <span style={{ fontSize: '14px', fontWeight: 900, color: '#a855f7' }}>{forecastScore}</span>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -455,16 +430,20 @@ export default function SimulationPage() {
               <AnalysisLoadingWindow label="Before" />
             ) : analysis ? (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Before</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Before</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
+                    <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
+                    <span className="text-sm font-black" style={{ color: '#d2bbff' }}>{analysis.before.ux_score}</span>
+                  </div>
                 </div>
                 <div className="relative rounded-xl overflow-hidden" style={{ background: '#201e2a', border: '1px solid rgba(74,68,85,0.15)' }}>
                   <AnnotatedPreview
                     screenshotB64={analysis.screenshot_b64}
                     annotations={analysis.before.annotations}
-                    uxScore={analysis.before.ux_score}
-                    showForecast={false}
                   />
                 </div>
               </div>
@@ -482,43 +461,24 @@ export default function SimulationPage() {
                     <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7' }} />
                     <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>After</span>
                   </div>
-                  {analysis.html_preview && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)', border: '1px solid rgba(124,58,237,0.2)' }}>
-                      AI Generated Preview
-                    </span>
-                  )}
-                </div>
-                <div className="relative rounded-xl overflow-hidden" style={{ background: '#201e2a', border: '1px solid rgba(124,58,237,0.25)', boxShadow: '0 0 30px rgba(124,58,237,0.12)', aspectRatio: '16/5' }}>
-                  {analysis.html_preview ? (
-                    <>
-                      <iframe
-                        srcDoc={analysis.html_preview}
-                        sandbox="allow-scripts"
-                        style={{ position: 'absolute', top: 0, left: 0, width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left', border: 'none', background: 'white' }}
-                      />
-                      {/* UX Score badges */}
-                      <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5 z-10">
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(74,68,85,0.3)' }}>
-                          <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>UX Score</span>
-                          <span className="text-sm font-black" style={{ color: '#d2bbff' }}>{analysis.after.ux_score}</span>
-                        </div>
-                        {analysis.after.ai_forecast !== undefined && (
-                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(124,58,237,0.25)' }}>
-                            <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>AI Forecast</span>
-                            <span className="text-sm font-black" style={{ color: '#a855f7' }}>{analysis.after.ai_forecast}</span>
-                          </div>
-                        )}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
+                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
+                      <span className="text-sm font-black" style={{ color: '#d2bbff' }}>{analysis.after.ux_score}</span>
+                    </div>
+                    {analysis.after.ai_forecast !== undefined && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(124,58,237,0.25)' }}>
+                        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>AI Forecast</span>
+                        <span className="text-sm font-black" style={{ color: '#a855f7' }}>{analysis.after.ai_forecast}</span>
                       </div>
-                    </>
-                  ) : (
-                    <AnnotatedPreview
-                      screenshotB64={analysis.screenshot_b64}
-                      annotations={analysis.after.annotations}
-                      uxScore={analysis.after.ux_score}
-                      showForecast={true}
-                      forecastScore={analysis.after.ai_forecast}
-                    />
-                  )}
+                    )}
+                  </div>
+                </div>
+                <div className="relative rounded-xl overflow-hidden" style={{ background: '#201e2a', border: '1px solid rgba(124,58,237,0.25)', boxShadow: '0 0 30px rgba(124,58,237,0.12)' }}>
+                  <AnnotatedPreview
+                    screenshotB64={analysis.after_screenshot_b64 ?? analysis.screenshot_b64}
+                    annotations={analysis.after.annotations}
+                  />
                 </div>
               </div>
             ) : (
@@ -533,7 +493,7 @@ export default function SimulationPage() {
               <div className="flex items-center gap-4">
                 {(['positive', 'issue', 'warning', 'insight'] as const).map((t) => (
                   <div key={t} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm" style={{ background: ANNOTATION_COLORS[t].border }} />
+                    <div className="w-3 h-3 rounded-sm" style={{ background: ANNOTATION_COLORS[t].pin }} />
                     <span className="text-[10px] uppercase font-bold" style={{ color: 'rgba(204,195,216,0.5)' }}>{t}</span>
                   </div>
                 ))}

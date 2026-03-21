@@ -62,7 +62,8 @@ You MUST return ONLY valid JSON — no markdown, no code fences, no explanation 
     "engagement_change": "+28%",
     "confidence": "91.5%",
     "insight": "2-3 sentence summary of the key findings and highest-impact recommendations based on what is actually visible in this screenshot."
-  }
+  },
+  "css_patch": "/* Valid CSS that applies the after improvements directly to the page. Use broad, robust selectors (tag names, attribute selectors, existing class patterns visible in the screenshot) rather than guessing specific class names. Focus on the highest-impact visual changes: button styling, spacing, contrast, typography size, layout fixes. Example: a[href] { display: inline-block; padding: 10px 20px; background: #7c3aed; color: white; border-radius: 6px; text-decoration: none; } */"
 }
 
 Zone coordinates are percentages (0–100) of the image width (x, w) and height (y, h).
@@ -70,6 +71,7 @@ Zone coordinates are percentages (0–100) of the image width (x, w) and height 
 - after.annotations: predicted optimised state annotations after fixing the identified issues
 - ux_score: integer 0–100 reflecting overall UX quality
 - ai_forecast: integer 0–100 predicting UX score after recommended fixes
+- css_patch: valid CSS injected into the real page to visually apply the improvements — must use robust selectors, not guessed class names
 - Return ONLY the JSON object. No extra text."""
 
     focus_descriptions: dict[str, str] = {
@@ -94,14 +96,14 @@ Zone coordinates are percentages (0–100) of the image width (x, w) and height 
             "Annotate strong CTAs, affordance failures, Fitts' Law violations, and confusion zones."
         ),
         "scroll": (
-            "ANALYSIS FOCUS: Scroll Behaviour & Content Density\n\n"
-            "Analyse the screenshot for scroll engagement and fold strategy. Focus on:\n"
-            "- Fold position: what is visible without scrolling, and does it compel the user to continue?\n"
-            "- Scroll triggers: are there strong visual or content cues (partial elements, progressive reveals) that invite scrolling?\n"
-            "- Content density: is information chunked using Miller's Law (7±2), or is there cognitive overload?\n"
-            "- Progressive disclosure: is complex information revealed gradually, or dumped all at once?\n"
-            "- Drop-off risk: are there content deserts or visual dead-ends that could halt scroll momentum?\n"
-            "Annotate what anchors users at the fold, what drives scroll, and where density or dead-ends risk early abandonment."
+            "ANALYSIS FOCUS: Content Density & Information Architecture\n\n"
+            "Analyse the screenshot for content density, hierarchy, and information architecture. Focus on:\n"
+            "- Fold position: what is visible without scrolling, and is it dense enough to convey value?\n"
+            "- Content chunking: is information grouped using Miller's Law (7±2 chunks), or is there cognitive overload?\n"
+            "- Progressive disclosure: is complex information revealed gradually, or presented all at once?\n"
+            "- Visual dead zones: large empty areas that waste viewport real estate and reduce information density\n"
+            "- Whitespace balance: is whitespace used purposefully to group and separate content, or does it fragment the layout?\n"
+            "Annotate over-dense regions, under-utilised areas, chunking failures, and strong information hierarchy patterns."
         ),
         "eye": (
             "ANALYSIS FOCUS: Eye Tracking & Gaze Patterns\n\n"
@@ -112,28 +114,6 @@ Zone coordinates are percentages (0–100) of the image width (x, w) and height 
             "- Saccade paths: are there natural eye movement paths between key content areas?\n"
             "- Gaze dead zones: areas unlikely to receive fixations, potentially wasting valuable real estate\n"
             "Annotate predicted high-fixation zones, reading path anchors, gaze dead zones, and visual weight imbalances."
-        ),
-        "dropoff": (
-            "ANALYSIS FOCUS: Drop-off Points & Friction\n\n"
-            "Analyse the screenshot for friction points and drop-off risk. Focus on:\n"
-            "- Cognitive overload: dense text, unclear hierarchy, too many simultaneous choices (Hick's Law)\n"
-            "- Trust signals: are there testimonials, security badges, guarantees, or social proof? Their absence creates anxiety.\n"
-            "- Confusion zones: ambiguous labels, unclear next steps, or missing signposting\n"
-            "- Form friction: long forms, required fields without explanation, unclear validation\n"
-            "- Value proposition clarity: does the user immediately understand what they get and why it matters?\n"
-            "- Micro-copy gaps: missing helper text, error explanations, or contextual guidance\n"
-            "Annotate high-friction elements, trust signal gaps, and areas likely to cause user abandonment."
-        ),
-        "rageclicks": (
-            "ANALYSIS FOCUS: Rage Clicks & Broken Affordances\n\n"
-            "Analyse the screenshot for elements likely to trigger rage clicks (frustrated repeated clicking). Focus on:\n"
-            "- Broken affordances: elements that look interactive but are not (static text styled like links, decorative buttons)\n"
-            "- Misleading UI patterns: elements that suggest clickability via colour, underline, or hover-like appearance\n"
-            "- Unresponsive-looking elements: buttons or links that may appear disabled, greyed, or broken\n"
-            "- False interactivity: images, badges, or cards that appear clickable but lead nowhere\n"
-            "- Proximity confusion: non-interactive elements placed so close to interactive ones that misfires occur\n"
-            "- Loading state ambiguity: elements that could be mistaken for loading/broken states\n"
-            "Annotate elements most at risk of rage clicks, their affordance failures, and predicted fix impact."
         ),
     }
 
