@@ -1,164 +1,155 @@
 /**
- * MockDashboardBefore — intentionally poor UI design.
- * Issues baked in: inconsistent spacing, mixed capitalization, random border-radii,
- * different card heights/styles, no color system, poor hierarchy.
+ * MockDashboardBefore — realistic but unpolished.
+ * Looks like a real SaaS admin panel built without a design system:
+ * light mode, generic blue accents, inconsistent spacing/radius/type.
  */
 export default function MockDashboardBefore() {
   return (
-    <div className="w-full h-full bg-[#1a1b2e] text-sm font-sans flex flex-col overflow-hidden">
-      {/* Top nav — cramped, mismatched */}
-      <div className="bg-[#252741] px-4 py-3 flex items-center gap-5 border-b border-[#373865] flex-shrink-0">
-        <span className="text-white font-black text-xl tracking-tight">ACME Admin</span>
-        <div className="flex items-center gap-5 ml-2">
-          <span className="text-[#aab0d0] text-[11px] uppercase tracking-widest cursor-pointer">Dashboard</span>
-          <span className="text-[#aab0d0] text-[11px] uppercase tracking-widest cursor-pointer">Users</span>
-          <span className="text-[#aab0d0] text-xs cursor-pointer">REPORTS</span>
-          <span className="text-[#aab0d0] text-[10px] cursor-pointer">settings</span>
+    <div className="w-full h-full text-sm font-sans flex flex-col overflow-hidden" style={{ background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
+
+      {/* Top nav */}
+      <div className="flex items-center px-5 gap-6 flex-shrink-0" style={{ height: '52px', background: '#1e40af', borderBottom: '3px solid #1d4ed8' }}>
+        <span className="text-white font-bold text-base tracking-tight">ProjectHub</span>
+        <div className="flex items-center gap-5 text-blue-200 text-xs">
+          {['Dashboard', 'Projects', 'Team', 'Reports', 'Settings'].map((item, i) => (
+            <span key={item} className="cursor-pointer" style={{ color: i === 0 ? '#ffffff' : '#93c5fd', borderBottom: i === 0 ? '2px solid white' : 'none', paddingBottom: '2px' }}>
+              {item}
+            </span>
+          ))}
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button className="bg-green-500 text-white text-[10px] px-2.5 py-1 rounded font-medium">
-            + New User
-          </button>
-          <button className="bg-blue-600 text-white text-[10px] px-2 py-1 font-medium">
-            Export
-          </button>
-          <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold ml-1">
-            AD
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-blue-200 text-xs">🔔</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-full bg-blue-300 flex items-center justify-center text-blue-900 text-[10px] font-bold">JD</div>
+            <span className="text-blue-100 text-xs">John D. ▾</span>
           </div>
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar — cramped, inconsistent */}
-        <div className="w-48 bg-[#1e2035] border-r border-[#373865] p-2 pt-3 flex-shrink-0 overflow-y-auto">
-          <div className="text-[#6b7280] text-[9px] uppercase tracking-widest mb-1.5 px-2 font-bold">
-            MAIN MENU
-          </div>
-          <div className="text-white bg-blue-700 px-2 py-1.5 rounded text-[11px] mb-0.5 cursor-pointer">
-            📊 Dashboard
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-[11px] cursor-pointer hover:bg-white/5">
-            All Users
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1.5 text-[11px] cursor-pointer hover:bg-white/5">
-            ➕ Add New User
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-xs cursor-pointer hover:bg-white/5">
-            Export Data
+
+        {/* Sidebar */}
+        <div className="flex-shrink-0 flex flex-col" style={{ width: '190px', background: '#ffffff', borderRight: '1px solid #e5e7eb' }}>
+          <div className="px-3 py-3">
+            <div className="text-[9px] font-semibold uppercase tracking-wider mb-2 px-2" style={{ color: '#9ca3af' }}>Main</div>
+            {[
+              { label: '📊  Dashboard', active: true },
+              { label: '📁  Projects', active: false },
+              { label: '✅  Tasks', active: false },
+              { label: '👥  Team', active: false },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center px-2 py-2 rounded mb-0.5 text-xs cursor-pointer"
+                style={{
+                  background: item.active ? '#eff6ff' : 'transparent',
+                  color: item.active ? '#1d4ed8' : '#6b7280',
+                  fontWeight: item.active ? 600 : 400,
+                  borderLeft: item.active ? '3px solid #1d4ed8' : '3px solid transparent',
+                }}
+              >
+                {item.label}
+              </div>
+            ))}
+
+            <div className="text-[9px] font-semibold uppercase tracking-wider mt-4 mb-2 px-2" style={{ color: '#9ca3af' }}>Reports</div>
+            {['📈  Analytics', '📋  Invoices', '📉  Expenses'].map((label) => (
+              <div key={label} className="flex items-center px-2 py-2 rounded mb-0.5 text-xs cursor-pointer" style={{ color: '#6b7280', borderLeft: '3px solid transparent' }}>
+                {label}
+              </div>
+            ))}
           </div>
 
-          <div className="text-[#6b7280] text-[9px] uppercase tracking-widest mt-4 mb-1 px-2 font-bold">
-            REPORTS
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-[11px] cursor-pointer hover:bg-white/5">
-            Monthly Report
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-xs cursor-pointer hover:bg-white/5">
-            Weekly Report
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1.5 text-[11px] cursor-pointer hover:bg-white/5">
-            Custom report
-          </div>
-
-          <div className="text-[#6b7280] text-[9px] uppercase tracking-widest mt-4 mb-1 px-2 font-bold">
-            SYSTEM
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-xs cursor-pointer hover:bg-white/5">
-            Security
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1 text-[11px] cursor-pointer hover:bg-white/5">
-            Profile Settings
-          </div>
-          <div className="text-[#aab0d0] px-2 py-1.5 text-xs cursor-pointer hover:bg-white/5">
-            Help & Docs
+          <div className="mt-auto p-3 border-t" style={{ borderColor: '#f3f4f6' }}>
+            <div className="text-[10px] text-center py-1 px-2 rounded" style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }}>
+              ⚠ Free plan — 3/5 projects
+            </div>
           </div>
         </div>
 
         {/* Main content */}
-        <div className="flex-1 p-5 overflow-auto bg-[#1a1b2e]">
-          {/* Page header — jumbled */}
-          <div className="mb-1">
-            <span className="text-white text-2xl font-black">DASHBOARD</span>
-          </div>
-          <div className="text-[#7b80a0] text-[10px] mb-5">
-            Last updated: Jan 15, 2024 at 3:45 PM &nbsp;|&nbsp; Welcome back, Admin User!
-          </div>
+        <div className="flex-1 overflow-auto p-5">
 
-          {/* Stats — inconsistent sizes and styles */}
-          <div className="flex gap-3 mb-5 items-start">
-            <div className="bg-blue-900 rounded p-3 w-[100px]">
-              <div className="text-[#8fa0c0] text-[9px] mb-1">Total Users</div>
-              <div className="text-white font-bold text-xl leading-none">2,847</div>
-              <div className="text-green-400 text-[9px] mt-1">↑ 12.5% this month</div>
+          {/* Page header */}
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h1 className="font-bold text-gray-800" style={{ fontSize: '20px' }}>Dashboard</h1>
+              <p className="text-gray-400 text-xs mt-0.5">Monday, January 15, 2024 · Welcome back John!</p>
             </div>
-
-            <div className="bg-[#2d2d4e] rounded-2xl p-4 w-[130px]">
-              <div className="text-gray-400 text-[9px] font-semibold uppercase tracking-wide">
-                REVENUE
-              </div>
-              <div className="text-yellow-400 font-black text-3xl leading-none mt-1">$48k</div>
-              <div className="text-gray-400 text-[9px] mt-1">vs last month</div>
-            </div>
-
-            <div className="bg-gray-700 rounded p-2 w-[90px]">
-              <div className="text-gray-300 text-[9px] mb-1">Active Sessions</div>
-              <div className="text-white font-bold text-lg leading-none">124</div>
-            </div>
-
-            <div className="bg-[#1e3a2f] border border-green-800 rounded-3xl p-4 flex-1">
-              <div className="text-gray-300 text-[10px]">Conversion Rate</div>
-              <div className="text-green-400 font-bold text-2xl mt-1">8.7%</div>
-              <div className="text-green-600 text-[9px]">Industry avg is 3.2%</div>
+            <div className="flex gap-2">
+              <button className="text-xs px-3 py-1.5 rounded" style={{ background: '#ffffff', border: '1px solid #d1d5db', color: '#374151' }}>
+                Export CSV
+              </button>
+              <button className="text-xs px-3 py-1.5 rounded font-medium" style={{ background: '#1d4ed8', color: 'white' }}>
+                + New Project
+              </button>
             </div>
           </div>
 
-          {/* Table — poor formatting */}
-          <div className="bg-[#252741] rounded overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-600 flex justify-between items-center">
-              <span className="text-white font-bold text-sm">Recent Signups</span>
-              <button className="text-[10px] text-blue-400 underline">View all users →</button>
+          {/* Stat cards — inconsistent sizes */}
+          <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="p-4 rounded-lg" style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}>
+              <div className="text-xs text-gray-400 mb-1">TOTAL PROJECTS</div>
+              <div className="font-bold text-gray-800" style={{ fontSize: '26px' }}>24</div>
+              <div className="text-xs mt-1" style={{ color: '#16a34a' }}>↑ 4 this month</div>
             </div>
-            <table className="w-full text-[11px]">
+            <div className="p-3 rounded" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+              <div className="text-[10px] text-blue-500 font-semibold mb-1">Active Tasks</div>
+              <div className="font-extrabold text-blue-700" style={{ fontSize: '28px' }}>138</div>
+              <div className="text-[10px] text-blue-400 mt-1">across all projects</div>
+            </div>
+            <div className="p-4 rounded-2xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+              <div className="text-xs text-gray-500 mb-2">Team Members</div>
+              <div className="font-bold" style={{ fontSize: '22px', color: '#15803d' }}>12</div>
+            </div>
+            <div className="p-4 rounded-lg" style={{ background: '#ffffff', border: '2px solid #f59e0b' }}>
+              <div className="text-xs font-bold text-yellow-600 mb-1">⚠ OVERDUE</div>
+              <div className="font-bold text-red-500" style={{ fontSize: '26px' }}>7</div>
+              <div className="text-xs text-gray-400 mt-1">tasks past due date</div>
+            </div>
+          </div>
+
+          {/* Projects table */}
+          <div className="rounded-lg overflow-hidden mb-4" style={{ background: '#ffffff', border: '1px solid #e5e7eb' }}>
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid #f3f4f6', background: '#f9fafb' }}>
+              <span className="font-semibold text-gray-700 text-sm">Recent Projects</span>
+              <a className="text-xs" style={{ color: '#1d4ed8' }}>View all →</a>
+            </div>
+            <table className="w-full">
               <thead>
-                <tr className="text-gray-500 border-b border-gray-700">
-                  <th className="px-4 py-2 text-left font-semibold">NAME</th>
-                  <th className="px-4 py-2 text-left font-semibold">EMAIL</th>
-                  <th className="px-4 py-2 text-left font-semibold">Status</th>
-                  <th className="px-4 py-2 text-left font-semibold">Joined</th>
-                  <th className="px-4 py-2 text-left font-semibold">ACTIONS</th>
+                <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#f9fafb' }}>
+                  {['Project Name', 'Status', 'Progress', 'Due Date', 'Team'].map((h) => (
+                    <th key={h} className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9ca3af' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['Alice Johnson', 'alice@gmail.com', 'ACTIVE', 'Jan 14'],
-                  ['bob.smith', 'bob.smith@company.com', 'Pending', 'Jan 13'],
-                  ['Carol Williams', 'carol@example.org', 'inactive', 'Jan 12'],
-                  ['david_m', 'david@test.net', 'ACTIVE', 'Jan 11'],
-                ].map(([name, email, status, date], i) => (
-                  <tr
-                    key={i}
-                    className={`border-b border-gray-700/40 ${i % 2 === 1 ? 'bg-[#1e1f35]' : ''}`}
-                  >
-                    <td className="px-4 py-2.5 text-white">{name}</td>
-                    <td className="px-4 py-2.5 text-gray-400 text-[10px]">{email}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                          status === 'ACTIVE'
-                            ? 'bg-green-900 text-green-300'
-                            : status === 'Pending'
-                              ? 'bg-yellow-900 text-yellow-300'
-                              : 'bg-red-900 text-red-400'
-                        }`}
-                      >
-                        {status}
+                  { name: 'Website Redesign', status: 'In Progress', pct: 68, due: 'Jan 30', team: 'Design' },
+                  { name: 'Mobile App v2', status: 'On Hold', pct: 32, due: 'Feb 15', team: 'Dev' },
+                  { name: 'API Integration', status: 'Completed', pct: 100, due: 'Jan 10', team: 'Backend' },
+                  { name: 'Marketing Campaign', status: 'Overdue', pct: 45, due: 'Jan 08', team: 'Marketing' },
+                ].map((row, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f9fafb', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                    <td className="px-4 py-3 text-xs font-medium" style={{ color: '#111827' }}>{row.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{
+                        background: row.status === 'Completed' ? '#dcfce7' : row.status === 'In Progress' ? '#dbeafe' : row.status === 'Overdue' ? '#fee2e2' : '#f3f4f6',
+                        color: row.status === 'Completed' ? '#166534' : row.status === 'In Progress' ? '#1d4ed8' : row.status === 'Overdue' ? '#dc2626' : '#6b7280',
+                      }}>
+                        {row.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-500 text-[10px]">{date}</td>
-                    <td className="px-4 py-2.5">
-                      <button className="text-blue-400 text-[9px] underline mr-2">Edit</button>
-                      <button className="text-red-500 text-[9px] underline">Del</button>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 rounded-full h-1.5" style={{ background: '#e5e7eb' }}>
+                          <div className="h-1.5 rounded-full" style={{ width: `${row.pct}%`, background: row.status === 'Overdue' ? '#ef4444' : '#1d4ed8' }} />
+                        </div>
+                        <span className="text-[10px]" style={{ color: '#9ca3af' }}>{row.pct}%</span>
+                      </div>
                     </td>
+                    <td className="px-4 py-3 text-[11px]" style={{ color: row.status === 'Overdue' ? '#ef4444' : '#6b7280' }}>{row.due}</td>
+                    <td className="px-4 py-3 text-[10px]" style={{ color: '#6b7280' }}>{row.team}</td>
                   </tr>
                 ))}
               </tbody>

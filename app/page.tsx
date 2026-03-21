@@ -3,14 +3,12 @@ import Footer from '@/components/layout/Footer'
 import HeroSection from '@/components/landing/HeroSection'
 import HowItWorks from '@/components/landing/HowItWorks'
 import FeatureHighlights from '@/components/landing/FeatureHighlights'
-import DemoWorkspace from '@/components/demo/DemoWorkspace'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-zinc-950 overflow-x-hidden">
+    <main className="min-h-screen overflow-x-hidden" style={{ background: '#13111c' }}>
       <Navbar />
       <HeroSection />
-      <DemoWorkspace />
       <HowItWorks />
       <FeatureHighlights />
       <Footer />

@@ -1,7 +1,6 @@
 'use client'
 
 import { RotateCcw, Code2, Download, ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { STYLE_PRESETS, MOCK_TRANSFORM_RESULT } from '@/lib/mock-data'
 import type { TransformState, StylePreset } from '@/types'
 
@@ -13,42 +12,48 @@ interface Props {
   onReset: () => void
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  spacing: 'text-blue-400 bg-blue-950/50 border-blue-800/50',
-  typography: 'text-violet-400 bg-violet-950/50 border-violet-800/50',
-  color: 'text-orange-400 bg-orange-950/50 border-orange-800/50',
-  hierarchy: 'text-indigo-400 bg-indigo-950/50 border-indigo-800/50',
-  consistency: 'text-emerald-400 bg-emerald-950/50 border-emerald-800/50',
-}
-
 export default function ControlsPanel({ state, preset, onPresetChange, onRefine, onReset }: Props) {
   const { improvements, issuesDetected, issuesFixed, score } = MOCK_TRANSFORM_RESULT
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-y-auto">
-      <div className="text-zinc-400 text-[11px] font-medium uppercase tracking-wider">Controls</div>
+      <div className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        Controls
+      </div>
 
       {/* Style presets */}
       <div>
-        <div className="text-zinc-500 text-[10px] font-medium mb-2">Style preset</div>
+        <div className="text-[10px] font-medium mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>Style preset</div>
         <div className="flex flex-col gap-1.5">
           {STYLE_PRESETS.map((p) => (
             <button
               key={p.id}
               onClick={() => onPresetChange(p.id)}
-              className={cn(
-                'flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all',
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-all"
+              style={
                 preset === p.id
-                  ? 'border-indigo-500/60 bg-indigo-500/10 text-zinc-100'
-                  : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
-              )}
+                  ? { border: '1px solid rgba(168,85,247,0.4)', background: 'rgba(124,58,237,0.1)', color: '#ffffff' }
+                  : { border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)', color: 'rgba(255,255,255,0.4)' }
+              }
+              onMouseEnter={(e) => {
+                if (preset !== p.id) {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (preset !== p.id) {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.4)'
+                }
+              }}
             >
               <div>
                 <div className="text-[11px] font-medium">{p.label}</div>
-                <div className="text-[10px] text-zinc-600 mt-0.5">{p.description}</div>
+                <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>{p.description}</div>
               </div>
               {preset === p.id && (
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#a855f7', boxShadow: '0 0 6px #a855f7' }} />
               )}
             </button>
           ))}
@@ -57,23 +62,23 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
 
       {/* Score — visible after complete */}
       {state === 'complete' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-          <div className="text-zinc-500 text-[10px] font-medium mb-3">Quality score</div>
+        <div className="rounded-xl p-3" style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+          <div className="text-[10px] font-medium mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>Quality score</div>
           <div className="flex items-center gap-3">
             <div className="text-center">
-              <div className="text-2xl font-bold text-zinc-600">{score.before}</div>
-              <div className="text-[9px] text-zinc-600 mt-0.5">Before</div>
+              <div className="text-2xl font-bold" style={{ color: 'rgba(255,255,255,0.2)' }}>{score.before}</div>
+              <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>Before</div>
             </div>
-            <ChevronRight size={14} className="text-zinc-700" />
+            <ChevronRight size={14} style={{ color: 'rgba(255,255,255,0.15)' }} />
             <div className="text-center">
-              <div className="text-2xl font-bold text-indigo-400">{score.after}</div>
-              <div className="text-[9px] text-zinc-500 mt-0.5">After</div>
+              <div className="text-2xl font-bold" style={{ color: '#a855f7' }}>{score.after}</div>
+              <div className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>After</div>
             </div>
           </div>
-          <div className="mt-3 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div className="mt-3 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
             <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-1000"
-              style={{ width: `${score.after}%` }}
+              className="h-full rounded-full transition-all duration-1000"
+              style={{ width: `${score.after}%`, background: 'linear-gradient(to right, #7c3aed, #a855f7)' }}
             />
           </div>
         </div>
@@ -82,28 +87,27 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
       {/* Improvements list — visible after complete */}
       {state === 'complete' && (
         <div className="flex-1">
-          <div className="text-zinc-500 text-[10px] font-medium mb-2">
+          <div className="text-[10px] font-medium mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
             {issuesFixed} of {issuesDetected} issues fixed
           </div>
           <div className="flex flex-col gap-1.5">
             {improvements.slice(0, 5).map((imp) => (
               <div
                 key={imp.id}
-                className="flex items-start gap-2 p-2 rounded-lg bg-zinc-900/60 border border-zinc-800/60"
+                className="flex items-start gap-2 p-2 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
               >
                 <span
-                  className={cn(
-                    'text-[9px] font-medium px-1.5 py-0.5 rounded-md border flex-shrink-0 mt-0.5',
-                    CATEGORY_COLORS[imp.category]
-                  )}
+                  className="text-[9px] font-medium px-1.5 py-0.5 rounded-md flex-shrink-0 mt-0.5"
+                  style={{ background: 'rgba(124,58,237,0.15)', color: '#c084fc', border: '1px solid rgba(124,58,237,0.25)' }}
                 >
                   {imp.category}
                 </span>
                 <div>
-                  <div className="text-zinc-300 text-[10px] font-medium leading-tight">
+                  <div className="text-[10px] font-medium leading-tight" style={{ color: 'rgba(255,255,255,0.6)' }}>
                     {imp.label}
                   </div>
-                  <div className="text-zinc-600 text-[9px] mt-0.5 leading-relaxed">
+                  <div className="text-[9px] mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.2)' }}>
                     {imp.description}
                   </div>
                 </div>
@@ -118,13 +122,12 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
         {(state === 'uploaded' || state === 'complete') && (
           <button
             onClick={onRefine}
-            disabled={false}
-            className={cn(
-              'w-full py-2.5 rounded-xl text-[12px] font-semibold transition-all',
+            className="w-full py-2.5 rounded-xl text-[12px] font-semibold transition-all text-white"
+            style={
               state === 'complete'
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
-                : 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-glow-sm'
-            )}
+                ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }
+                : { background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.3)' }
+            }
           >
             {state === 'complete' ? 'Regenerate' : 'Refine UI'}
           </button>
@@ -132,7 +135,12 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
 
         {/* Export code button */}
         {state === 'complete' && (
-          <button className="w-full py-2 rounded-xl text-[11px] font-medium text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-all flex items-center justify-center gap-1.5">
+          <button
+            className="w-full py-2 rounded-xl text-[11px] font-medium transition-all flex items-center justify-center gap-1.5"
+            style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+          >
             <Code2 size={12} />
             Export code
           </button>
@@ -140,7 +148,12 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
 
         {/* Download */}
         {state === 'complete' && (
-          <button className="w-full py-2 rounded-xl text-[11px] font-medium text-zinc-500 hover:text-zinc-300 transition-colors flex items-center justify-center gap-1.5">
+          <button
+            className="w-full py-2 rounded-xl text-[11px] font-medium transition-colors flex items-center justify-center gap-1.5"
+            style={{ color: 'rgba(255,255,255,0.2)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}
+          >
             <Download size={12} />
             Save image
           </button>
@@ -150,7 +163,10 @@ export default function ControlsPanel({ state, preset, onPresetChange, onRefine,
         {state !== 'empty' && (
           <button
             onClick={onReset}
-            className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-700 hover:text-zinc-500 transition-colors py-1"
+            className="flex items-center justify-center gap-1.5 text-[10px] transition-colors py-1"
+            style={{ color: 'rgba(255,255,255,0.15)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.15)')}
           >
             <RotateCcw size={10} />
             Start over
