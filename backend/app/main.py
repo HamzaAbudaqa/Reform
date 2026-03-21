@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.analyze_competitors import router as competitors_router
 from app.routes.discover_competitors import router as discovery_router
 from app.routes.transform_ui import router as transform_router
+from app.routes.suggest_edit import router as suggest_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(competitors_router)
 app.include_router(discovery_router)
 app.include_router(transform_router)
+app.include_router(suggest_router)
 
 
 @app.get("/health")
