@@ -1,4 +1,13 @@
-SITE_EXTRACTION_GOAL = """Analyze this website's UI/UX design. Return ONLY a JSON object with exactly these 8 keys. No markdown fences. No explanation. Just the JSON.
+SITE_EXTRACTION_GOAL = """You are a real user exploring this website for the first time. Do not just describe the UI — experience it.
+
+INSTRUCTIONS:
+1. Land on the page. Note what you see first.
+2. Scroll down through the full page.
+3. If there is a primary CTA or interactive element, click it.
+4. If there are navigation links or tabs, try at least one.
+5. Observe: hover effects, transitions, loading states, visual feedback.
+
+Then return ONLY a JSON object with exactly these 8 keys. No markdown fences. No explanation. Just the JSON.
 
 CRITICAL RULES:
 - All design tokens must be directly usable in code (no descriptive phrases).
@@ -7,6 +16,8 @@ CRITICAL RULES:
 - Borders must be valid CSS border shorthand values.
 - Font families must be real font names observed on the page.
 - Use short snake_case identifiers for pattern lists, not sentences.
+- ux_flow must describe what a USER experiences step by step, not what the page contains.
+- ux_quality must describe HOW the experience feels, not what elements exist.
 
 {
   "page_type": "single_string_identifier",
@@ -72,18 +83,36 @@ CRITICAL RULES:
   },
 
   "ux_flow": [
-    "step_1_action",
-    "step_2_action",
-    "step_3_action"
+    "user_lands_on_dark_hero_with_headline",
+    "attention_drawn_to_green_cta_button",
+    "scrolls_past_feature_cards_with_hover_lift",
+    "clicks_get_started_cta",
+    "sees_signup_form_or_dashboard_preview",
+    "notices_social_proof_strip_below_fold"
   ],
 
   "ux_quality": [
-    "observation_identifier_1",
-    "observation_identifier_2"
+    "clear_primary_action_within_2_seconds",
+    "fast_hover_feedback_on_interactive_elements",
+    "low_cognitive_load_single_focus_per_section",
+    "strong_visual_hierarchy_guides_eye_path",
+    "smooth_scroll_transitions_between_sections",
+    "no_layout_shift_during_page_load"
   ]
 }
 
-Fill every key. If a component type is not visible on the page, use ["not_present"]. Inspect colors from the actual rendered page. List 3-6 items per array. All shadow, border, and motion values must be valid CSS."""
+IMPORTANT for ux_flow:
+- Describe real user steps, not page sections.
+- Start with "user_lands_on..." or "user_sees..."
+- Include what draws attention, what action is taken, what happens after.
+- If you clicked something, describe what appeared.
+
+IMPORTANT for ux_quality:
+- Describe HOW the experience feels, not WHAT exists.
+- Include: clarity, speed, cognitive load, feedback quality, focus.
+- Bad: "has_a_navbar" — Good: "clear_primary_action_within_2_seconds"
+
+Fill every key. If a component type is not visible on the page, use ["not_present"]. Inspect colors from the actual rendered page. List 4-6 items per array. All shadow, border, and motion values must be valid CSS."""
 
 
 def build_aggregation_prompt(

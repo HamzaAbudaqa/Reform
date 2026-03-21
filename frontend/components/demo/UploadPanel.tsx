@@ -1,23 +1,27 @@
 'use client'
 
 import { useRef } from 'react'
-import { Upload, ImageIcon, Sparkles } from 'lucide-react'
+import { Upload, ImageIcon, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TransformState } from '@/types'
 
 interface Props {
   state: TransformState
-  onUpload: () => void
+  onUpload: (file?: File) => void
+  onRemove: () => void
+  fileName?: string
 }
 
 const EXAMPLE_LABEL = 'dashboard_v2.png'
 
-export default function UploadPanel({ state, onUpload }: Props) {
+export default function UploadPanel({ state, onUpload, onRemove, fileName }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    if (state === 'empty') onUpload()
+    if (state === 'empty' && e.dataTransfer.files[0]) {
+      onUpload(e.dataTransfer.files[0])
+    }
   }
 
   return (
@@ -39,9 +43,9 @@ export default function UploadPanel({ state, onUpload }: Props) {
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           className="hidden"
-          onChange={() => onUpload()}
+          onChange={(e) => onUpload(e.target.files?.[0])}
         />
 
         {state === 'empty' ? (
@@ -51,17 +55,24 @@ export default function UploadPanel({ state, onUpload }: Props) {
             </div>
             <div>
               <p className="text-zinc-300 text-xs font-medium">Drop screenshot</p>
-              <p className="text-zinc-600 text-[10px] mt-1">PNG, JPG, WebP</p>
+              <p className="text-zinc-600 text-[10px] mt-1">PNG, JPG, WebP, PDF</p>
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center gap-2 p-4">
+          <div className="h-full flex flex-col items-center justify-center gap-2 p-4 relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
+              className="absolute top-2 right-2 w-5 h-5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center transition-colors"
+              title="Remove file"
+            >
+              <X size={11} className="text-zinc-400" />
+            </button>
             <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
               <ImageIcon size={15} className="text-indigo-400" />
             </div>
             <div className="text-center">
-              <p className="text-zinc-300 text-[11px] font-medium">{EXAMPLE_LABEL}</p>
-              <p className="text-zinc-600 text-[10px] mt-0.5">1440 × 900 · PNG</p>
+              <p className="text-zinc-300 text-[11px] font-medium truncate max-w-[140px]">{fileName ?? EXAMPLE_LABEL}</p>
+              <p className="text-zinc-600 text-[10px] mt-0.5">Ready to refine</p>
             </div>
           </div>
         )}
