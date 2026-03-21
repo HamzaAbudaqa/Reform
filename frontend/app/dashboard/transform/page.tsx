@@ -1,22 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import Editor from '@monaco-editor/react'
 
-const COMMITS = [
-  { hash: 'a717c5', msg: 'fix: navigation jumping', color: '#a855f7' },
-  { hash: 'a712c1', msg: 'fix: navigation jumping', color: '#a855f7' },
-  { hash: 'a712c1', msg: 'fix: navigation jumping', color: '#3b82f6' },
-  { hash: 'c1a9d5', msg: 'feat: add auth flow', color: '#ef4444' },
-  { hash: 'c1a9d5', msg: 'feat: add auth flow', color: '#ef4444' },
-  { hash: 'c1a9d5', msg: 'chore: dependency update', color: '#f59e0b' },
-  { hash: 'o01371', msg: 'feat: add auth flow', color: '#f59e0b' },
-  { hash: 'o0fd71', msg: 'feat: add auth flow', color: '#a855f7' },
-  { hash: 'o0d77c', msg: 'chore: dependency update', color: '#3b82f6' },
-  { hash: 'c1e9d5', msg: 'feat: add auth flow', color: '#3b82f6' },
-  { hash: 'c1a83a', msg: 'feat: add auth flow', color: '#a855f7' },
-  { hash: 'e83321', msg: 'feat: add auth flow', color: '#f59e0b' },
-]
+interface CommitEntry {
+  hash: string
+  msg: string
+  color: string
+  status: 'accepted' | 'rejected' | 'pending'
+  code?: string
+  suggestion?: string
+}
+
+const INITIAL_COMMITS: CommitEntry[] = []
 
 interface AnalysisData {
   meta: { project_style_goal: string; description: string }
@@ -28,6 +26,23 @@ interface TransformData {
   refined_ui: Record<string, unknown>
   code: string
 }
+interface FileEntry { path: string; content: string; size: number }
+interface ComponentInfo { name: string; file_path: string; type: string; description: string }
+interface CodeAnalysis {
+  entry_points: string[]; layout_files: string[]; components: ComponentInfo[]
+  dependency_map: Record<string, string[]>; recommended_target: string; target_reason: string
+}
+interface ChangeAnnotation { region: string; change_type: string; description: string; ux_impact: string }
+interface TransformResult {
+  transformed_files: { path: string; original_code: string; updated_code: string; diff_summary: string }[]
+  change_annotations: ChangeAnnotation[]; change_summary: string[]
+  before_html: string; after_html: string
+}
+interface GithubRepo {
+  id: number; full_name: string; name: string; private: boolean
+  language: string | null; updated_at: string; default_branch: string
+}
+type PipelineStep = 'idle' | 'ingesting' | 'analyzing' | 'transforming' | 'complete'
 
 function BrowserFrame({ children, label, accent = false }: { children: React.ReactNode; label: string; accent?: boolean }) {
   return (
@@ -53,18 +68,581 @@ function BrowserFrame({ children, label, accent = false }: { children: React.Rea
   )
 }
 
+type Phase = 'idle' | 'listening' | 'thinking' | 'responding'
+
+function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }) {
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [hasGreeted, setHasGreeted] = useState(false)
+  const [orbScale, setOrbScale] = useState(1)
+  const [transcript, setTranscript] = useState('')
+  const [aiResponse, setAiResponse] = useState('')
+  const [displayText, setDisplayText] = useState('')
+  const [error, setError] = useState('')
+  const [history, setHistory] = useState<{ role: string; content: string }[]>([])
+  const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stoppedRef = useRef(false)
+
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const animFrameRef = useRef<number>(0)
+  const ttsCtxRef = useRef<AudioContext | null>(null)
+  const micCtxRef = useRef<AudioContext | null>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const micAnalyserRef = useRef<AnalyserNode | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasSpeechRef = useRef(false)
+  const historyRef = useRef<{ role: string; content: string }[]>([])
+  const mountedRef = useRef(true)
+
+  useEffect(() => { historyRef.current = history }, [history])
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
+
+  const visualizeTTS = useCallback(() => {
+    if (!analyserRef.current || !mountedRef.current) return
+    const data = new Uint8Array(analyserRef.current.frequencyBinCount)
+    analyserRef.current.getByteFrequencyData(data)
+    const avg = data.reduce((a, b) => a + b, 0) / data.length / 255
+    setOrbScale(1 + avg * 0.3)
+    animFrameRef.current = requestAnimationFrame(visualizeTTS)
+  }, [])
+
+  const visualizeMic = useCallback(() => {
+    if (!micAnalyserRef.current || !mountedRef.current) return
+    const data = new Uint8Array(micAnalyserRef.current.frequencyBinCount)
+    micAnalyserRef.current.getByteFrequencyData(data)
+    const avg = data.reduce((a, b) => a + b, 0) / data.length / 255
+    setOrbScale(1 + avg * 0.25)
+
+    // Track if user has spoken (volume above threshold)
+    if (avg > 0.05) {
+      hasSpeechRef.current = true
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+    }
+
+    // Silence detection: user spoke then went quiet for 1.5s → stop recording
+    if (avg < 0.02 && hasSpeechRef.current) {
+      if (!silenceTimerRef.current) {
+        silenceTimerRef.current = setTimeout(() => {
+          if (mountedRef.current && recorderRef.current?.state === 'recording') {
+            recorderRef.current.stop()
+          }
+        }, 1500)
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(visualizeMic)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  function stopMic() {
+    cancelAnimationFrame(animFrameRef.current)
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      try { recorderRef.current.stop() } catch { /* */ }
+    }
+    recorderRef.current = null
+    if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null }
+    if (micCtxRef.current && micCtxRef.current.state !== 'closed') { micCtxRef.current.close().catch(() => {}); micCtxRef.current = null }
+    micAnalyserRef.current = null
+    chunksRef.current = []
+  }
+
+  function stopTTS() {
+    cancelAnimationFrame(animFrameRef.current)
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null }
+    if (ttsCtxRef.current && ttsCtxRef.current.state !== 'closed') { ttsCtxRef.current.close().catch(() => {}); ttsCtxRef.current = null }
+    analyserRef.current = null
+  }
+
+  async function startListening() {
+    if (!mountedRef.current) return
+    stoppedRef.current = false
+    stopMic()
+    setError('')
+    setTranscript('')
+    chunksRef.current = []
+    hasSpeechRef.current = false
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      setError(`Mic: ${e instanceof Error ? e.message : 'denied'}`)
+      setPhase('idle')
+      return
+    }
+    if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
+    micStreamRef.current = stream
+    setPhase('listening')
+
+    // Visualizer
+    try {
+      const ctx = new AudioContext()
+      micCtxRef.current = ctx
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+      micAnalyserRef.current = analyser
+      animFrameRef.current = requestAnimationFrame(visualizeMic)
+    } catch { /* */ }
+
+    // MediaRecorder — works in ALL browsers
+    try {
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : 'audio/mp4'
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      recorderRef.current = recorder
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = async () => {
+        // Stop mic stream and visualizer immediately
+        cancelAnimationFrame(animFrameRef.current)
+        if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null }
+        if (micCtxRef.current && micCtxRef.current.state !== 'closed') { micCtxRef.current.close().catch(() => {}); micCtxRef.current = null }
+        micAnalyserRef.current = null
+
+        if (chunksRef.current.length === 0) { setPhase('idle'); return }
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        chunksRef.current = []
+
+        // Only process if we're still supposed to be listening
+        if (!mountedRef.current) return
+
+        // Stop mic visuals
+        cancelAnimationFrame(animFrameRef.current)
+        setOrbScale(1)
+
+        // Transcribe via backend
+        setPhase('thinking')
+        setTranscript('Transcribing...')
+
+        try {
+          const formData = new FormData()
+          formData.append('audio', blob, `recording.${mimeType.includes('webm') ? 'webm' : 'mp4'}`)
+
+          const res = await fetch('http://localhost:8000/transcribe', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!res.ok) throw new Error(`Transcribe failed: ${res.status}`)
+          const data = await res.json()
+
+          if (data.error && !data.transcript) {
+            setTranscript('')
+            setError(data.error)
+            setPhase('idle')
+            stopMic()
+            return
+          }
+
+          const text = data.transcript?.trim()
+          if (!text) {
+            setTranscript('')
+            setPhase('idle')
+            stopMic()
+            startListening() // no speech detected, restart
+            return
+          }
+
+          setTranscript(text)
+          stopMic()
+          await processUserInput(text)
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Transcription failed')
+          setPhase('idle')
+          stopMic()
+        }
+      }
+
+      recorder.start()
+      setTranscript('')
+      setDisplayText('Listening...')
+    } catch (e) {
+      setError(`Recorder: ${e instanceof Error ? e.message : 'failed'}`)
+      stopMic()
+      setPhase('idle')
+    }
+  }
+
+  function typewrite(text: string, onDone?: () => void) {
+    if (typewriterRef.current) clearTimeout(typewriterRef.current)
+    setDisplayText('')
+    let i = 0
+    function tick() {
+      if (!mountedRef.current) return
+      if (i < text.length) {
+        setDisplayText(text.slice(0, i + 1))
+        i++
+        typewriterRef.current = setTimeout(tick, 30)
+      } else {
+        onDone?.()
+      }
+    }
+    tick()
+  }
+
+  async function processUserInput(userText: string) {
+    setOrbScale(1)
+    setPhase('thinking')
+    typewrite(userText)
+
+    const newHistory = [...historyRef.current, { role: 'user', content: userText }]
+    setHistory(newHistory)
+
+    let aiText: string
+    let finalPrompt: string | null = null
+    try {
+      const storedAnalysis = sessionStorage.getItem('refineui_analysis')
+      const analysisCtx = storedAnalysis ? JSON.parse(storedAnalysis) : null
+
+      const res = await fetch('http://localhost:8000/voice-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_message: userText,
+          conversation_history: newHistory,
+          analysis_context: analysisCtx,
+        }),
+      })
+
+      if (!res.ok) throw new Error(`Backend: ${res.status}`)
+      const data = await res.json()
+      aiText = data.response
+      finalPrompt = data.final_prompt || null
+    } catch (e) {
+      aiText = 'Sorry, I had trouble with that. What were you saying?'
+      setError(e instanceof Error ? e.message : 'Backend error')
+    }
+
+    if (!mountedRef.current) return
+    setAiResponse(aiText)
+    setHistory(prev => [...prev, { role: 'assistant', content: aiText }])
+
+    if (stoppedRef.current) return
+
+    // If AI generated a final prompt, send it to the pipeline and close
+    if (finalPrompt) {
+      typewrite(aiText, async () => {
+        if (stoppedRef.current) return
+        await playTTS(aiText)
+        if (mountedRef.current && !stoppedRef.current) onFinalPrompt(finalPrompt!)
+      })
+      return
+    }
+
+    // Otherwise continue conversation
+    typewrite(aiText, async () => {
+      if (stoppedRef.current) return
+      await playTTS(aiText)
+      if (mountedRef.current && !stoppedRef.current) startListening()
+    })
+  }
+
+  async function playTTS(text: string): Promise<void> {
+    if (!mountedRef.current) return
+    setPhase('responding')
+
+    try {
+      const res = await fetch('http://localhost:8000/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!res.ok) throw new Error('TTS failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+
+      await new Promise<void>((resolve, reject) => {
+        if (!mountedRef.current) { URL.revokeObjectURL(url); resolve(); return }
+
+        const audio = new Audio(url)
+        audioRef.current = audio
+
+        try {
+          const ctx = new AudioContext()
+          ttsCtxRef.current = ctx
+          const source = ctx.createMediaElementSource(audio)
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = 256
+          source.connect(analyser)
+          analyser.connect(ctx.destination)
+          analyserRef.current = analyser
+        } catch { /* play without visualizer */ }
+
+        audio.onplay = () => {
+          if (analyserRef.current) animFrameRef.current = requestAnimationFrame(visualizeTTS)
+        }
+        audio.onended = () => {
+          cancelAnimationFrame(animFrameRef.current)
+          setOrbScale(1)
+          URL.revokeObjectURL(url)
+          stopTTS()
+          resolve()
+        }
+        audio.onerror = () => { URL.revokeObjectURL(url); stopTTS(); reject(new Error('Playback failed')) }
+        audio.play().catch(reject)
+      })
+    } catch {
+      stopTTS()
+      if (mountedRef.current) setPhase('idle')
+    }
+  }
+
+  async function greet() {
+    const text = 'Hey! What are we designing today?'
+    setAiResponse(text)
+    setHistory([{ role: 'assistant', content: text }])
+    typewrite(text)
+    try { await playTTS(text) } catch { /* */ }
+    if (mountedRef.current && !stoppedRef.current) { setPhase('idle'); startListening() }
+  }
+
+  function handleStop() {
+    stoppedRef.current = true
+    if (typewriterRef.current) { clearTimeout(typewriterRef.current); typewriterRef.current = null }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+    stopMic()
+    stopTTS()
+    setOrbScale(1)
+    setPhase('idle')
+    setDisplayText('')
+    setTranscript('')
+  }
+
+  function handleButtonClick() {
+    if (phase === 'listening' || phase === 'responding') {
+      handleStop()
+    } else {
+      stopTTS()
+      startListening()
+    }
+  }
+
+  useEffect(() => {
+    if (!hasGreeted) {
+      setHasGreeted(true)
+      const timer = setTimeout(() => greet(), 600)
+      return () => clearTimeout(timer)
+    }
+    return () => { stopMic(); stopTTS() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const isActive = phase === 'listening' || phase === 'responding'
+  const intensity = orbScale - 1
+
+  const phaseLabel = {
+    idle: 'Reform Voice',
+    listening: 'Listening...',
+    thinking: 'Thinking...',
+    responding: 'Responding...',
+  }[phase]
+
+  const phaseSub = {
+    idle: 'Tap the mic to start talking',
+    listening: 'Speak now \u2014 I\u2019ll respond when you pause',
+    thinking: 'Processing your input...',
+    responding: 'Reform AI is speaking',
+  }[phase]
+
+  return (
+    <div className="relative p-8 flex flex-col items-center justify-center overflow-hidden" style={{ minHeight: '340px' }}>
+      <style>{`
+        @keyframes blob1 {
+          0%, 100% { border-radius: 42% 58% 62% 38% / 45% 55% 45% 55%; }
+          25% { border-radius: 55% 45% 38% 62% / 58% 42% 58% 42%; }
+          50% { border-radius: 38% 62% 55% 45% / 42% 58% 42% 58%; }
+          75% { border-radius: 62% 38% 45% 55% / 55% 45% 55% 45%; }
+        }
+        @keyframes blob2 {
+          0%, 100% { border-radius: 58% 42% 45% 55% / 62% 38% 55% 45%; }
+          33% { border-radius: 45% 55% 58% 42% / 38% 62% 42% 58%; }
+          66% { border-radius: 55% 45% 42% 58% / 45% 55% 62% 38%; }
+        }
+        @keyframes blobIdle {
+          0%, 100% { border-radius: 47% 53% 51% 49% / 48% 52% 50% 50%; }
+          50% { border-radius: 53% 47% 49% 51% / 52% 48% 50% 50%; }
+        }
+        @keyframes pulseThink {
+          0%, 100% { transform: scale(1); opacity: 0.25; border-radius: 50%; }
+          50% { transform: scale(1.08); opacity: 0.5; border-radius: 50%; }
+        }
+      `}</style>
+
+      {/* Ambient background glow */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute w-72 h-72 rounded-full transition-all duration-300" style={{
+          background: `radial-gradient(circle, rgba(124,58,237,${isActive ? 0.06 + intensity * 0.12 : phase === 'thinking' ? 0.06 : 0.03}) 0%, transparent 70%)`,
+          transform: `scale(${isActive ? 1 + intensity * 0.3 : 1})`,
+        }} />
+      </div>
+
+      {/* Orb container */}
+      <div className="relative mb-5">
+        {/* Outer glow layer */}
+        <div
+          className="absolute -inset-3 transition-all duration-150"
+          style={{
+            borderRadius: '50%',
+            background: `radial-gradient(circle, rgba(124,58,237,${isActive ? 0.08 + intensity * 0.15 : 0.03}), transparent 70%)`,
+            filter: `blur(${isActive ? 12 + intensity * 15 : 8}px)`,
+            transform: `scale(${1 + intensity * 0.4})`,
+          }}
+        />
+
+        {/* Main orb blob */}
+        <div
+          className="relative w-28 h-28 flex items-center justify-center rounded-full"
+          style={{
+            borderRadius: '50%',
+            animation: isActive
+              ? `blob1 ${Math.max(0.8, 2 - intensity * 4)}s ease-in-out infinite, blob2 ${Math.max(0.6, 1.5 - intensity * 3)}s ease-in-out infinite`
+              : phase === 'thinking'
+                ? 'pulseThink 1.5s ease-in-out infinite'
+                : 'blobIdle 4s ease-in-out infinite',
+            background: isActive
+              ? `radial-gradient(circle at ${45 + intensity * 10}% ${40 - intensity * 5}%, rgba(168,85,247,${0.4 + intensity * 0.5}), rgba(124,58,237,${0.2 + intensity * 0.3}) 50%, rgba(59,130,246,${0.08 + intensity * 0.15}))`
+              : phase === 'thinking'
+                ? 'radial-gradient(circle at 45% 40%, rgba(168,85,247,0.35), rgba(124,58,237,0.18) 55%, rgba(59,130,246,0.08))'
+                : 'radial-gradient(circle at 45% 40%, rgba(168,85,247,0.25), rgba(124,58,237,0.12) 55%, rgba(59,130,246,0.06))',
+            boxShadow: isActive
+              ? `0 0 ${20 + intensity * 50}px rgba(124,58,237,${0.15 + intensity * 0.4}), 0 0 ${40 + intensity * 80}px rgba(124,58,237,${0.05 + intensity * 0.15}), inset 0 0 ${20 + intensity * 30}px rgba(168,85,247,${0.1 + intensity * 0.25})`
+              : phase === 'thinking'
+                ? '0 0 40px rgba(124,58,237,0.15), 0 0 80px rgba(124,58,237,0.06), inset 0 0 25px rgba(168,85,247,0.12)'
+                : '0 0 30px rgba(124,58,237,0.1), 0 0 60px rgba(124,58,237,0.04), inset 0 0 20px rgba(168,85,247,0.08)',
+            transform: `scale(${orbScale})`,
+            transition: 'transform 80ms ease-out, box-shadow 150ms ease-out',
+          }}
+        />
+      </div>
+
+      {/* Phase label */}
+      <p className="text-[14px] font-semibold text-white mb-0.5 relative">{phaseLabel}</p>
+
+      {/* Typewriter text */}
+      <p className="text-[12px] mt-2 max-w-sm text-center relative leading-relaxed" style={{
+        color: phase === 'listening' ? 'rgba(255,255,255,0.5)'
+          : (phase === 'responding' || phase === 'thinking') ? 'rgba(168,85,247,0.6)'
+          : 'rgba(255,255,255,0.2)',
+        minHeight: '18px',
+      }}>
+        {displayText || phaseSub}
+      </p>
+
+      {error && (
+        <p className="text-[10px] mt-1 relative" style={{ color: 'rgba(239,68,68,0.5)' }}>{error}</p>
+      )}
+
+      {/* Action button */}
+      <button
+        onClick={handleButtonClick}
+        className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-semibold transition-all active:scale-95 mt-1"
+        style={phase === 'listening' || phase === 'responding' ? {
+          background: 'rgba(239,68,68,0.1)',
+          color: 'rgba(239,68,68,0.8)',
+          border: '1px solid rgba(239,68,68,0.2)',
+          boxShadow: '0 0 15px rgba(239,68,68,0.1)',
+        } : phase === 'thinking' ? {
+          background: 'rgba(168,85,247,0.05)',
+          color: 'rgba(168,85,247,0.4)',
+          border: '1px solid rgba(168,85,247,0.1)',
+        } : {
+          background: 'rgba(168,85,247,0.1)',
+          color: 'rgba(168,85,247,0.8)',
+          border: '1px solid rgba(168,85,247,0.2)',
+          boxShadow: '0 0 15px rgba(124,58,237,0.1)',
+        }}
+      >
+        {phase === 'listening' || phase === 'responding' ? (
+          <>
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ background: 'rgba(239,68,68,0.8)' }} />
+            Stop
+          </>
+        ) : phase === 'thinking' ? (
+          <>
+            <div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.15)', borderTopColor: 'rgba(168,85,247,0.5)' }} />
+            Processing...
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+            Start Listening
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
+
 export default function TransformPage() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [transform, setTransform] = useState<TransformData | null>(null)
   const [scOpen, setScOpen] = useState(false)
+<<<<<<< HEAD
   const [codeOpen, setCodeOpen] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
+=======
+  const [commits, setCommits] = useState<CommitEntry[]>(INITIAL_COMMITS)
+  const [changeStatus, setChangeStatus] = useState<'pending' | 'accepted' | 'rejected'>('pending')
+  const [showSuggestModal, setShowSuggestModal] = useState(false)
+  const [suggestTab, setSuggestTab] = useState<'text' | 'voice' | 'code'>('text')
+  const [suggestion, setSuggestion] = useState('')
+  const [codeEdit, setCodeEdit] = useState('')
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [selectedCommit, setSelectedCommit] = useState<CommitEntry | null>(null)
+>>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
   const router = useRouter()
+  const { data: session } = useSession()
+
+  // ── Code Pipeline State ──
+  const [pipelineStep, setPipelineStep] = useState<PipelineStep>('idle')
+  const [pipelineError, setPipelineError] = useState('')
+  const [ingestedFiles, setIngestedFiles] = useState<FileEntry[]>([])
+  const [codeAnalysis, setCodeAnalysis] = useState<CodeAnalysis | null>(null)
+  const [selectedTarget, setSelectedTarget] = useState('')
+  const [userIntent, setUserIntent] = useState('')
+  const [transformResult, setTransformResult] = useState<TransformResult | null>(null)
+  const [repoName, setRepoName] = useState('')
+  const [repoBranch, setRepoBranch] = useState('main')
+  const [repos, setRepos] = useState<GithubRepo[]>([])
+  const [loadingRepos, setLoadingRepos] = useState(false)
+  const [repoSearch, setRepoSearch] = useState('')
+  const [commitLoading, setCommitLoading] = useState(false)
+  const [commitResult, setCommitResult] = useState<{ sha: string; url: string } | null>(null)
+
+  useEffect(() => {
+    if (session?.accessToken && repos.length === 0 && pipelineStep === 'idle') {
+      setLoadingRepos(true)
+      fetch('https://api.github.com/user/repos?sort=updated&per_page=30&type=owner', {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      })
+        .then(r => r.json())
+        .then(data => { setRepos(Array.isArray(data) ? data : []); setLoadingRepos(false) })
+        .catch(() => setLoadingRepos(false))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken, pipelineStep])
 
   useEffect(() => {
     const stored = sessionStorage.getItem('refineui_analysis')
     if (stored) { try { setAnalysis(JSON.parse(stored)) } catch { /* */ } }
     const storedTransform = sessionStorage.getItem('refineui_transform')
+<<<<<<< HEAD
     if (storedTransform) { try { setTransform(JSON.parse(storedTransform)) } catch { /* */ } }
   }, [])
 
@@ -74,15 +652,207 @@ export default function TransformPage() {
       setCodeCopied(true)
       setTimeout(() => setCodeCopied(false), 2000)
     })
+=======
+    if (storedTransform) {
+      try {
+        const t = JSON.parse(storedTransform)
+        setTransformResult(t.result); setCodeAnalysis(t.codeAnalysis)
+        setSelectedTarget(t.target); setRepoName(t.repoName)
+        setRepoBranch(t.branch || 'main'); setPipelineStep('complete')
+      } catch { /* */ }
+    }
+  }, [])
+
+  const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
+
+  async function runPipeline(repo: GithubRepo) {
+    if (!analysis) return
+    setPipelineError(''); setRepoName(repo.full_name); setRepoBranch(repo.default_branch || 'main')
+
+    setPipelineStep('ingesting')
+    let files: FileEntry[]
+    try {
+      const res = await fetch('http://localhost:8000/ingest-repo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_url: `https://github.com/${repo.full_name}`, branch: repo.default_branch || 'main', access_token: session?.accessToken || null }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Ingestion failed: ${res.status}`) }
+      const data = await res.json(); files = data.files; setIngestedFiles(files)
+    } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Ingestion failed'); setPipelineStep('idle'); return }
+
+    setPipelineStep('analyzing')
+    let target: string; let codeAnalysisResult: CodeAnalysis
+    try {
+      const res = await fetch('http://localhost:8000/analyze-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Analysis failed') }
+      codeAnalysisResult = await res.json(); setCodeAnalysis(codeAnalysisResult)
+      target = codeAnalysisResult.recommended_target; setSelectedTarget(target)
+    } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Analysis failed'); setPipelineStep('idle'); return }
+
+    setPipelineStep('transforming')
+    try {
+      const res = await fetch('http://localhost:8000/transform-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files, target_file: target, design_intelligence: analysis, user_intent: userIntent }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Transform failed') }
+      const result: TransformResult = await res.json()
+      setTransformResult(result); setPipelineStep('complete')
+      sessionStorage.setItem('refineui_transform', JSON.stringify({ result, codeAnalysis: codeAnalysisResult, target, repoName: repo.full_name, branch: repo.default_branch || 'main' }))
+      const newCommit: CommitEntry = { hash: Math.random().toString(16).slice(2, 8), msg: `refactor: ${result.transformed_files[0]?.diff_summary?.slice(0, 50) || 'UI transformation'}`, color: '#f59e0b', status: 'pending', code: result.transformed_files[0]?.updated_code, suggestion: userIntent || 'Applied design intelligence' }
+      setCommits(prev => [newCommit, ...prev]); setScOpen(true)
+    } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Transform failed'); setPipelineStep('idle') }
+  }
+
+  async function handleAccept() {
+    let ghSha = ''
+    if (transformResult?.transformed_files[0] && session?.accessToken && repoName && selectedTarget) {
+      setCommitLoading(true); setPipelineError('')
+      try {
+        const tf = transformResult.transformed_files[0]
+        const commitMsg = `reform: ${transformResult.change_summary.slice(0, 3).join('; ') || tf.diff_summary || 'UI improvements'}`
+        const res = await fetch('http://localhost:8000/commit-to-github', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_name: repoName, branch: repoBranch, file_path: selectedTarget, new_content: tf.updated_code, commit_message: commitMsg, access_token: session.accessToken }),
+        })
+        if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Commit failed') }
+        const data = await res.json()
+        ghSha = data.commit_sha || ''
+        setCommitResult({ sha: ghSha, url: data.commit_url || '' })
+      } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Commit to GitHub failed'); setCommitLoading(false); return }
+      setCommitLoading(false)
+    }
+    setChangeStatus('accepted')
+    const realHash = ghSha ? ghSha.slice(0, 7) : Math.random().toString(16).slice(2, 8)
+    setCommits(prev => {
+      const hasPending = prev.some(c => c.status === 'pending')
+      if (hasPending) return prev.map(c => c.status === 'pending' ? { ...c, status: 'accepted' as const, color: '#22c55e', hash: realHash } : c)
+      return [{ hash: realHash, msg: `reform: ${transformResult?.transformed_files[0]?.diff_summary?.slice(0, 50) || 'UI improvements'}`, color: '#22c55e', status: 'accepted', code: transformResult?.transformed_files[0]?.updated_code } as CommitEntry, ...prev]
+    })
+    setScOpen(true)
+  }
+
+  function handleReject() {
+    setChangeStatus('rejected')
+    const hasPending = commits.some(c => c.status === 'pending')
+    if (hasPending) {
+      // Update ALL pending commits to rejected
+      setCommits(prev => prev.map(c =>
+        c.status === 'pending' ? { ...c, status: 'rejected', color: '#ef4444' } : c
+      ))
+    } else {
+      const newCommit: CommitEntry = {
+        hash: Math.random().toString(16).slice(2, 8),
+        msg: 'feat: UI transformation',
+        color: '#ef4444',
+        status: 'rejected',
+      }
+      setCommits(prev => [newCommit, ...prev])
+    }
+    setScOpen(true)
+  }
+
+  async function handleSuggestSubmit(directPrompt?: string) {
+    const promptText = (directPrompt || suggestion).trim()
+    if (!promptText) return
+    setSuggestLoading(true)
+
+    try {
+      const currentCode = sessionStorage.getItem('refineui_analysis') || ''
+      const res = await fetch('http://localhost:8000/suggest-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suggestion: promptText,
+          current_code: currentCode,
+          analysis_context: analysis,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Suggest edit failed')
+      const data = await res.json()
+
+      const newCommit: CommitEntry = {
+        hash: Math.random().toString(16).slice(2, 8),
+        msg: `edit: ${data.summary || promptText.slice(0, 40)}`,
+        color: '#f59e0b',
+        status: 'pending',
+        code: data.revised_code,
+        suggestion: promptText,
+      }
+      setCommits(prev => [newCommit, ...prev])
+      setChangeStatus('pending')
+      setShowSuggestModal(false)
+      setSuggestion('')
+      setScOpen(true)
+    } catch {
+      const newCommit: CommitEntry = {
+        hash: Math.random().toString(16).slice(2, 8),
+        msg: `edit: ${promptText.slice(0, 40)}`,
+        color: '#f59e0b',
+        status: 'pending',
+        suggestion: promptText,
+      }
+      setCommits(prev => [newCommit, ...prev])
+      setShowSuggestModal(false)
+      setSuggestion('')
+      setScOpen(true)
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
+
+  function handleCodeSubmit() {
+    if (!codeEdit.trim()) return
+    const newCommit: CommitEntry = {
+      hash: Math.random().toString(16).slice(2, 8),
+      msg: 'edit: manual code change',
+      color: '#f59e0b',
+      status: 'pending',
+      code: codeEdit,
+      suggestion: 'Manual code edit via IDE',
+    }
+    setCommits(prev => [newCommit, ...prev])
+    setShowSuggestModal(false)
+    setCodeEdit('')
+    setScOpen(true)
+  }
+
+  function openSuggestModal() {
+    // Pre-populate the code editor with existing generated code if available
+    const storedAnalysis = sessionStorage.getItem('refineui_analysis')
+    if (storedAnalysis && !codeEdit) {
+      setCodeEdit(`export default function Dashboard() {\n  return (\n    <div className="flex gap-6 p-8">\n      <Sidebar />\n      <MainContent />\n    </div>\n  )\n}`)
+    }
+    setSuggestTab('text')
+    setShowSuggestModal(true)
+  }
+
+  function handleCommitClick(commit: CommitEntry) {
+    setSelectedCommit(commit)
+  }
+
+  function handleAcceptRejected(commit: CommitEntry) {
+    setCommits(prev =>
+      prev.map(c => c.hash === commit.hash && c.msg === commit.msg ? { ...c, status: 'accepted', color: '#22c55e' } : c)
+    )
+    setSelectedCommit({ ...commit, status: 'accepted', color: '#22c55e' })
+>>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
   }
 
   if (!analysis) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
         <div className="text-center max-w-sm">
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.12)' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
+          </div>
           <h2 className="text-xl font-bold text-white mb-2">No Analysis Data</h2>
-          <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.35)' }}>Complete a Project Discovery first.</p>
-          <button onClick={() => router.push('/dashboard/discovery')} className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.2)' }}>
+          <p className="text-[13px] mb-6 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>Complete a Project Discovery first to generate your UI transformation.</p>
+          <button onClick={() => router.push('/dashboard/discovery')} className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.25)' }}>
             Start Discovery
           </button>
         </div>
@@ -94,84 +864,214 @@ export default function TransformPage() {
     <div className="flex justify-center px-6 py-10 pb-20">
       <div className="w-full max-w-6xl space-y-10">
 
-        {/* ── HERO: Before / After ── */}
-        <div>
-          <h1 className="text-3xl font-bold text-white text-center mb-8">UI Transformation</h1>
-          <div className="flex flex-col lg:flex-row gap-6">
-            <BrowserFrame label="Before">
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                  <div className="w-3.5 h-3.5 rounded-full" style={{ background: '#7c3aed' }} />
-                  <span className="text-[9px] font-semibold text-white">RefineUI</span>
-                  <div className="flex-1" />
-                  <div className="flex gap-1">{[1,2,3].map(n => <div key={n} className="h-2.5 w-6 rounded" style={{ background: 'rgba(255,255,255,0.05)' }} />)}</div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="w-20 space-y-1.5">
-                    {['Discovery', 'Competitors', 'Design', 'Insights'].map(n => (
-                      <div key={n} className="px-2 py-1 rounded text-[7px]" style={{ background: n === 'Discovery' ? 'rgba(255,255,255,0.06)' : 'transparent', color: 'rgba(255,255,255,0.4)' }}>{n}</div>
-                    ))}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="text-[8px] font-semibold text-white/60 px-1">Discovery</div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {['Companies', 'Context'].map(l => (
-                        <div key={l} className="rounded-lg p-2 space-y-1.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <div className="text-[6px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>{l}</div>
-                          {[70,85,55].map((w, i) => <div key={i} className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', width: `${w}%` }} />)}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="h-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }} />
-                  </div>
-                </div>
-                <div className="mt-3 px-1"><span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Settings</span></div>
-              </div>
-            </BrowserFrame>
-
-            {/* Arrow */}
-            <div className="hidden lg:flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.3)' }}>
-                <span className="text-white text-lg">→</span>
-              </div>
+        {/* ── HEADER ── */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-white mb-3">UI Transformation</h1>
+          <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 6px rgba(168,85,247,0.4)' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'rgba(168,85,247,0.8)' }}>
+                {pipelineStep === 'complete' ? (changeStatus === 'accepted' ? 'Applied' : changeStatus === 'rejected' ? 'Original Kept' : 'Ready for Review') : pipelineStep === 'idle' ? 'Select a Repository' : 'Processing...'}
+              </span>
             </div>
-
-            <BrowserFrame label="After" accent>
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(168,85,247,0.06)' }}>
-                  <div className="w-3.5 h-3.5 rounded-full" style={{ background: '#7c3aed' }} />
-                  <span className="text-[9px] font-semibold text-white">RefineUI</span>
-                  <div className="flex-1" />
-                  <div className="flex gap-1">
-                    <span className="text-[6px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.15)', color: 'rgba(168,85,247,0.8)' }}>Pro</span>
-                    <span className="text-[6px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: '#86efac' }}>Live</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="w-16 space-y-1">
-                    {['Team', 'Yours', 'Config', 'Library'].map((n, i) => (
-                      <div key={n} className="px-1.5 py-1 rounded text-[6px]" style={{ background: i === 0 ? 'rgba(168,85,247,0.08)' : 'transparent', color: i === 0 ? 'rgba(168,85,247,0.7)' : 'rgba(255,255,255,0.25)' }}>{n}</div>
-                    ))}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="text-[8px] font-semibold text-white/70 px-1">Discovery</div>
-                    <div className="text-[6px] px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>Latest AI inspection</div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {['Frameworks', 'Context'].map(l => (
-                        <div key={l} className="rounded-lg p-2 space-y-1.5" style={{ background: 'rgba(168,85,247,0.03)', border: '1px solid rgba(168,85,247,0.08)' }}>
-                          <div className="text-[6px] font-semibold" style={{ color: 'rgba(168,85,247,0.6)' }}>{l}</div>
-                          {[75,60,90].map((w, i) => <div key={i} className="h-1.5 rounded-full" style={{ background: 'rgba(168,85,247,0.06)', width: `${w}%` }} />)}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="h-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.01)' }} />
-                  </div>
-                </div>
-              </div>
-            </BrowserFrame>
+            <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{repoName || `${analysis.sources?.length || 0} sources analyzed`}</span>
           </div>
         </div>
 
+        {/* ── REPO PICKER ── */}
+        {pipelineStep === 'idle' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.12)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-[14px]">Select a Repository</h3>
+                  <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{session ? 'Choose a repo to analyze and improve' : 'Sign in with GitHub to see your repos'}</p>
+                </div>
+              </div>
+              <div className="px-5 pb-3">
+                <input type="text" value={repoSearch} onChange={e => setRepoSearch(e.target.value)} placeholder="Search repositories..." className="w-full bg-transparent px-4 py-2.5 text-[13px] outline-none rounded-lg text-white placeholder:text-white/20" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }} />
+              </div>
+              <div className="px-5 pb-3">
+                <input type="text" value={userIntent} onChange={e => setUserIntent(e.target.value)} placeholder="Optional: describe your goal (e.g., 'make it more modern')" className="w-full bg-transparent px-4 py-2 text-[12px] outline-none rounded-lg text-white/60 placeholder:text-white/15" style={{ border: '1px solid rgba(255,255,255,0.04)' }} />
+              </div>
+              <div style={{ maxHeight: '340px', overflowY: 'auto', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                {session && loadingRepos && <div className="flex items-center justify-center py-8"><div className="w-6 h-6 rounded-full animate-spin mr-3" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} /><span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading repos...</span></div>}
+                {session && !loadingRepos && filteredRepos.map(repo => (
+                  <div key={repo.id} onClick={() => runPipeline(repo)} className="flex items-center justify-between px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.04]" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.25)"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" /></svg>
+                      <div className="min-w-0"><span className="text-[13px] text-white/70 truncate block">{repo.full_name}</span><span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{repo.language || 'Unknown'}</span></div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {repo.private && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }}>Private</span>}
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M5.5 3.5L9 7l-3.5 3.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.2" strokeLinecap="round" /></svg>
+                    </div>
+                  </div>
+                ))}
+                {session && !loadingRepos && filteredRepos.length === 0 && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.25)' }}>No repositories found</p></div>}
+                {!session && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Sign in with GitHub to see your repositories</p></div>}
+              </div>
+            </div>
+            {pipelineError && <div className="mt-3 px-4 py-2.5 rounded-lg text-[12px]" style={{ background: 'rgba(239,68,68,0.08)', color: 'rgba(239,68,68,0.7)', border: '1px solid rgba(239,68,68,0.1)' }}>{pipelineError}</div>}
+          </div>
+        )}
+
+        {/* ── PIPELINE PROGRESS ── */}
+        {(pipelineStep === 'ingesting' || pipelineStep === 'analyzing' || pipelineStep === 'transforming') && (
+          <div className="max-w-2xl mx-auto flex flex-col items-center py-12">
+            <div className="w-12 h-12 rounded-full mb-5 animate-spin" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} />
+            <p className="text-white font-medium text-[15px] mb-1.5">
+              {pipelineStep === 'ingesting' && 'Fetching repository files...'}
+              {pipelineStep === 'analyzing' && 'Analyzing code structure...'}
+              {pipelineStep === 'transforming' && 'Applying design intelligence...'}
+            </p>
+            <p className="text-[12px] text-center max-w-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              {pipelineStep === 'ingesting' && `Pulling frontend files from ${repoName}`}
+              {pipelineStep === 'analyzing' && 'Reform is identifying the highest-impact UI surface to improve'}
+              {pipelineStep === 'transforming' && `Safely refactoring ${selectedTarget}`}
+            </p>
+          </div>
+        )}
+
+        {/* ── REAL BEFORE / AFTER PREVIEWS ── */}
+        {pipelineStep === 'complete' && transformResult && (
+          <div>
+            {codeAnalysis && selectedTarget && (
+              <div className="rounded-xl px-5 py-3 mb-6 max-w-4xl mx-auto flex items-center gap-3" style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.912 5.813a2 2 0 001.272 1.272L21 12l-5.816 1.916a2 2 0 00-1.272 1.272L12 21l-1.912-5.812a2 2 0 00-1.272-1.272L3 12l5.816-1.915a2 2 0 001.272-1.272L12 3z" /></svg>
+                <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.45)' }}>Reform selected <span className="font-mono text-white/70">{selectedTarget}</span> as the highest-impact surface to improve</span>
+              </div>
+            )}
+            {commitResult && (
+              <div className="rounded-xl px-5 py-3 mb-6 max-w-4xl mx-auto flex items-center justify-between" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                <div className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <span className="text-[12px]" style={{ color: '#86efac' }}>Changes committed to GitHub</span>
+                  <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.25)' }}>{commitResult.sha.slice(0, 7)}</span>
+                </div>
+                <a href={commitResult.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium" style={{ color: 'rgba(168,85,247,0.7)' }}>View commit &rarr;</a>
+              </div>
+            )}
+            <div className="flex flex-col lg:flex-row gap-6">
+              <BrowserFrame label="Before">
+                <div className="relative">
+                  <iframe srcDoc={transformResult.before_html} className="w-full border-0" style={{ minHeight: '320px', background: '#09090b', pointerEvents: 'none' }} sandbox="" tabIndex={-1} title="Before preview" />
+                  <div className="absolute inset-0" style={{ pointerEvents: 'auto', cursor: 'default' }} />
+                </div>
+              </BrowserFrame>
+              <div className="hidden lg:flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.3)' }}><span className="text-white text-lg">&rarr;</span></div>
+              </div>
+              <BrowserFrame label="After" accent>
+                <div className="relative">
+                  <iframe srcDoc={transformResult.after_html} className="w-full border-0" style={{ minHeight: '320px', background: '#09090b', pointerEvents: 'none' }} sandbox="" tabIndex={-1} title="After preview" />
+                  <div className="absolute inset-0" style={{ pointerEvents: 'auto', cursor: 'default' }} />
+                </div>
+              </BrowserFrame>
+            </div>
+            {transformResult.change_annotations.length > 0 && (
+              <div className="mt-6 rounded-xl p-5 max-w-4xl mx-auto" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h3 className="text-[11px] font-medium uppercase tracking-wider mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>What Changed</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {transformResult.change_annotations.map((ann, i) => (
+                    <div key={i} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: ann.change_type === 'layout' ? 'rgba(59,130,246,0.1)' : ann.change_type === 'spacing' ? 'rgba(34,197,94,0.1)' : ann.change_type === 'component' ? 'rgba(245,158,11,0.1)' : 'rgba(168,85,247,0.1)', color: ann.change_type === 'layout' ? 'rgba(59,130,246,0.7)' : ann.change_type === 'spacing' ? 'rgba(34,197,94,0.7)' : ann.change_type === 'component' ? 'rgba(245,158,11,0.7)' : 'rgba(168,85,247,0.7)' }}>{ann.change_type}</span>
+                        <span className="text-[11px] font-medium text-white/60">{ann.region}</span>
+                      </div>
+                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{ann.description}</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(34,197,94,0.5)' }}>{ann.ux_impact}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {transformResult.change_summary.length > 0 && (
+              <div className="mt-4 rounded-xl p-5 max-w-4xl mx-auto" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h3 className="text-[11px] font-medium uppercase tracking-wider mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Improvement Summary</h3>
+                <ul className="space-y-1.5">{transformResult.change_summary.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <svg className="mt-0.5 flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    {item}
+                  </li>
+                ))}</ul>
+              </div>
+            )}
+            <div className="mt-4 flex justify-center">
+              <button onClick={() => { setPipelineStep('idle'); setTransformResult(null); setCodeAnalysis(null); setIngestedFiles([]); setUserIntent(''); setSelectedTarget(''); setRepoName(''); setCommitResult(null); setCommitLoading(false); setChangeStatus('pending'); setCommits([]); sessionStorage.removeItem('refineui_transform') }} className="text-[11px] font-medium px-4 py-2 rounded-lg transition-colors hover:bg-white/[0.03]" style={{ color: 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.06)' }}>Start New Transformation</button>
+            </div>
+          </div>
+        )}
+        {/* ── TOOLBAR ── */}
+        <div className="rounded-xl max-w-4xl mx-auto overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+          {changeStatus === 'pending' ? (
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.12)' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                </div>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Review Changes</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleAccept}
+                  disabled={commitLoading}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-medium transition-all hover:bg-green-500/[0.06] active:scale-[0.97]"
+                  style={{ color: 'rgba(34,197,94,0.7)', border: '1px solid transparent', opacity: commitLoading ? 0.5 : 1 }}
+                >
+                  {commitLoading ? (
+                    <><div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(34,197,94,0.2)', borderTopColor: 'rgba(34,197,94,0.7)' }} />Committing...</>
+                  ) : (
+                    <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Apply Changes</>
+                  )}
+                </button>
+                <button
+                  onClick={handleReject}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-medium transition-all hover:bg-red-500/[0.06] active:scale-[0.97]"
+                  style={{ color: 'rgba(239,68,68,0.5)', border: '1px solid transparent' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  Keep Original
+                </button>
+                <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <button
+                  onClick={openSuggestModal}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold transition-all hover:bg-purple-500/[0.06] active:scale-[0.97]"
+                  style={{ color: 'rgba(168,85,247,0.7)', border: '1px solid rgba(168,85,247,0.12)' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  Refine Further
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-5 py-4 cursor-pointer transition-colors hover:bg-white/[0.01]" onClick={() => setChangeStatus('pending')}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
+                  {changeStatus === 'accepted' ? (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.6)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  ) : (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  )}
+                </div>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.2)' }}>Review Changes</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: changeStatus === 'accepted' ? '#22c55e' : '#ef4444', boxShadow: `0 0 6px ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }} />
+                  <span className="text-[11px] font-medium" style={{ color: changeStatus === 'accepted' ? '#86efac' : 'rgba(239,68,68,0.7)' }}>
+                    {changeStatus === 'accepted' ? 'Changes applied' : 'Original kept'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+<<<<<<< HEAD
         {/* ── Generated Code ── */}
         {transform?.code && (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
@@ -181,6 +1081,39 @@ export default function TransformPage() {
                 <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.5)' }} />
                 <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.6)' }}>Generated Component Code</span>
                 <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)' }}>React + Tailwind</span>
+=======
+        {/* ── SECONDARY: Heatmaps (small) ── */}
+        <div>
+          <div className="flex items-center justify-center gap-3 mb-5">
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06))' }} />
+            <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Predicted Attention Analysis</p>
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.06), transparent)' }} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-4xl mx-auto">
+            {[
+              { label: 'Original UI', gradient: 'radial-gradient(ellipse at 45% 35%, rgba(255,0,0,0.5) 0%, rgba(255,100,0,0.25) 20%, transparent 45%), radial-gradient(ellipse at 30% 65%, rgba(255,80,0,0.4) 0%, transparent 40%)', accent: false },
+              { label: 'Refined UI', gradient: 'radial-gradient(ellipse at 35% 30%, rgba(80,0,255,0.35) 0%, transparent 45%), radial-gradient(ellipse at 65% 50%, rgba(255,0,0,0.25) 0%, transparent 35%), radial-gradient(ellipse at 50% 75%, rgba(0,50,255,0.25) 0%, transparent 40%)', accent: true },
+            ].map((hm) => (
+              <div key={hm.label} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: hm.accent ? '1px solid rgba(168,85,247,0.1)' : '1px solid rgba(255,255,255,0.06)', boxShadow: hm.accent ? '0 0 30px rgba(124,58,237,0.05)' : 'none' }}>
+                <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-medium" style={{ color: hm.accent ? 'rgba(168,85,247,0.6)' : 'rgba(255,255,255,0.4)' }}>Heatmap: {hm.label}</span>
+                  {hm.accent && <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.08)', color: 'rgba(168,85,247,0.5)', border: '1px solid rgba(168,85,247,0.12)' }}>IMPROVED</span>}
+                </div>
+                <div className="px-3 pb-3">
+                  <div className="relative rounded-lg overflow-hidden" style={{ background: '#0a0820', aspectRatio: '16/7' }}>
+                    <div className="absolute inset-0 p-3 opacity-20">
+                      <div className="flex gap-2 h-full">
+                        <div className="w-10 space-y-1">{[1,2,3,4].map(n => <div key={n} className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.1)' }} />)}</div>
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 w-1/2 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                          <div className="grid grid-cols-3 gap-1">{[1,2,3].map(n => <div key={n} className="h-10 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />)}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute inset-0 pointer-events-none" style={{ background: hm.gradient, mixBlendMode: 'screen' }} />
+                  </div>
+                </div>
+>>>>>>> e2dd010c169fd6c497060ea3e31086e7ca9ceca2
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -234,8 +1167,8 @@ export default function TransformPage() {
         <div
           className="overflow-hidden transition-all duration-300 ease-out rounded-2xl mb-2"
           style={{
-            maxHeight: scOpen ? '320px' : '0px',
-            width: '300px',
+            maxHeight: scOpen ? '380px' : '0px',
+            width: '340px',
             opacity: scOpen ? 1 : 0,
             background: 'rgba(19,17,28,0.6)',
             backdropFilter: 'blur(24px) saturate(1.5)',
@@ -244,21 +1177,44 @@ export default function TransformPage() {
             boxShadow: scOpen ? '0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.08)' : 'none',
           }}
         >
-          <div className="p-4 overflow-y-auto" style={{ maxHeight: '300px' }}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>Source Control</span>
-              <span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>{COMMITS.length} commits</span>
+          <div className="p-4 overflow-y-auto" style={{ maxHeight: '360px' }}>
+            <div className="flex items-center justify-between mb-3 pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <div className="flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><line x1="1.05" y1="12" x2="7" y2="12" /><line x1="17.01" y1="12" x2="22.96" y2="12" /></svg>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>Source Control</span>
+              </div>
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded-full" style={{ color: 'rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>{commits.length}</span>
             </div>
+            {commits.length === 0 ? (
+              <div className="text-center py-6">
+                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.15)' }}>No commits yet</span>
+              </div>
+            ) : (
             <div className="relative">
-              <div className="absolute left-[4px] top-1 bottom-1 w-[1.5px]" style={{ background: 'linear-gradient(to bottom, rgba(168,85,247,0.4), rgba(59,130,246,0.3), rgba(239,68,68,0.3), rgba(245,158,11,0.3), rgba(168,85,247,0.2))' }} />
-              {COMMITS.map((c, i) => (
-                <div key={i} className="flex items-center gap-2.5 py-[5px] relative">
-                  <div className="w-[9px] h-[9px] rounded-full flex-shrink-0 z-10" style={{ background: c.color, boxShadow: `0 0 6px ${c.color}30` }} />
+              <div className="absolute left-[4px] top-1 bottom-1 w-[1.5px]" style={{ background: 'linear-gradient(to bottom, rgba(168,85,247,0.4), rgba(59,130,246,0.3), rgba(239,68,68,0.3), rgba(245,158,11,0.3), rgba(168,85,247,0.1))' }} />
+              {commits.map((c, i) => (
+                <div
+                  key={i}
+                  onClick={() => handleCommitClick(c)}
+                  className="flex items-center gap-2.5 py-[6px] relative cursor-pointer rounded-lg px-1.5 -mx-1 transition-all hover:bg-white/[0.03]"
+                >
+                  <div className="w-[9px] h-[9px] rounded-full flex-shrink-0 z-10" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}40` }} />
                   <span className="text-[9px] font-mono w-11 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>{c.hash}</span>
                   <span className="text-[10px] text-white/60 font-medium flex-1 truncate">{c.msg}</span>
+                  {c.status === 'rejected' && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'rgba(239,68,68,0.7)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                      REJECTED
+                    </span>
+                  )}
+                  {c.status === 'pending' && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: 'rgba(245,158,11,0.1)', color: 'rgba(245,158,11,0.7)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                      PENDING
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
 
@@ -276,9 +1232,269 @@ export default function TransformPage() {
         >
           <div className="w-1.5 h-1.5 rounded-full" style={{ background: scOpen ? '#22c55e' : '#a855f7', boxShadow: scOpen ? '0 0 6px rgba(34,197,94,0.4)' : '0 0 6px rgba(168,85,247,0.3)' }} />
           <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>Source Control</span>
-          <span className="text-[8px] transition-transform duration-300" style={{ color: 'rgba(255,255,255,0.2)', transform: scOpen ? 'rotate(180deg)' : '' }}>▲</span>
+          <span className="text-[8px] transition-transform duration-300" style={{ color: 'rgba(255,255,255,0.2)', transform: scOpen ? 'rotate(180deg)' : '' }}>&#9650;</span>
         </button>
       </div>
+
+      {/* ── SUGGEST EDIT MODAL ── */}
+      {showSuggestModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)' }}>
+          <div className="rounded-2xl w-full max-w-3xl mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.1)' }}>
+            {/* Accent top bar */}
+            <div className="h-[2px]" style={{ background: 'linear-gradient(90deg, #7c3aed, #a855f7, rgba(168,85,247,0.2), transparent)' }} />
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-[15px]">Suggest an Edit</h2>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Choose how you&apos;d like to describe your change</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSuggestModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex px-6 pt-4 gap-1">
+              {([
+                { key: 'text' as const, label: 'Text Prompt', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
+                { key: 'voice' as const, label: 'Voice Prompt', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg> },
+                { key: 'code' as const, label: 'Code Editor', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg> },
+              ]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setSuggestTab(tab.key)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-[11px] font-medium transition-all duration-200"
+                  style={suggestTab === tab.key ? {
+                    background: 'rgba(168,85,247,0.06)',
+                    color: 'white',
+                    borderTop: '2px solid #a855f7',
+                    borderLeft: '1px solid rgba(255,255,255,0.06)',
+                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                    boxShadow: '0 -4px 12px rgba(168,85,247,0.06)',
+                  } : {
+                    color: 'rgba(255,255,255,0.35)',
+                    border: '1px solid transparent',
+                  }}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="px-6 pb-6">
+              <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+
+                {/* TEXT PROMPT TAB */}
+                {suggestTab === 'text' && (
+                  <div className="p-5">
+                    <textarea
+                      autoFocus
+                      value={suggestion}
+                      onChange={e => setSuggestion(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleSuggestSubmit() }}
+                      placeholder="Describe what you'd like to change... (e.g., 'Make the sidebar collapsible', 'Change the accent color to blue')"
+                      className="w-full bg-transparent text-[13px] text-white outline-none resize-none placeholder:text-white/20"
+                      style={{ minHeight: '140px', lineHeight: '1.7' }}
+                      disabled={suggestLoading}
+                    />
+                    <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                      <span className="text-[10px] flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.15)' }}>
+                        <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>&#8984;</kbd>
+                        <span>+</span>
+                        <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>Enter</kbd>
+                        <span className="ml-1">to submit</span>
+                      </span>
+                      <button
+                        onClick={() => handleSuggestSubmit()}
+                        disabled={suggestLoading || !suggestion.trim()}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-semibold transition-all active:scale-[0.97]"
+                        style={{
+                          background: suggestion.trim() ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
+                          color: suggestion.trim() ? 'white' : 'rgba(255,255,255,0.2)',
+                          boxShadow: suggestion.trim() ? '0 0 25px rgba(124,58,237,0.25)' : 'none',
+                        }}
+                      >
+                        {suggestLoading ? (
+                          <>
+                            <div className="w-3.5 h-3.5 rounded-full animate-spin" style={{ border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                            Send to AI
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* VOICE PROMPT TAB */}
+                {suggestTab === 'voice' && <VoiceOrb onFinalPrompt={(prompt) => {
+                  setShowSuggestModal(false)
+                  handleSuggestSubmit(prompt)
+                }} />}
+
+                {/* CODE EDITOR TAB */}
+                {suggestTab === 'code' && (
+                  <div className="flex flex-col">
+                    {/* Editor toolbar */}
+                    <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div className="flex items-center gap-2.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+                        <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.4)' }}>Dashboard.tsx</span>
+                      </div>
+                      <span className="text-[9px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5" style={{ background: 'rgba(34,197,94,0.08)', color: '#86efac', border: '1px solid rgba(34,197,94,0.12)' }}>
+                        <div className="w-1 h-1 rounded-full" style={{ background: '#22c55e' }} />
+                        Editable
+                      </span>
+                    </div>
+                    {/* Monaco Editor */}
+                    <div style={{ height: '340px' }}>
+                      <Editor
+                        height="100%"
+                        defaultLanguage="typescript"
+                        value={codeEdit}
+                        onChange={(val) => setCodeEdit(val || '')}
+                        theme="vs-dark"
+                        options={{
+                          minimap: { enabled: false },
+                          fontSize: 13,
+                          lineHeight: 22,
+                          padding: { top: 12, bottom: 12 },
+                          scrollBeyondLastLine: false,
+                          wordWrap: 'on',
+                          tabSize: 2,
+                          renderLineHighlight: 'gutter',
+                          scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+                          overviewRulerLanes: 0,
+                          hideCursorInOverviewRuler: true,
+                          overviewRulerBorder: false,
+                        }}
+                      />
+                    </div>
+                    {/* Submit bar */}
+                    <div className="flex items-center justify-between px-4 py-3.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.01)' }}>
+                      <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Edit the code directly, then submit</span>
+                      <button
+                        onClick={handleCodeSubmit}
+                        disabled={!codeEdit.trim()}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-semibold transition-all active:scale-[0.97]"
+                        style={{
+                          background: codeEdit.trim() ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
+                          color: codeEdit.trim() ? 'white' : 'rgba(255,255,255,0.2)',
+                          boxShadow: codeEdit.trim() ? '0 0 25px rgba(124,58,237,0.25)' : 'none',
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        Submit Code
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── COMMIT DETAIL MODAL ── */}
+      {selectedCommit && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)' }}>
+          <div className="rounded-2xl max-w-lg w-full mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: `0 24px 80px rgba(0,0,0,0.6), 0 0 40px ${selectedCommit.color}12` }}>
+            {/* Accent top bar */}
+            <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${selectedCommit.color}80, ${selectedCommit.color}20, transparent)` }} />
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${selectedCommit.color}15`, border: `1px solid ${selectedCommit.color}25` }}>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: selectedCommit.color, boxShadow: `0 0 10px ${selectedCommit.color}50` }} />
+                </div>
+                <div>
+                  <span className="text-[11px] font-mono block" style={{ color: 'rgba(255,255,255,0.3)' }}>{selectedCommit.hash}</span>
+                  {selectedCommit.status === 'rejected' && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Rejected</span>
+                  )}
+                  {selectedCommit.status === 'accepted' && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#86efac' }}>Accepted</span>
+                  )}
+                  {selectedCommit.status === 'pending' && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#f59e0b' }}>Pending Review</span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setSelectedCommit(null)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Commit message */}
+              <div>
+                <span className="text-[9px] font-medium uppercase tracking-wider block mb-1.5" style={{ color: 'rgba(255,255,255,0.2)' }}>Commit Message</span>
+                <h3 className="text-white font-semibold text-[15px] leading-snug">{selectedCommit.msg}</h3>
+              </div>
+
+              {/* Suggestion text if available */}
+              {selectedCommit.suggestion && (
+                <div className="rounded-xl p-4" style={{ background: 'rgba(168,85,247,0.03)', border: '1px solid rgba(168,85,247,0.08)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(168,85,247,0.5)' }}>Suggested Edit</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{selectedCommit.suggestion}</p>
+                </div>
+              )}
+
+              {/* Code preview if available */}
+              {selectedCommit.code && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.2)' }}>Code Preview</span>
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.08)', color: 'rgba(168,85,247,0.5)' }}>
+                      {selectedCommit.code.split('\n').length} lines
+                    </span>
+                  </div>
+                  <pre className="p-4 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.45)', maxHeight: '200px' }}>
+                    {selectedCommit.code.slice(0, 500)}{selectedCommit.code.length > 500 ? '\n...' : ''}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+              {(selectedCommit.status === 'rejected' || selectedCommit.status === 'pending') && (
+                <button
+                  onClick={() => handleAcceptRejected(selectedCommit)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-semibold transition-all active:scale-[0.97]"
+                  style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.08))', color: '#86efac', border: '1px solid rgba(34,197,94,0.2)', boxShadow: '0 0 20px rgba(34,197,94,0.08)' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  Accept{selectedCommit.status === 'rejected' ? ' Now' : ' Changes'}
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedCommit(null)}
+                className="px-5 py-2.5 rounded-xl text-[11px] font-medium transition-colors hover:bg-white/[0.03]"
+                style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

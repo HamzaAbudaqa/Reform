@@ -10,6 +10,11 @@ from app.routes.discover_competitors import router as discovery_router
 from app.routes.transform_ui import router as transform_router
 from app.routes.repo_pages import router as repo_pages_router
 from app.routes.analyze_page import router as analyze_page_router
+from app.routes.suggest_edit import router as suggest_router
+from app.routes.voice import router as voice_router
+from app.routes.voice_chat import router as voice_chat_router
+from app.routes.transcribe import router as transcribe_router
+from app.routes.code_pipeline import router as code_pipeline_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +40,11 @@ app.include_router(discovery_router)
 app.include_router(transform_router)
 app.include_router(repo_pages_router)
 app.include_router(analyze_page_router)
+app.include_router(suggest_router)
+app.include_router(voice_router)
+app.include_router(voice_chat_router)
+app.include_router(transcribe_router)
+app.include_router(code_pipeline_router)
 
 
 @app.get("/health")
