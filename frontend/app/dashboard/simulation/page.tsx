@@ -282,6 +282,21 @@ const [loadingScreens, setLoadingScreens] = useState(true)
   )
 
   useEffect(() => {
+    // If transform data exists, use that route as the screen
+    const storedTransform = sessionStorage.getItem('refineui_transform')
+    if (storedTransform) {
+      try {
+        const t = JSON.parse(storedTransform)
+        const route = t.result?.preview_route || '/'
+        const label = route === '/' ? 'Home' : route.replace(/^\//, '').replace(/\//g, ' / ').replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+        const screen = { label, route }
+        setScreens([screen])
+        setSelectedScreen(screen)
+        setLoadingScreens(false)
+        return
+      } catch { /* fall through */ }
+    }
+
     const repoUrl = sessionStorage.getItem('refineui_repo')
     if (repoUrl) {
       setLoadingScreens(true)
