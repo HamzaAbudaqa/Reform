@@ -47,7 +47,7 @@ You MUST return ONLY valid JSON — no markdown, no code fences, no explanation 
       {
         "id": "string (short unique id, e.g. a1)",
         "label": "string (max 6 words)",
-        "detail": "string (1-2 sentences describing the predicted optimised state and the expected improvement)",
+        "detail": "string (1-2 sentences describing the state after improvements — include remaining issues or warnings that still persist even after the fix)",
         "type": "positive|issue|warning|insight",
         "principle": "string",
         "confidence": 0.91,
@@ -63,15 +63,19 @@ You MUST return ONLY valid JSON — no markdown, no code fences, no explanation 
     "confidence": "91.5%",
     "insight": "2-3 sentence summary of the key findings and highest-impact recommendations based on what is actually visible in this screenshot."
   },
-  "css_patch": "/* Valid CSS that applies the after improvements directly to the page. Use broad, robust selectors (tag names, attribute selectors, existing class patterns visible in the screenshot) rather than guessing specific class names. Focus on the highest-impact visual changes: button styling, spacing, contrast, typography size, layout fixes. Example: a[href] { display: inline-block; padding: 10px 20px; background: #7c3aed; color: white; border-radius: 6px; text-decoration: none; } */"
+  "css_patch": "REPLACE_WITH_ACTUAL_CSS"
 }
 
 Zone coordinates are percentages (0–100) of the image width (x, w) and height (y, h).
 - before.annotations: current issues and strengths observed in the screenshot as-is
-- after.annotations: predicted optimised state annotations after fixing the identified issues
+- after.annotations: realistic state after improvements — most issues should be resolved (positive/insight), but include any that still persist as issue/warning. Not all problems can be fixed by CSS alone. Aim for a realistic mix, not all-positive.
 - ux_score: integer 0–100 reflecting overall UX quality
 - ai_forecast: integer 0–100 predicting UX score after recommended fixes
-- css_patch: valid CSS injected into the real page to visually apply the improvements — must use robust selectors, not guessed class names
+- css_patch: MANDATORY — you MUST generate real, working CSS that visually transforms the page based on your recommendations. Rules:
+  1. ONLY use HTML element selectors and attribute selectors — NEVER guess class or ID names. Safe selectors: button, a, h1, h2, h3, p, nav, header, main, section, footer, input, img, ul, li, [href], [type="submit"], [role="button"]
+  2. Make changes DRAMATIC and clearly visible — increase font sizes significantly, add strong background colours, bold borders, high-contrast colours, generous padding. The diff must be obvious at a glance.
+  3. Apply at least 6 distinct CSS rules targeting different elements.
+  4. Example of strong css_patch: "button, [role='button'], [type='submit'] { background: #7c3aed !important; color: white !important; padding: 14px 28px !important; border-radius: 8px !important; font-size: 16px !important; font-weight: 700 !important; border: none !important; } h1 { font-size: 3rem !important; line-height: 1.1 !important; letter-spacing: -0.02em !important; } h2 { font-size: 2rem !important; } a:not([role='button']) { color: #a855f7 !important; text-decoration: underline !important; } nav { background: rgba(0,0,0,0.95) !important; padding: 16px 24px !important; } p { font-size: 1rem !important; line-height: 1.75 !important; max-width: 65ch !important; }"
 - Return ONLY the JSON object. No extra text."""
 
     focus_descriptions: dict[str, str] = {
