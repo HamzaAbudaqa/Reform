@@ -1115,9 +1115,6 @@ export default function TransformPage() {
                 ))}</ul>
               </div>
             )}
-            <div className="mt-4 flex justify-center">
-              <button onClick={() => { setPipelineStep('idle'); setTransformResult(null); setCodeAnalysis(null); setIngestedFiles([]); setUserIntent(''); setSelectedTarget(''); setRepoName(''); setCommitResult(null); setCommitLoading(false); setChangeStatus('pending'); setCommits([]); sessionStorage.removeItem('refineui_transform') }} className="text-[11px] font-medium px-4 py-2 rounded-lg transition-colors hover:bg-white/[0.03]" style={{ color: 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.06)' }}>Start New Transformation</button>
-            </div>
           </div>
         )}
         {/* ── TOOLBAR — only show when pipeline is complete ── */}
