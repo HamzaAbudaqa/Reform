@@ -37,19 +37,6 @@ const HEATMAP_TYPES = [
   { key: 'eye', label: 'Eye Tracking' },
 ]
 
-const ANALYTICS_FALLBACK: Record<string, { roi: string; engagement: string; engagementRaw: number; confidence: string; confidenceRaw: number; insight: string }> = {
-  attention: { roi: '+34%', engagement: '+28%', engagementRaw: 28, confidence: '94.2%', confidenceRaw: 94, insight: 'Primary CTA achieves 88% visual saliency within 2s. Consolidating layout clusters reduces cognitive load.' },
-  click:     { roi: '+22%', engagement: '+19%', engagementRaw: 19, confidence: '91.5%', confidenceRaw: 91, insight: 'Click concentration shifted to conversion zones. Navigation clicks down 18%, intent clicks up 22%.' },
-  scroll:    { roi: '+15%', engagement: '+31%', engagementRaw: 31, confidence: '89.0%', confidenceRaw: 89, insight: 'Content density restructuring improves readability. Chunking reduced cognitive load by an estimated 31%.' },
-  eye:       { roi: '+41%', engagement: '+37%', engagementRaw: 37, confidence: '96.1%', confidenceRaw: 96, insight: 'Eye tracking predicts 1.8x more fixations on key CTAs. F-pattern improved to Z-pattern.' },
-}
-
-const SCORES_FALLBACK: Record<string, { beforeEng: string; afterEng: string }> = {
-  attention: { beforeEng: '52', afterEng: '86' },
-  click:     { beforeEng: '61', afterEng: '83' },
-  scroll:    { beforeEng: '44', afterEng: '75' },
-  eye:       { beforeEng: '57', afterEng: '94' },
-}
 
 // ── Annotation colours ─────────────────────────────────────────────
 const ANNOTATION_COLORS = {
@@ -66,9 +53,11 @@ const CARD_H = 116 // approximate rendered height
 function AnnotatedPreview({
   screenshotB64,
   annotations,
+  showAnnotations,
 }: {
   screenshotB64: string
   annotations: Annotation[]
+  showAnnotations: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -108,20 +97,20 @@ function AnnotatedPreview({
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', width: '100%', aspectRatio: '16/5', background: '#0d0c16' }}
+      style={{ position: 'relative', width: '100%', background: '#0d0c16' }}
     >
-      {/* Screenshot — clipped to container */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      {/* Screenshot — clipped independently so annotations can overflow */}
+      <div style={{ overflow: 'hidden', borderRadius: 'inherit' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`data:image/png;base64,${screenshotB64}`}
           alt="Page screenshot"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top left', display: 'block' }}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
         />
       </div>
 
-      {/* Annotation layer — NOT clipped so card can position freely */}
-      <div style={{ position: 'absolute', inset: 0 }}>
+      {/* Annotation layer — not clipped, can overflow container */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'visible', display: showAnnotations ? 'block' : 'none' }}>
 
         {annotations.map((ann, idx) => {
           const colors = ANNOTATION_COLORS[ann.type] ?? ANNOTATION_COLORS.insight
@@ -226,8 +215,8 @@ function AnalysisLoadingWindow({ label }: { label: string }) {
         className="relative rounded-xl overflow-hidden flex items-center justify-center"
         style={{
           background: '#201e2a',
-          border: isAfter ? '1px solid rgba(124,58,237,0.25)' : '1px solid rgba(74,68,85,0.15)',
-          aspectRatio: '16/5',
+          border: '1px solid rgba(74,68,85,0.15)',
+          aspectRatio: '16/9',
         }}
       >
         <div className="flex flex-col items-center gap-3">
@@ -242,7 +231,7 @@ function AnalysisLoadingWindow({ label }: { label: string }) {
               animation: 'spin 0.8s linear infinite',
             }}
           />
-          <span className="text-xs font-medium" style={{ color: 'rgba(204,195,216,0.5)' }}>Analysing with Claude...</span>
+          <span className="text-xs font-medium" style={{ color: 'rgba(204,195,216,0.5)' }}>Running UX analysis...</span>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -263,8 +252,8 @@ function AnalysisEmptyWindow({ label }: { label: string }) {
         className="relative rounded-xl overflow-hidden flex items-center justify-center"
         style={{
           background: '#201e2a',
-          border: isAfter ? '1px solid rgba(124,58,237,0.25)' : '1px solid rgba(74,68,85,0.15)',
-          aspectRatio: '16/5',
+          border: '1px solid rgba(74,68,85,0.15)',
+          aspectRatio: '16/9',
         }}
       >
         <span className="text-xs" style={{ color: 'rgba(204,195,216,0.3)' }}>Select a screen to begin analysis</span>
@@ -278,11 +267,19 @@ export default function SimulationPage() {
   const [screens, setScreens] = useState<{ label: string; route: string }[]>(DEFAULT_SCREENS)
   const [selectedScreen, setSelectedScreen] = useState<{ label: string; route: string } | null>(null)
   const [selectedHeatmap, setSelectedHeatmap] = useState('attention')
-  const [panelOpen, setPanelOpen] = useState(true)
-  const [loadingScreens, setLoadingScreens] = useState(true)
+const [loadingScreens, setLoadingScreens] = useState(true)
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
-  const analysisCache = useRef<Record<string, AnalysisResult>>({})
+  const [showAnnotations, setShowAnnotations] = useState(true)
+  const [showFrictionInfo, setShowFrictionInfo] = useState(false)
+  const analysisCache = useRef<Record<string, AnalysisResult>>(
+    (() => {
+      try {
+        const stored = sessionStorage.getItem('refineui_analysis_cache')
+        return stored ? JSON.parse(stored) : {}
+      } catch { return {} }
+    })()
+  )
 
   useEffect(() => {
     const repoUrl = sessionStorage.getItem('refineui_repo')
@@ -338,6 +335,7 @@ export default function SimulationPage() {
       })
       .then((result) => {
         analysisCache.current[cacheKey] = result
+        try { sessionStorage.setItem('refineui_analysis_cache', JSON.stringify(analysisCache.current)) } catch {}
         setAnalysis(result)
       })
       .catch((err) => {
@@ -349,31 +347,29 @@ export default function SimulationPage() {
       })
   }, [selectedScreen, selectedHeatmap])
 
-  // Derive analytics values — prefer live result, fall back to hardcoded
-  const analyticsFallback = ANALYTICS_FALLBACK[selectedHeatmap]
-  const scoresFallback = SCORES_FALLBACK[selectedHeatmap]
+  const insightValue = analysis?.analytics.insight ?? null
 
-  const roiValue = analysis?.analytics.roi ?? analyticsFallback.roi
-  const engagementValue = analysis?.analytics.engagement_change ?? analyticsFallback.engagement
-  const engagementRaw = analysis
-    ? parseInt(analysis.analytics.engagement_change.replace(/[^0-9]/g, ''), 10) || analyticsFallback.engagementRaw
-    : analyticsFallback.engagementRaw
-  const confidenceValue = analysis?.analytics.confidence ?? analyticsFallback.confidence
-  const confidenceRaw = analysis
-    ? parseFloat(analysis.analytics.confidence.replace('%', '')) || analyticsFallback.confidenceRaw
-    : analyticsFallback.confidenceRaw
-  const insightValue = analysis?.analytics.insight ?? analyticsFallback.insight
-  const beforeScore = analysis?.before.ux_score?.toString() ?? scoresFallback.beforeEng
-  const afterScore = analysis?.after.ux_score?.toString() ?? scoresFallback.afterEng
+  // Friction Index — derived entirely from Claude's annotation types
+  const calcFriction = (anns: Annotation[]) => {
+    if (!anns.length) return null
+    const bad = anns.filter(a => a.type === 'issue' || a.type === 'warning').length
+    return Math.round((bad / anns.length) * 100)
+  }
+  const frictionBefore = analysis ? calcFriction(analysis.before.annotations) : null
+  const frictionAfter  = analysis ? calcFriction(analysis.after.annotations)  : null
+  const frictionDelta  = frictionBefore !== null && frictionAfter !== null ? frictionBefore - frictionAfter : null
+
+  const beforeScore = analysis?.before.ux_score ?? null
+  const afterScore  = analysis?.after.ux_score  ?? null
+  const scoreDelta  = beforeScore !== null && afterScore !== null ? afterScore - beforeScore : null
 
   return (
     <div className="px-8 py-4">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-1">
-        <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest" style={{ background: 'rgba(111,0,190,0.3)', color: '#ddb7ff' }}>Simulation Active</span>
+      <div className="flex items-center gap-3 mb-2 mt-3">
         <span className="text-xs" style={{ color: 'rgba(204,195,216,0.5)' }}>AI Predicted Metrics</span>
       </div>
-      <h1 className="text-2xl font-extrabold tracking-tight text-white mb-4">UX Performance Prediction Layer</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-white mb-4">UX Lab</h1>
 
       <div>
         {/* Controls row */}
@@ -402,7 +398,7 @@ export default function SimulationPage() {
 
           {/* Heatmap type pills */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>Heatmap</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>Analysis Mode</span>
             <div className="flex items-center gap-1 flex-wrap">
               {HEATMAP_TYPES.map((h) => (
                 <button
@@ -419,81 +415,110 @@ export default function SimulationPage() {
               ))}
             </div>
           </div>
+
+          {/* Divider */}
+          <div className="w-px h-5" style={{ background: 'rgba(74,68,85,0.3)' }} />
+
+          {/* Annotations toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>Annotations</span>
+            <button
+              onClick={() => setShowAnnotations(!showAnnotations)}
+              className="relative flex-shrink-0 transition-all duration-200"
+              style={{
+                width: '36px',
+                height: '20px',
+                borderRadius: '10px',
+                background: showAnnotations ? 'rgba(124,58,237,0.8)' : 'rgba(54,51,63,0.8)',
+                border: showAnnotations ? '1px solid rgba(124,58,237,0.9)' : '1px solid rgba(74,68,85,0.4)',
+              }}
+            >
+              <span
+                className="absolute top-[2px] transition-all duration-200"
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'white',
+                  left: showAnnotations ? '18px' : '2px',
+                  display: 'block',
+                }}
+              />
+            </button>
+          </div>
         </div>
 
-        {/* Main area: windows + collapsible panel */}
-        <div className="flex gap-4 items-start">
-          {/* Stacked comparison windows */}
-          <div className="flex-1 min-w-0 space-y-2">
-            {/* Before window */}
-            {loadingAnalysis ? (
-              <AnalysisLoadingWindow label="Before" />
-            ) : analysis ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Before</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
-                    <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
-                    <span className="text-sm font-black" style={{ color: '#d2bbff' }}>{analysis.before.ux_score}</span>
-                  </div>
-                </div>
-                <div className="relative rounded-xl overflow-hidden" style={{ background: '#201e2a', border: '1px solid rgba(74,68,85,0.15)' }}>
-                  <AnnotatedPreview
-                    screenshotB64={analysis.screenshot_b64}
-                    annotations={analysis.before.annotations}
-                  />
-                </div>
-              </div>
-            ) : (
-              <AnalysisEmptyWindow label="Before" />
-            )}
-
-            {/* After window */}
-            {loadingAnalysis ? (
-              <AnalysisLoadingWindow label="After" />
-            ) : analysis ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7' }} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>After</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
-                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
-                      <span className="text-sm font-black" style={{ color: '#d2bbff' }}>{analysis.after.ux_score}</span>
+        {/* Main area */}
+        <div className="space-y-4">
+          {/* Side-by-side comparison windows */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-3">
+              {/* Before window */}
+              {loadingAnalysis ? (
+                <AnalysisLoadingWindow label="Before" />
+              ) : analysis ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Before</span>
                     </div>
-                    {analysis.after.ai_forecast !== undefined && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(124,58,237,0.25)' }}>
-                        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>AI Forecast</span>
-                        <span className="text-sm font-black" style={{ color: '#a855f7' }}>{analysis.after.ai_forecast}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
+                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
+                      <span className="text-xs font-black" style={{ color: '#d2bbff' }}>{analysis.before.ux_score}</span>
+                    </div>
+                  </div>
+                  <div className="relative rounded-xl" style={{ background: '#201e2a', border: '1px solid rgba(74,68,85,0.15)' }}>
+                    <AnnotatedPreview
+                      screenshotB64={analysis.screenshot_b64}
+                      annotations={analysis.before.annotations}
+                      showAnnotations={showAnnotations}
+                    />
                   </div>
                 </div>
-                <div className="relative rounded-xl overflow-hidden" style={{ background: '#201e2a', border: '1px solid rgba(124,58,237,0.25)', boxShadow: '0 0 30px rgba(124,58,237,0.12)' }}>
-                  <AnnotatedPreview
-                    screenshotB64={analysis.after_screenshot_b64 ?? analysis.screenshot_b64}
-                    annotations={analysis.after.annotations}
-                  />
+              ) : (
+                <AnalysisEmptyWindow label="Before" />
+              )}
+
+              {/* After window */}
+              {loadingAnalysis ? (
+                <AnalysisLoadingWindow label="After" />
+              ) : analysis ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7' }} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>After</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg" style={{ background: 'rgba(15,13,24,0.6)', border: '1px solid rgba(74,68,85,0.3)' }}>
+                        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>UX Score</span>
+                        <span className="text-xs font-black" style={{ color: '#d2bbff' }}>{analysis.after.ux_score}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative rounded-xl" style={{ background: '#201e2a', border: '1px solid rgba(74,68,85,0.15)' }}>
+                    <AnnotatedPreview
+                      screenshotB64={analysis.after_screenshot_b64 ?? analysis.screenshot_b64}
+                      annotations={analysis.after.annotations}
+                      showAnnotations={showAnnotations}
+                    />
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <AnalysisEmptyWindow label="After" />
-            )}
+              ) : (
+                <AnalysisEmptyWindow label="After" />
+              )}
+            </div>
 
             {/* Legend */}
             <div className="flex justify-between items-center px-1 pt-1">
-              <p className="text-sm" style={{ color: 'rgba(204,195,216,0.4)' }}>
-                {HEATMAP_TYPES.find(h => h.key === selectedHeatmap)?.label} Heatmap · {selectedScreen?.label ?? ''}
+              <p className="text-xs" style={{ color: 'rgba(204,195,216,0.4)' }}>
+                {HEATMAP_TYPES.find(h => h.key === selectedHeatmap)?.label} · {selectedScreen?.label ?? ''}
               </p>
-              <div className="flex items-center gap-4">
-                {(['positive', 'issue', 'warning', 'insight'] as const).map((t) => (
+              <div className="flex items-center gap-3">
+                {(['positive', 'warning', 'issue'] as const).map((t) => (
                   <div key={t} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm" style={{ background: ANNOTATION_COLORS[t].pin }} />
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: ANNOTATION_COLORS[t].pin }} />
                     <span className="text-[10px] uppercase font-bold" style={{ color: 'rgba(204,195,216,0.5)' }}>{t}</span>
                   </div>
                 ))}
@@ -501,102 +526,127 @@ export default function SimulationPage() {
             </div>
           </div>
 
-          {/* Collapsible analytics panel */}
-          <div className="flex items-start gap-0 flex-shrink-0">
-            {/* Toggle tab */}
-            <button
-              onClick={() => setPanelOpen(!panelOpen)}
-              className="flex items-center justify-center rounded-l-lg self-stretch px-1.5"
-              style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)', borderRight: 'none', minHeight: '48px' }}
-              title={panelOpen ? 'Collapse panel' : 'Expand panel'}
-            >
-              <span
-                className="text-[10px] font-bold"
-                style={{ color: 'rgba(204,195,216,0.4)', transform: panelOpen ? 'rotate(0deg)' : 'rotate(180deg)', display: 'inline-block', transition: 'transform 0.25s' }}
-              >
-                ›
-              </span>
-            </button>
+          {/* Stats row — below windows, horizontal layout */}
+          {analysis && (
+            <div className="grid grid-cols-3 gap-3">
 
-            {/* Panel content */}
-            <div
-              className="overflow-hidden transition-all duration-300"
-              style={{ width: panelOpen ? '280px' : '0px', opacity: panelOpen ? 1 : 0 }}
-            >
-              <div className="space-y-4" style={{ width: '280px' }}>
-                {/* ROI card */}
-                <div className="rounded-xl p-5" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(204,195,216,0.5)' }}>UX Improvement ROI</h3>
-                  <div className="space-y-5">
-                    {/* ROI */}
-                    <div>
-                      <div className="flex justify-between items-end mb-1.5">
-                        <span className="text-xs font-medium text-white">ROI Estimate</span>
-                        <span className="text-lg font-bold" style={{ color: '#d2bbff' }}>{roiValue}</span>
+              {/* Friction Index */}
+              <div className="rounded-xl p-4" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Friction Index</span>
+                  <div className="relative">
+                    <button
+                      onMouseEnter={() => setShowFrictionInfo(true)}
+                      onMouseLeave={() => setShowFrictionInfo(false)}
+                      className="flex items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{ width: '16px', height: '16px', background: 'rgba(74,68,85,0.4)', color: 'rgba(204,195,216,0.5)' }}
+                    >
+                      ?
+                    </button>
+                    {showFrictionInfo && (
+                      <div className="absolute z-[200] rounded-xl p-4" style={{ width: '220px', bottom: '22px', right: '0', background: 'rgba(13,12,22,0.97)', border: '1px solid rgba(74,68,85,0.3)', backdropFilter: 'blur(12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                        <p className="text-[11px] font-bold mb-2" style={{ color: '#d2bbff' }}>What is Friction Index?</p>
+                        <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(204,195,216,0.65)' }}>
+                          Friction Index measures the proportion of UX annotations flagged as issues or warnings out of all annotations identified.
+                        </p>
+                        <p className="text-[10px] leading-relaxed mt-2" style={{ color: 'rgba(204,195,216,0.65)' }}>
+                          A lower score means fewer friction points. The delta shows how much the proposed changes reduce friction.
+                        </p>
+                        <p className="text-[10px] mt-2 font-mono" style={{ color: 'rgba(204,195,216,0.35)' }}>
+                          (issues + warnings) / total annotations
+                        </p>
                       </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(54,51,63,1)' }}>
-                        <div className="h-full rounded-full" style={{ width: `${parseInt(roiValue.replace(/[^0-9]/g, ''), 10) || 0}%`, background: '#d2bbff' }} />
-                      </div>
-                    </div>
-                    {/* Engagement */}
-                    <div>
-                      <div className="flex justify-between items-end mb-1.5">
-                        <span className="text-xs font-medium text-white">Engagement Change</span>
-                        <span className="text-lg font-bold" style={{ color: '#ddb7ff' }}>{engagementValue}</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(54,51,63,1)' }}>
-                        <div className="h-full rounded-full" style={{ width: `${engagementRaw}%`, background: '#ddb7ff' }} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Score delta */}
-                  <div className="mt-5 pt-5 grid grid-cols-2 gap-3" style={{ borderTop: '1px solid rgba(74,68,85,0.1)' }}>
-                    <div className="rounded-lg p-3 text-center" style={{ background: 'rgba(54,51,63,0.4)' }}>
-                      <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(204,195,216,0.4)' }}>Before</p>
-                      <p className="text-xl font-black text-white">{beforeScore}</p>
-                      <p className="text-[9px]" style={{ color: 'rgba(204,195,216,0.35)' }}>eng. score</p>
-                    </div>
-                    <div className="rounded-lg p-3 text-center" style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' }}>
-                      <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(204,195,216,0.4)' }}>After</p>
-                      <p className="text-xl font-black" style={{ color: '#d2bbff' }}>{afterScore}</p>
-                      <p className="text-[9px]" style={{ color: 'rgba(204,195,216,0.35)' }}>eng. score</p>
-                    </div>
+                    )}
                   </div>
                 </div>
+                {frictionBefore !== null && frictionAfter !== null ? (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between items-end mb-1">
+                        <span className="text-[10px]" style={{ color: 'rgba(204,195,216,0.4)' }}>Before</span>
+                        <span className="text-xs font-black text-white">{frictionBefore}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(54,51,63,1)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${frictionBefore}%`, background: 'rgba(239,68,68,0.7)' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-end mb-1">
+                        <span className="text-[10px]" style={{ color: 'rgba(204,195,216,0.4)' }}>After</span>
+                        <span className="text-xs font-black" style={{ color: '#d2bbff' }}>{frictionAfter}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(54,51,63,1)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${frictionAfter}%`, background: 'rgba(124,58,237,0.7)' }} />
+                      </div>
+                    </div>
+                    {frictionDelta !== null && (
+                      <div className="flex items-center justify-between rounded-lg px-3 py-2 mt-1" style={{ background: frictionDelta > 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${frictionDelta > 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+                        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.4)' }}>Reduction</span>
+                        <span className="text-base font-black" style={{ color: frictionDelta > 0 ? '#86efac' : '#fca5a5' }}>
+                          {frictionDelta > 0 ? '−' : '+'}{Math.abs(frictionDelta)}% pts
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px]" style={{ color: 'rgba(204,195,216,0.3)' }}>Run an analysis to see data.</p>
+                )}
+              </div>
 
-                {/* Confidence card */}
-                <div className="rounded-xl p-5" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>Confidence</span>
-                    <span className="text-xs font-bold" style={{ color: '#d2bbff' }}>{confidenceValue}</span>
+              {/* UX Score */}
+              <div className="rounded-xl p-4" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>UX Score</span>
+                {beforeScore !== null && afterScore !== null ? (
+                  <div className="mt-4 space-y-3">
+                    {/* Delta hero */}
+                    {scoreDelta !== null && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black" style={{ color: scoreDelta >= 0 ? '#86efac' : '#fca5a5' }}>
+                          {scoreDelta >= 0 ? '+' : ''}{scoreDelta}
+                        </span>
+                        <span className="text-[10px] font-medium" style={{ color: 'rgba(204,195,216,0.35)' }}>pts improvement</span>
+                      </div>
+                    )}
+                    {/* Stacked bar */}
+                    <div className="relative w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(54,51,63,1)' }}>
+                      {/* Before fill */}
+                      <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${beforeScore}%`, background: 'rgba(255,255,255,0.15)' }} />
+                      {/* After fill */}
+                      <div className="absolute left-0 top-0 h-full rounded-full transition-all duration-700" style={{ width: `${afterScore}%`, background: 'linear-gradient(90deg, rgba(124,58,237,0.6), #a855f7)' }} />
+                    </div>
+                    {/* Labels */}
+                    <div className="flex justify-between">
+                      <span className="text-[10px]" style={{ color: 'rgba(204,195,216,0.35)' }}>Before <span className="font-bold text-white">{beforeScore}</span></span>
+                      <span className="text-[10px]" style={{ color: 'rgba(204,195,216,0.35)' }}>After <span className="font-bold" style={{ color: '#d2bbff' }}>{afterScore}</span></span>
+                    </div>
                   </div>
-                  <div className="flex gap-1 h-1.5 mb-4">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 rounded-full"
-                        style={{ background: i < Math.round(confidenceRaw / 20) ? '#d2bbff' : 'rgba(54,51,63,1)' }}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(204,195,216,0.4)' }}>
-                    Based on 1.2M training sets from top-performing B2B interfaces.
+                ) : (
+                  <p className="text-[11px] mt-4" style={{ color: 'rgba(204,195,216,0.3)' }}>Run an analysis to see data.</p>
+                )}
+              </div>
+
+              {/* AI Insight */}
+              <div className="rounded-xl p-4" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
+                <div className="flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Big star */}
+                    <path d="M9 2L10.5 7.5L16 9L10.5 10.5L9 16L7.5 10.5L2 9L7.5 7.5L9 2Z" fill="rgba(168,85,247,0.9)"/>
+                    {/* Small star top-right */}
+                    <path d="M18 2L18.9 4.6L21.5 5.5L18.9 6.4L18 9L17.1 6.4L14.5 5.5L17.1 4.6L18 2Z" fill="rgba(168,85,247,0.7)"/>
+                    {/* Small star bottom-right */}
+                    <path d="M18 14L18.7 16.3L21 17L18.7 17.7L18 20L17.3 17.7L15 17L17.3 16.3L18 14Z" fill="rgba(168,85,247,0.6)"/>
+                  </svg>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>AI Insight</span>
+                </div>
+                <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(54,51,63,0.4)' }}>
+                  <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(204,195,216,0.6)' }}>
+                    {insightValue ?? 'Run an analysis to see insights.'}
                   </p>
                 </div>
-
-                {/* AI Insight card */}
-                <div className="rounded-xl p-5" style={{ background: '#1c1a25', border: '1px solid rgba(74,68,85,0.15)' }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.5)' }}>AI Insight</span>
-                  </div>
-                  <div className="p-3 rounded-lg" style={{ background: 'rgba(54,51,63,0.4)' }}>
-                    <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(204,195,216,0.6)' }}>{insightValue}</p>
-                  </div>
-                </div>
               </div>
+
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

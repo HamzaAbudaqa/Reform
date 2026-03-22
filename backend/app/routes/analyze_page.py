@@ -79,6 +79,7 @@ async def analyze_page(body: AnalyzePageRequest):
         raise HTTPException(status_code=500, detail=f"Claude returned invalid JSON: {exc}") from exc
 
     css_patch = data.get("css_patch", "")
+    logger.info("CSS patch from Claude (%d chars): %s", len(css_patch), css_patch[:300])
 
     try:
         after_screenshot_b64 = (await take_screenshot_with_css_b64(body.url, css_patch)) if css_patch else screenshot_b64
