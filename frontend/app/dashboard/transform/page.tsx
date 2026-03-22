@@ -1119,8 +1119,8 @@ export default function TransformPage() {
             </div>
           </div>
         )}
-        {/* ── TOOLBAR ── */}
-        <div className="rounded-xl max-w-4xl mx-auto overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+        {/* ── TOOLBAR — only show when pipeline is complete ── */}
+        {pipelineStep === 'complete' && <div className="rounded-xl max-w-4xl mx-auto overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
           {changeStatus === 'pending' ? (
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-2.5">
@@ -1183,7 +1183,7 @@ export default function TransformPage() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── Generated Code ── */}
         {transform?.code && (
@@ -1223,8 +1223,8 @@ export default function TransformPage() {
           </div>
         )}
 
-        {/* ── Heatmap CTA ── */}
-        <div className="flex justify-center">
+        {/* ── Heatmap CTA — only when complete ── */}
+        {pipelineStep === 'complete' && <div className="flex justify-center">
           <button
             onClick={() => router.push('/dashboard/simulation')}
             className="flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm text-white transition-all active:scale-[0.98]"
@@ -1238,7 +1238,7 @@ export default function TransformPage() {
             <span>Analyse UX Heatmaps</span>
             <span style={{ color: 'rgba(168,85,247,0.5)', fontSize: '12px' }}>→</span>
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* ── SOURCE CONTROL — liquid glass, bottom-left ── */}
