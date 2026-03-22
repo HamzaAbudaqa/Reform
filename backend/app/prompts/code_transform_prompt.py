@@ -87,10 +87,20 @@ def build_code_transform_prompt(
 
 ## TRANSFORMATION RULES (CRITICAL — follow in this exact order)
 
+### Step 0: UX FLOW IMPROVEMENTS (HIGHEST PRIORITY)
+- Reduce the number of clicks needed to accomplish key tasks
+- Surface important actions (CTAs, primary buttons) more prominently
+- Remove unnecessary nesting, extra pages, or hidden options
+- Add quick-action buttons, inline controls, or shortcuts where users currently need multiple steps
+- Consolidate related information that is currently spread across sections
+- Make the most common user action reachable in 1-2 clicks instead of 3+
+- Add clear visual hierarchy so users instantly know where to go
+- Look at competitor patterns and apply their flow efficiency
+
 ### Step 1: Layout
 - Improve structure, grouping, and visual hierarchy
 - Apply layout patterns from design intelligence
-- Do NOT change component tree structure unless necessary
+- Restructure sections to reduce cognitive load
 
 ### Step 2: Spacing
 - Improve padding, margins, gap values
@@ -99,13 +109,15 @@ def build_code_transform_prompt(
 
 ### Step 3: Components
 - Improve buttons, cards, nav elements, form controls
+- Make primary actions visually dominant (larger, higher contrast, better placement)
+- Add hover/focus states that guide users through the flow
 - Apply component patterns from design intelligence
-- Keep all props and event handlers intact
 
 ### Step 4: Visual Polish
 - Apply colors, borders, shadows, typography from design tokens
+- Make the UI feel premium and competitor-quality
 - Use Tailwind classes (prefer utilities over arbitrary values)
-- Apply motion/transition patterns
+- Apply motion/transition patterns for a polished feel
 
 ## STRICT CONSTRAINTS
 - This is a REFACTOR, NOT a rewrite
@@ -127,7 +139,7 @@ Return a JSON object with this exact structure:
   "change_annotations": [
     {{
       "region": "human-readable section name like 'Hero section', 'Navigation bar', 'Page layout' — NOT code terms like 'body element' or 'div container'",
-      "change_type": "layout|spacing|component|visual",
+      "change_type": "flow|layout|spacing|component|visual",
       "description": "Plain English description a designer would write. NO code terms, NO class names, NO HTML tags. BAD: 'Added min-h-screen Tailwind utility to body className'. GOOD: 'Made the page fill the full screen height'",
       "ux_impact": "User-facing benefit in plain English. BAD: 'Improves developer experience'. GOOD: 'Eliminates white gaps on short pages'"
     }}
