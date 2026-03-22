@@ -46,6 +46,71 @@ interface GithubRepo {
 }
 type PipelineStep = 'idle' | 'ingesting' | 'analyzing' | 'transforming' | 'complete'
 
+const PIPELINE_STAGES = [
+  { key: 'ingesting', label: 'Fetching files', duration: 8 },
+  { key: 'analyzing', label: 'Analyzing code', duration: 12 },
+  { key: 'transforming', label: 'Transforming UI', duration: 45 },
+]
+
+function PipelineProgress({ step, repoName, targetFile }: { step: PipelineStep; repoName: string; targetFile: string }) {
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef(Date.now())
+
+  useEffect(() => { startRef.current = Date.now(); setElapsed(0) }, [step])
+
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [step])
+
+  const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === step)
+  const currentStage = PIPELINE_STAGES[currentIdx]
+  const totalEstimate = PIPELINE_STAGES.reduce((a, s) => a + s.duration, 0)
+  const completedTime = PIPELINE_STAGES.slice(0, currentIdx).reduce((a, s) => a + s.duration, 0)
+  const stageProgress = currentStage ? Math.min(elapsed / currentStage.duration, 0.95) : 0
+  const overallProgress = ((completedTime + (currentStage ? stageProgress * currentStage.duration : 0)) / totalEstimate) * 100
+
+  const subtitle = step === 'ingesting' ? `Pulling frontend files from ${repoName}`
+    : step === 'analyzing' ? 'Identifying the highest-impact UI surface'
+    : `Refactoring ${targetFile.split('/').pop()} and rendering previews`
+
+  return (
+    <div className="max-w-xl mx-auto py-10">
+      <div className="flex items-center justify-center gap-1 mb-6">
+        {PIPELINE_STAGES.map((s, i) => {
+          const isDone = i < currentIdx
+          const isActive = s.key === step
+          return (
+            <div key={s.key} className="flex items-center gap-1">
+              {i > 0 && <div className="w-8 h-px" style={{ background: isDone ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.06)' }} />}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{
+                background: isActive ? 'rgba(168,85,247,0.1)' : isDone ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)',
+                border: `1px solid ${isActive ? 'rgba(168,85,247,0.25)' : isDone ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)'}`,
+              }}>
+                {isDone ? (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                ) : isActive ? (
+                  <div className="w-2.5 h-2.5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+                ) : (
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }} />
+                )}
+                <span className="text-[10px] font-medium" style={{ color: isActive ? 'rgba(168,85,247,0.8)' : isDone ? 'rgba(34,197,94,0.6)' : 'rgba(255,255,255,0.2)' }}>{s.label}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="w-full h-1 rounded-full mb-4" style={{ background: 'rgba(255,255,255,0.04)' }}>
+        <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.max(2, overallProgress)}%`, background: 'linear-gradient(90deg, #7c3aed, #a855f7)', boxShadow: '0 0 12px rgba(168,85,247,0.3)' }} />
+      </div>
+      <div className="text-center">
+        <p className="text-[13px] text-white/60 mb-0.5">{subtitle}</p>
+        <p className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>{elapsed}s elapsed · ~{Math.max(0, totalEstimate - completedTime - elapsed)}s remaining</p>
+      </div>
+    </div>
+  )
+}
+
 function BrowserFrame({ children, label, accent = false }: { children: React.ReactNode; label: string; accent?: boolean }) {
   return (
     <div className="flex flex-col gap-2 flex-1 min-w-0">
@@ -925,19 +990,7 @@ export default function TransformPage() {
 
         {/* ── PIPELINE PROGRESS ── */}
         {(pipelineStep === 'ingesting' || pipelineStep === 'analyzing' || pipelineStep === 'transforming') && (
-          <div className="max-w-2xl mx-auto flex flex-col items-center py-12">
-            <div className="w-12 h-12 rounded-full mb-5 animate-spin" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} />
-            <p className="text-white font-medium text-[15px] mb-1.5">
-              {pipelineStep === 'ingesting' && 'Fetching repository files...'}
-              {pipelineStep === 'analyzing' && 'Analyzing code structure...'}
-              {pipelineStep === 'transforming' && 'Applying design intelligence...'}
-            </p>
-            <p className="text-[12px] text-center max-w-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              {pipelineStep === 'ingesting' && `Pulling frontend files from ${repoName}`}
-              {pipelineStep === 'analyzing' && 'Reform is identifying the highest-impact UI surface to improve'}
-              {pipelineStep === 'transforming' && `Safely refactoring ${selectedTarget}`}
-            </p>
-          </div>
+          <PipelineProgress step={pipelineStep} repoName={repoName} targetFile={selectedTarget} />
         )}
 
         {/* ── REAL BEFORE / AFTER PREVIEWS ── */}
