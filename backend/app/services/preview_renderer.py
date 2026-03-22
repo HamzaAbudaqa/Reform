@@ -198,7 +198,7 @@ async def render_previews(
 
         # ── Step 4: Screenshot BEFORE (the real committed code) ──
         try:
-            before_b64 = take_screenshot_b64(preview_url)
+            before_b64 = await take_screenshot_b64(preview_url)
         except Exception as e:
             return {
                 "before_screenshot": "",
@@ -239,7 +239,7 @@ async def render_previews(
         # ── Step 7: Screenshot AFTER (the modified code) ──
         logger.info("Screenshotting AFTER: %s", preview_url)
         try:
-            after_b64 = take_screenshot_b64(preview_url)
+            after_b64 = await take_screenshot_b64(preview_url)
         except Exception as e:
             logger.warning("AFTER screenshot failed: %s", e)
             after_b64 = before_b64
