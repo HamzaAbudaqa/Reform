@@ -1242,8 +1242,8 @@ export default function TransformPage() {
         </div>}
       </div>
 
-      {/* ── SOURCE CONTROL — liquid glass, bottom-left ── */}
-      <div className="fixed bottom-5 left-5 z-40">
+      {/* ── SOURCE CONTROL — only when complete ── */}
+      {pipelineStep === 'complete' && <div className="fixed bottom-5 left-5 z-40">
         {/* Expanded panel */}
         <div
           className="overflow-hidden transition-all duration-300 ease-out rounded-2xl mb-2"
@@ -1315,7 +1315,7 @@ export default function TransformPage() {
           <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>Source Control</span>
           <span className="text-[8px] transition-transform duration-300" style={{ color: 'rgba(255,255,255,0.2)', transform: scOpen ? 'rotate(180deg)' : '' }}>&#9650;</span>
         </button>
-      </div>
+      </div>}
 
       {/* ── SUGGEST EDIT MODAL ── */}
       {showSuggestModal && (
