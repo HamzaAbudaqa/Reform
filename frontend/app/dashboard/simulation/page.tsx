@@ -321,11 +321,30 @@ const [loadingScreens, setLoadingScreens] = useState(true)
     setLoadingAnalysis(true)
     setAnalysis(null)
 
+    // Check if transform screenshots exist — use them for the selected route
+    const storedTransform = sessionStorage.getItem('refineui_transform')
+    let transformScreenshots: { before: string; after: string } | null = null
+    if (storedTransform) {
+      try {
+        const t = JSON.parse(storedTransform)
+        if (t.result?.before_screenshot && t.result?.after_screenshot) {
+          transformScreenshots = { before: t.result.before_screenshot, after: t.result.after_screenshot }
+        }
+      } catch { /* */ }
+    }
+
+    // Use the repo URL from session or fall back to localhost
+    const repoUrl = sessionStorage.getItem('refineui_repo') || ''
+    const match = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/)
+    const repoName = match ? match[1].split('/')[1] : ''
+    const deployedBase = repoName ? `https://${repoName}.vercel.app` : 'http://localhost:3000'
+    const targetUrl = `${deployedBase}${selectedScreen.route}`
+
     fetch('http://localhost:8000/analyze-page', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: `http://localhost:3000${selectedScreen.route}`,
+        url: targetUrl,
         heatmap_type: selectedHeatmap,
       }),
     })
@@ -334,6 +353,11 @@ const [loadingScreens, setLoadingScreens] = useState(true)
         return res.json() as Promise<AnalysisResult>
       })
       .then((result) => {
+        // If we have real transform screenshots, use them instead of the analysis screenshots
+        if (transformScreenshots) {
+          result.screenshot_b64 = transformScreenshots.before
+          result.after_screenshot_b64 = transformScreenshots.after
+        }
         analysisCache.current[cacheKey] = result
         try { sessionStorage.setItem('refineui_analysis_cache', JSON.stringify(analysisCache.current)) } catch {}
         setAnalysis(result)
