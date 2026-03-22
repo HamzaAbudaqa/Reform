@@ -1059,8 +1059,9 @@ export default function TransformPage() {
               </BrowserFrame>
             </div>
             {transformResult.change_annotations.length > 0 && (() => {
-              const typeOrder = ['layout', 'spacing', 'component', 'visual']
+              const typeOrder = ['flow', 'layout', 'spacing', 'component', 'visual']
               const typeColors: Record<string, { bg: string; text: string; accent: string }> = {
+                flow: { bg: 'rgba(236,72,153,0.1)', text: 'rgba(236,72,153,0.7)', accent: 'rgba(236,72,153,0.15)' },
                 layout: { bg: 'rgba(59,130,246,0.1)', text: 'rgba(59,130,246,0.7)', accent: 'rgba(59,130,246,0.15)' },
                 spacing: { bg: 'rgba(34,197,94,0.1)', text: 'rgba(34,197,94,0.7)', accent: 'rgba(34,197,94,0.15)' },
                 component: { bg: 'rgba(245,158,11,0.1)', text: 'rgba(245,158,11,0.7)', accent: 'rgba(245,158,11,0.15)' },
