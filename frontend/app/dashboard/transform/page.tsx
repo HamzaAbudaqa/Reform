@@ -926,7 +926,7 @@ export default function TransformPage() {
                 {pipelineStep === 'complete' ? (changeStatus === 'accepted' ? 'Applied' : changeStatus === 'rejected' ? 'Original Kept' : 'Ready for Review') : pipelineStep === 'idle' ? 'Select a Repository' : 'Processing...'}
               </span>
             </div>
-            <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{repoName || `${analysis.sources?.length || 0} sources analyzed`}</span>
+            <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{repoName || `${analysis?.sources?.length || 0} sources analyzed`}</span>
           </div>
         </div>
 
