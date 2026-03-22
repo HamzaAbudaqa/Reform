@@ -702,6 +702,8 @@ export default function TransformPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken, pipelineStep])
 
+  const autoStartedRef = useRef(false)
+
   useEffect(() => {
     const stored = sessionStorage.getItem('refineui_analysis')
     if (stored) { try { setAnalysis(JSON.parse(stored)) } catch { /* */ } }
@@ -716,6 +718,27 @@ export default function TransformPage() {
       } catch { /* */ }
     }
   }, [])
+
+  // Auto-start pipeline if a repo was selected in Discovery
+  useEffect(() => {
+    if (autoStartedRef.current || pipelineStep !== 'idle' || transformResult) return
+    const repoUrl = sessionStorage.getItem('refineui_repo')
+    if (!repoUrl || !session?.accessToken) return
+    autoStartedRef.current = true
+
+    // Extract owner/repo from URL like https://github.com/owner/repo
+    const match = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/)
+    if (!match) return
+    const fullName = match[1].replace(/\.git$/, '')
+
+    // Create a minimal GithubRepo object and start pipeline
+    runPipeline({
+      id: 0, full_name: fullName, name: fullName.split('/')[1],
+      private: false, language: null, updated_at: '', default_branch: 'main',
+      homepage: null, html_url: repoUrl,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken, pipelineStep])
 
   function handleCopyCode() {
     if (!transform?.code) return
