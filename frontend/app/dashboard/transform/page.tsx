@@ -75,7 +75,7 @@ function PipelineProgress({ step, repoName, targetFile }: { step: PipelineStep; 
     : `Refactoring ${targetFile.split('/').pop()} and rendering previews`
 
   return (
-    <div className="max-w-xl mx-auto py-10 flex flex-col items-center justify-center min-h-[50vh]">
+    <div className="max-w-xl mx-auto pt-6 pb-10 w-full">
       <div className="flex items-center justify-center gap-1 mb-6">
         {PIPELINE_STAGES.map((s, i) => {
           const isDone = i < currentIdx
