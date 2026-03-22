@@ -728,7 +728,6 @@ export default function TransformPage() {
   const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
 
   async function runPipeline(repo: GithubRepo) {
-    if (!analysis) return
     setPipelineError(''); setRepoName(repo.full_name); setRepoBranch(repo.default_branch || 'main')
 
     setPipelineStep('ingesting')
@@ -758,7 +757,7 @@ export default function TransformPage() {
     try {
       const res = await fetch('http://localhost:8000/transform-code', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files, target_file: target, design_intelligence: analysis, user_intent: userIntent, repo_clone_url: `https://github.com/${repo.full_name}.git`, branch: repo.default_branch || 'main', access_token: session?.accessToken || '' }),
+        body: JSON.stringify({ files, target_file: target, design_intelligence: analysis || {}, user_intent: userIntent, repo_clone_url: `https://github.com/${repo.full_name}.git`, branch: repo.default_branch || 'main', access_token: session?.accessToken || '' }),
       })
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Transform failed') }
       const result: TransformResult = await res.json()
@@ -912,22 +911,6 @@ export default function TransformPage() {
     setSelectedCommit({ ...commit, status: 'accepted', color: '#22c55e' })
   }
 
-  if (!analysis) {
-    return (
-      <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="text-center max-w-sm">
-          <div className="w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.12)' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">No Analysis Data</h2>
-          <p className="text-[13px] mb-6 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>Complete a Project Discovery first to generate your UI transformation.</p>
-          <button onClick={() => router.push('/dashboard/discovery')} className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 30px rgba(124,58,237,0.25)' }}>
-            Start Discovery
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex justify-center px-6 py-10 pb-20">
