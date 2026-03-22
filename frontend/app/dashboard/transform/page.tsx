@@ -1058,23 +1058,51 @@ export default function TransformPage() {
                 )}
               </BrowserFrame>
             </div>
-            {transformResult.change_annotations.length > 0 && (
-              <div className="mt-6 rounded-xl p-5 max-w-4xl mx-auto" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h3 className="text-[11px] font-medium uppercase tracking-wider mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>What Changed</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {transformResult.change_annotations.map((ann, i) => (
-                    <div key={i} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: ann.change_type === 'layout' ? 'rgba(59,130,246,0.1)' : ann.change_type === 'spacing' ? 'rgba(34,197,94,0.1)' : ann.change_type === 'component' ? 'rgba(245,158,11,0.1)' : 'rgba(168,85,247,0.1)', color: ann.change_type === 'layout' ? 'rgba(59,130,246,0.7)' : ann.change_type === 'spacing' ? 'rgba(34,197,94,0.7)' : ann.change_type === 'component' ? 'rgba(245,158,11,0.7)' : 'rgba(168,85,247,0.7)' }}>{ann.change_type}</span>
-                        <span className="text-[11px] font-medium text-white/60">{ann.region}</span>
-                      </div>
-                      <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{ann.description}</p>
-                      <p className="text-[10px]" style={{ color: 'rgba(34,197,94,0.5)' }}>{ann.ux_impact}</p>
-                    </div>
-                  ))}
+            {transformResult.change_annotations.length > 0 && (() => {
+              const typeOrder = ['layout', 'spacing', 'component', 'visual']
+              const typeColors: Record<string, { bg: string; text: string; accent: string }> = {
+                layout: { bg: 'rgba(59,130,246,0.1)', text: 'rgba(59,130,246,0.7)', accent: 'rgba(59,130,246,0.15)' },
+                spacing: { bg: 'rgba(34,197,94,0.1)', text: 'rgba(34,197,94,0.7)', accent: 'rgba(34,197,94,0.15)' },
+                component: { bg: 'rgba(245,158,11,0.1)', text: 'rgba(245,158,11,0.7)', accent: 'rgba(245,158,11,0.15)' },
+                visual: { bg: 'rgba(168,85,247,0.1)', text: 'rgba(168,85,247,0.7)', accent: 'rgba(168,85,247,0.15)' },
+              }
+              const grouped = typeOrder
+                .map(type => ({ type, items: transformResult.change_annotations.filter(a => a.change_type === type) }))
+                .filter(g => g.items.length > 0)
+              // Add any types not in typeOrder
+              const knownTypes = new Set(typeOrder)
+              const extras = transformResult.change_annotations.filter(a => !knownTypes.has(a.change_type))
+              if (extras.length > 0) grouped.push({ type: 'other', items: extras })
+
+              return (
+                <div className="mt-6 rounded-xl p-5 max-w-4xl mx-auto" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <h3 className="text-[11px] font-medium uppercase tracking-wider mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>What Changed</h3>
+                  <div className="space-y-5">
+                    {grouped.map(group => {
+                      const colors = typeColors[group.type] || typeColors.visual
+                      return (
+                        <div key={group.type}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded" style={{ background: colors.bg, color: colors.text }}>{group.type}</span>
+                            <div className="flex-1 h-px" style={{ background: colors.accent }} />
+                            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.15)' }}>{group.items.length} {group.items.length === 1 ? 'change' : 'changes'}</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {group.items.map((ann, i) => (
+                              <div key={i} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                <p className="text-[11px] font-medium text-white/60 mb-1">{ann.region}</p>
+                                <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{ann.description}</p>
+                                <p className="text-[10px]" style={{ color: colors.text }}>{ann.ux_impact}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
             {transformResult.change_summary.length > 0 && (
               <div className="mt-4 rounded-xl p-5 max-w-4xl mx-auto" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <h3 className="text-[11px] font-medium uppercase tracking-wider mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Improvement Summary</h3>
