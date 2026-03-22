@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Editor from '@monaco-editor/react'
-import FlowDemoCard from '@/components/demo/FlowDemoCard'
 
 interface CommitEntry {
   hash: string
@@ -968,25 +967,21 @@ export default function TransformPage() {
               </div>
             )}
 
-            {/* Before / After preview cards — always visible */}
+            {/* Before / After preview cards — real pipeline data only */}
             <div className="flex flex-col lg:flex-row gap-6">
               <BrowserFrame label="Before">
                 {transformResult.before_screenshot ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`data:image/png;base64,${transformResult.before_screenshot}`} alt="Before — real screenshot" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
                 ) : (
-                  <div className="relative" style={{ height: '280px' }}>
-                    <FlowDemoCard
-                      steps={[
-                        { label: 'Navigate to section', target: 'sidebar:Workspace', duration: 1200 },
-                        { label: 'Find settings', target: 'nav:Settings', duration: 1000 },
-                        { label: 'Open page', target: 'card:2', duration: 1100 },
-                        { label: 'Locate option', target: 'sidebar:Deploy', duration: 1300 },
-                        { label: 'Confirm action', target: 'modal:confirm', duration: 1400 },
-                      ]}
-                      variant="before"
-                      caption={`Current flow in ${selectedTarget.split('/').pop() || 'page'}`}
-                    />
+                  <div className="flex items-center justify-center" style={{ minHeight: '280px', background: '#0d0c16' }}>
+                    <div className="text-center px-6">
+                      <div className="w-10 h-10 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+                      </div>
+                      <p className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Preview loading</p>
+                      <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.15)' }}>{transformResult.preview_error || 'Building and rendering your app...'}</p>
+                    </div>
                   </div>
                 )}
               </BrowserFrame>
@@ -998,15 +993,14 @@ export default function TransformPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={`data:image/png;base64,${transformResult.after_screenshot}`} alt="After — improved version" className="w-full" style={{ minHeight: '280px', objectFit: 'cover', objectPosition: 'top' }} />
                 ) : (
-                  <div className="relative" style={{ height: '280px' }}>
-                    <FlowDemoCard
-                      steps={[
-                        { label: 'One action', target: 'cta:deploy', duration: 800 },
-                        { label: 'Done', target: 'card:1', duration: 600 },
-                      ]}
-                      variant="after"
-                      caption="Streamlined flow after Reform"
-                    />
+                  <div className="flex items-center justify-center" style={{ minHeight: '280px', background: '#0d0c16' }}>
+                    <div className="text-center px-6">
+                      <div className="w-10 h-10 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.1)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.35)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+                      </div>
+                      <p className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Preview loading</p>
+                      <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.15)' }}>Applying changes and rendering...</p>
+                    </div>
                   </div>
                 )}
               </BrowserFrame>
