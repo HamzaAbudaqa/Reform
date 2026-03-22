@@ -22,8 +22,8 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="RefineUI Analysis Service",
-    description="TinyFish-powered competitor UI/UX analysis for RefineUI",
+    title="Reform Analysis Service",
+    description="AI-powered UI/UX analysis and refactoring for Reform",
     version="1.0.0",
 )
 

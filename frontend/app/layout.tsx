@@ -9,7 +9,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'RefineUI — Upgrade ugly frontends into polished UI',
+  title: 'Reform — Upgrade ugly frontends into polished UI',
   description:
     'AI-powered frontend refactoring tool. Upload a screenshot, get a production-ready redesign. Refactor the UI, not the logic.',
   keywords: ['UI refactor', 'frontend AI', 'design tool', 'developer tool'],

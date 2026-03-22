@@ -58,7 +58,7 @@ export default function NewPage() {
   async function handleCreateRepo() {
     if (!session?.accessToken || !newRepoName.trim()) return
     setCreatingRepo(true)
-    const name = `refineui-${newRepoName.trim().toLowerCase().replace(/\s+/g, '-')}`
+    const name = `reform-${newRepoName.trim().toLowerCase().replace(/\s+/g, '-')}`
     const res = await fetch('https://api.github.com/user/repos', {
       method: 'POST',
       headers: {
@@ -67,7 +67,7 @@ export default function NewPage() {
       },
       body: JSON.stringify({
         name,
-        description: 'Refactored with RefineUI — polished frontend, same logic.',
+        description: 'Refactored with Reform — polished frontend, same logic.',
         private: false,
         auto_init: true,
       }),
@@ -280,7 +280,7 @@ export default function NewPage() {
                     ) : (
                       <div className="px-4 py-3 flex items-center gap-2">
                         <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
-                          refineui-
+                          reform-
                         </span>
                         <input
                           autoFocus
@@ -435,7 +435,7 @@ export default function NewPage() {
                     </div>
                   ) : (
                     <div className="px-5 py-3 flex items-center gap-3">
-                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', whiteSpace: 'nowrap' }}>refineui-</span>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', whiteSpace: 'nowrap' }}>reform-</span>
                       <input
                         autoFocus
                         type="text"

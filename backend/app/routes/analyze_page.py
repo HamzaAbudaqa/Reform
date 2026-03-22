@@ -30,9 +30,9 @@ def _strip_fences(text: str) -> str:
 
 
 @router.post("/analyze-page")
-def analyze_page(body: AnalyzePageRequest):
+async def analyze_page(body: AnalyzePageRequest):
     try:
-        screenshot_b64 = take_screenshot_b64(body.url)
+        screenshot_b64 = await take_screenshot_b64(body.url)
     except Exception as exc:
         logger.exception("Screenshot failed for %s", body.url)
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {exc}") from exc
@@ -81,7 +81,7 @@ def analyze_page(body: AnalyzePageRequest):
     css_patch = data.get("css_patch", "")
 
     try:
-        after_screenshot_b64 = take_screenshot_with_css_b64(body.url, css_patch) if css_patch else screenshot_b64
+        after_screenshot_b64 = (await take_screenshot_with_css_b64(body.url, css_patch)) if css_patch else screenshot_b64
     except Exception as exc:
         logger.error("After screenshot failed: %s", exc)
         after_screenshot_b64 = screenshot_b64

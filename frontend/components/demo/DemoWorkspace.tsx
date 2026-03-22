@@ -77,7 +77,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
             See it in action
           </h2>
           <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', maxWidth: '480px', lineHeight: 1.7 }}>
-            Paste a GitHub repo URL, choose a style preset, and watch RefineUI transform your
+            Paste a GitHub repo URL, choose a style preset, and watch Reform transform your
             frontend in seconds.
           </p>
         </div>
@@ -98,7 +98,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
               <div className="w-3 h-3 rounded-full bg-emerald-500/60 hover:bg-emerald-500 transition-colors" />
             </div>
             <div className="flex-1 flex items-center justify-center">
-              <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>refineui — workspace</span>
+              <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>reform — workspace</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div

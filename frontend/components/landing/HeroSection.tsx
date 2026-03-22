@@ -1,8 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import MockDashboardBefore from '@/components/demo/MockDashboardBefore'
-import MockDashboardAfter from '@/components/demo/MockDashboardAfter'
+import FlowDemoCard from '@/components/demo/FlowDemoCard'
+
+const BEFORE_STEPS = [
+  { label: 'Navigate to Projects', target: 'sidebar:Workspace', duration: 1200 },
+  { label: 'Find deploy section', target: 'nav:Settings', duration: 1000 },
+  { label: 'Open settings page', target: 'card:2', duration: 1100 },
+  { label: 'Locate deploy option', target: 'sidebar:Deploy', duration: 1300 },
+  { label: 'Confirm deployment', target: 'modal:confirm', duration: 1400 },
+]
+
+const AFTER_STEPS = [
+  { label: 'Click Deploy', target: 'cta:deploy', duration: 800 },
+  { label: 'Done', target: 'card:1', duration: 600 },
+]
 
 function HeroBrowserFrame({
   children,
@@ -50,16 +62,8 @@ function HeroBrowserFrame({
             </div>
           </div>
         </div>
-        <div className="overflow-hidden" style={{ height: '195px', background: '#0d0c16' }}>
-          <div
-            style={{
-              width: '900px',
-              height: '560px',
-              transform: 'scale(0.4444)',
-              transformOrigin: 'top left',
-              pointerEvents: 'none',
-            }}
-          >
+        <div className="overflow-hidden relative" style={{ height: '210px', background: '#0a0918' }}>
+          <div style={{ pointerEvents: 'none' }}>
             {children}
           </div>
         </div>
@@ -247,7 +251,7 @@ export default function HeroSection() {
               </div>
               <div className="flex-1 flex justify-center">
                 <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                  refineui — transformation preview
+                  reform — transformation preview
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -256,9 +260,9 @@ export default function HeroSection() {
               </div>
             </div>
 
-            <div className="flex gap-4 px-6 pt-7 pb-24">
+            <div className="flex gap-4 px-6 pt-7 pb-8">
               <HeroBrowserFrame label="Before">
-                <MockDashboardBefore />
+                <FlowDemoCard steps={BEFORE_STEPS} variant="before" caption="5 clicks to deploy" />
               </HeroBrowserFrame>
 
               {/* Arrow divider */}
@@ -278,12 +282,12 @@ export default function HeroSection() {
                   className="text-[8px] font-semibold uppercase tracking-widest"
                   style={{ color: 'rgba(168,85,247,0.6)', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                 >
-                  Railway preset
+                  same task
                 </div>
               </div>
 
               <HeroBrowserFrame label="After" accent>
-                <MockDashboardAfter />
+                <FlowDemoCard steps={AFTER_STEPS} variant="after" caption="1 click to deploy" />
               </HeroBrowserFrame>
             </div>
 
