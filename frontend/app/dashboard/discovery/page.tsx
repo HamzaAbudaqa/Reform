@@ -94,7 +94,7 @@ export default function DiscoveryPage() {
       sessionStorage.setItem('refineui_discovery', JSON.stringify(MOCK_DISCOVERY))
       sessionStorage.setItem('refineui_analysis', JSON.stringify(MOCK_ANALYSIS))
       sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
-      if (!sessionStorage.getItem('refineui_repo')) sessionStorage.setItem('refineui_repo', 'https://github.com/anthropics/anthropic-quickstarts')
+      if (!sessionStorage.getItem('refineui_repo')) sessionStorage.setItem('refineui_repo', 'https://github.com/HamzaAbudaqa/Reform')
       finishProgress(); setDiscovery(MOCK_DISCOVERY); setCompleted(true); setLoading(false)
       return
     }
