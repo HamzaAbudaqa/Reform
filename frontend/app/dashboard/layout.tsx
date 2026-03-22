@@ -72,7 +72,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={() => { sessionStorage.removeItem('refineui_analysis'); sessionStorage.removeItem('refineui_discovery'); sessionStorage.removeItem('refineui_answers'); sessionStorage.removeItem('refineui_analysis_cache'); window.location.href = '/dashboard/discovery' }} className="px-3 py-1.5 rounded-lg text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <button onClick={() => { sessionStorage.removeItem('refineui_analysis'); sessionStorage.removeItem('refineui_discovery'); sessionStorage.removeItem('refineui_answers'); sessionStorage.removeItem('refineui_analysis_cache'); sessionStorage.removeItem('refineui_transform'); sessionStorage.removeItem('refineui_repo'); window.location.href = '/dashboard/discovery' }} className="px-3 py-1.5 rounded-lg text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
             Start New Analysis
           </button>
         </div>
