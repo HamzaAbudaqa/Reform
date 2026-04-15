@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import Image from 'next/image'
-import InteractiveBackground from '@/components/landing/InteractiveBackground'
 
 const STEPS = [
   { num: '01', text: 'Connect or paste a repo URL' },
@@ -14,7 +13,7 @@ const STEPS = [
 
 const PROCESS_NOTES = [
   'Reform scans the repo structure before making visual recommendations.',
-  'Competitor analysis is used to shape the aesthetic direction, not your product logic.',
+  'Competitor analysis shapes the aesthetic direction, not your product logic.',
   'The workflow stays frontend-only, so routes, handlers, and backend flow remain untouched.',
 ]
 
@@ -36,10 +35,30 @@ function GitHubIcon({ size = 16, color = 'currentColor' }: { size?: number; colo
   )
 }
 
+function ArrowRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M3.5 7h7M8 4.5 10.5 7 8 9.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function CheckDot() {
+  return <div className="h-1.5 w-1.5 rounded-full bg-neutral-900" />
+}
+
 export default function NewPage() {
   const { data: session, status } = useSession()
   const [query, setQuery] = useState('')
-  const [view, setView] = useState<'main' | 'github' | 'creating'>('main')
+  const [view, setView] = useState<'main' | 'github'>('main')
   const [repos, setRepos] = useState<GithubRepo[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [creatingRepo, setCreatingRepo] = useState(false)
@@ -81,9 +100,7 @@ export default function NewPage() {
     })
     const data = await res.json()
     setCreatingRepo(false)
-    if (data.html_url) {
-      setCreatedRepo(data.html_url)
-    }
+    if (data.html_url) setCreatedRepo(data.html_url)
   }
 
   const filteredRepos = repos.filter((r) =>
@@ -91,225 +108,301 @@ export default function NewPage() {
   )
 
   return (
-    <div className="app-shell min-h-screen">
-      <InteractiveBackground />
-      <div className="relative z-[1] min-h-screen flex flex-col">
-        {/* Header */}
-        <header
-          className="border-b backdrop-blur-2xl"
-          style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(5,7,12,0.76)' }}
-        >
-          <div className="max-w-5xl mx-auto px-5 sm:px-6 py-4 flex items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden"
-                style={{
-                  background: 'linear-gradient(180deg, rgba(124,140,255,0.2) 0%, rgba(124,140,255,0.08) 100%)',
-                  border: '1px solid rgba(170,180,255,0.16)',
-                }}
-              >
-                <Image src="/reform_justlogo.png" alt="Reform" width={34} height={34} className="object-contain" />
-              </div>
-              <span className="text-[16px] font-semibold text-white" style={{ letterSpacing: '-0.03em' }}>Reform</span>
-            </Link>
+    <div className="min-h-screen bg-white text-neutral-950">
+      <header className="sticky top-0 z-20 border-b border-black/[0.06] bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-6">
+          <Link href="/" style={{ textDecoration: 'none' }}>
+          <span style={{ fontSize: 20, fontWeight: 700, color: '#0a0a0a', letterSpacing: '-0.04em' }}>
+            Reform
+          </span>
+        </Link>
 
-            {status === 'loading' ? null : session ? (
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-2.5 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  {session.user?.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" />
-                  )}
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    {session.user?.name ?? session.user?.email}
-                  </span>
-                </div>
-                <button onClick={() => signOut()} className="btn-ghost text-xs px-3.5 py-2 rounded-xl">
-                  Sign out
-                </button>
+
+          {status === 'loading' ? null : session ? (
+            <div className="flex items-center gap-2.5">
+              <div className="hidden items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-2 sm:flex">
+                {session.user?.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={session.user.image} alt="" className="h-5 w-5 rounded-full" />
+                )}
+                <span className="text-[11px] text-neutral-500">
+                  {session.user?.name ?? session.user?.email}
+                </span>
               </div>
-            ) : (
               <button
-                onClick={() => signIn('github')}
-                className="btn-ghost inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium"
+                onClick={() => signOut()}
+                className="rounded-full border border-black/[0.08] px-4 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50"
               >
-                <GitHubIcon size={14} />
-                Sign in with GitHub
+                Sign out
               </button>
-            )}
-          </div>
-        </header>
+            </div>
+          ) : (
+            <button
+              onClick={() => signIn('github')}
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
+            >
+              <GitHubIcon size={14} />
+              Sign in with GitHub
+            </button>
+          )}
+        </div>
+      </header>
 
-        {/* Main content — single centered column */}
-        <div className="flex-1">
-          <div className="max-w-2xl mx-auto px-5 sm:px-6">
-
-            {/* Hero */}
-            <div className="pt-20 sm:pt-28 lg:pt-36 pb-16 sm:pb-20">
-              <div className="mono text-[11px] mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>New project</div>
-              <h1
-                className="text-[clamp(32px,5vw,48px)] font-bold text-white leading-[1.15]"
-                style={{ letterSpacing: '-0.04em' }}
-              >
-                Start from the repo.
-                <br />
-                <span style={{ color: 'rgba(255,255,255,0.4)' }}>Keep the product intact.</span>
-              </h1>
-              <p
-                className="mt-5 max-w-md text-[15px]"
-                style={{ color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}
-              >
-                Connect a GitHub repository or create a new one. Reform uses it as the starting point for a frontend-only polish pass.
-              </p>
+      <main className="mx-auto max-w-6xl px-5 pb-24 pt-10 sm:px-6 sm:pt-14 lg:pt-16">
+        <div className="grid gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+          <section>
+            <div className="mb-6 inline-flex items-center rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-neutral-500">
+              New project
             </div>
 
-            {/* Primary action area */}
-            {view === 'github' ? (
-              /* ── GitHub repo selection view ── */
-              <div className="pb-20">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-white" style={{ letterSpacing: '-0.02em' }}>
-                    Choose a repository
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="mono text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                      {session ? 'Connected' : 'Public repos'}
-                    </span>
+            <h1 className="max-w-2xl text-[clamp(38px,5vw,64px)] font-semibold leading-[1.02] tracking-[-0.055em] text-neutral-950">
+              Start from the repo.
+              <br />
+              <span className="text-neutral-300">Refine the interface.</span>
+            </h1>
+
+            <p className="mt-6 max-w-xl text-[16px] leading-8 text-neutral-500">
+              Connect a GitHub repository or create a new one. Reform uses it as the starting point for a frontend-only polish pass with clearer hierarchy, tighter spacing, and a more consistent visual system.
+            </p>
+
+            {view === 'main' ? (
+              <div className="mt-12 space-y-3">
+                <button
+                  className="w-full rounded-[22px] border border-black/[0.07] bg-white p-5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition hover:bg-neutral-50"
+                  onClick={() => setView('github')}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-black/[0.06] bg-neutral-50 text-neutral-700">
+                        <GitHubIcon size={17} />
+                      </div>
+                      <div>
+                        <div className="text-[15px] font-medium text-neutral-950">GitHub repository</div>
+                        <div className="mt-1 text-[12px] text-neutral-400">
+                          {session ? `Signed in as ${session.user?.name ?? 'you'}` : 'Use any public GitHub repo'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-neutral-300">
+                      <ArrowRightIcon />
+                    </div>
                   </div>
-                </div>
+                </button>
 
-                <div
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 mb-4"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
-                >
-                  <GitHubIcon size={15} color="rgba(255,255,255,0.35)" />
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder={session ? 'Search your repositories...' : 'github.com/owner/repository'}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    className="w-full bg-transparent text-sm outline-none"
-                    style={{ color: 'rgba(255,255,255,0.82)' }}
-                  />
-                </div>
+                {!showCreateForm ? (
+                  <button
+                    className="w-full rounded-[22px] border border-black/[0.07] bg-white p-5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition hover:bg-neutral-50"
+                    onClick={() => (session ? setShowCreateForm(true) : signIn('github'))}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-black/[0.06] bg-neutral-50 text-neutral-700">
+                          <PlusIcon />
+                        </div>
+                        <div>
+                          <div className="text-[15px] font-medium text-neutral-950">Create new project</div>
+                          <div className="mt-1 text-[12px] text-neutral-400">
+                            {session ? 'Create a Reform-ready repository from this workspace' : 'Sign in with GitHub to create'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ) : createdRepo ? (
+                  <div className="rounded-[22px] border border-black/[0.07] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                    <div className="mb-2 text-[14px] font-medium text-neutral-950">Repository created</div>
+                    <a
+                      href={createdRepo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[13px] text-neutral-500 underline underline-offset-4"
+                    >
+                      {createdRepo}
+                    </a>
+                  </div>
+                ) : (
+                  <div className="rounded-[22px] border border-black/[0.07] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                    <div className="flex items-center gap-3 border-b border-black/[0.06] pb-3">
+                      <span className="font-mono text-[12px] text-neutral-400">reform-</span>
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="project-name"
+                        value={newRepoName}
+                        onChange={(e) => setNewRepoName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCreateRepo()}
+                        className="w-full bg-transparent text-sm text-neutral-950 outline-none placeholder:text-neutral-300"
+                      />
+                    </div>
+                    <div className="mt-4 flex items-center gap-3">
+                      <button
+                        onClick={handleCreateRepo}
+                        disabled={!newRepoName.trim() || creatingRepo}
+                        className="rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {creatingRepo ? 'Creating...' : 'Create'}
+                      </button>
+                      <button
+                        onClick={() => setShowCreateForm(false)}
+                        className="text-[12px] text-neutral-500 transition hover:text-neutral-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-12">
+                <div className="overflow-hidden rounded-[24px] border border-black/[0.07] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.03)]">
+                  <div className="border-b border-black/[0.06] px-6 py-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-[17px] font-medium tracking-[-0.02em] text-neutral-950">Choose a repository</h2>
+                        <p className="mt-1 text-[12px] text-neutral-400">
+                          Browse an existing repo or paste a GitHub URL.
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5">
+                        <CheckDot />
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-neutral-500">
+                          {session ? 'Connected' : 'Public only'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                <div
-                  className="rounded-xl overflow-hidden"
-                  style={{ border: '1px solid rgba(255,255,255,0.07)' }}
-                >
-                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  <div className="border-b border-black/[0.06] px-6 py-4">
+                    <div className="flex items-center gap-3 rounded-full border border-black/[0.07] bg-neutral-50 px-4 py-3">
+                      <GitHubIcon size={15} color="rgba(23,23,23,0.45)" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder={session ? 'Search your repositories...' : 'github.com/owner/repository'}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        className="w-full bg-transparent text-sm text-neutral-950 outline-none placeholder:text-neutral-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-[440px] overflow-y-auto">
                     {!session && (
-                      <div className="p-5 space-y-4">
+                      <div className="space-y-5 p-6">
                         <button
                           onClick={() => signIn('github')}
-                          className="btn-ghost w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium"
+                          className="flex w-full items-center justify-center gap-2 rounded-full border border-black/[0.08] px-4 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-50"
                         >
                           <GitHubIcon size={14} />
                           Sign in to browse your repos
                         </button>
+
                         <div className="flex items-center gap-3">
-                          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                          <span className="mono text-[10px]" style={{ color: 'rgba(255,255,255,0.24)' }}>or</span>
-                          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                          <div className="h-px flex-1 bg-black/[0.06]" />
+                          <span className="text-[10px] uppercase tracking-[0.16em] text-neutral-400">or</span>
+                          <div className="h-px flex-1 bg-black/[0.06]" />
                         </div>
+
                         <Link
                           href={`/dashboard?repo=${encodeURIComponent(query || 'https://github.com/vercel/next.js')}`}
-                          className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold"
+                          className="flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
                         >
                           Analyze this repo
-                          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                            <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
+                          <ArrowRightIcon />
                         </Link>
                       </div>
                     )}
 
                     {session && loadingRepos && (
-                      <div className="flex items-center justify-center py-12 text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <div className="flex items-center justify-center py-14 text-sm text-neutral-400">
                         Loading your repositories...
                       </div>
                     )}
 
-                    {session && !loadingRepos && filteredRepos.map((repo) => (
+                    {session && !loadingRepos && filteredRepos.map((repo, index) => (
                       <Link
                         key={repo.id}
                         href={`/dashboard?repo=${encodeURIComponent(`https://github.com/${repo.full_name}`)}&branch=${encodeURIComponent(repo.default_branch || 'main')}`}
-                        className="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-white/[0.03]"
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                        className="flex items-center justify-between gap-4 px-6 py-4 transition hover:bg-neutral-50"
+                        style={{ borderBottom: index < filteredRepos.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <GitHubIcon size={15} color="rgba(255,255,255,0.35)" />
+                        <div className="flex min-w-0 items-center gap-3.5">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.06] bg-neutral-50 text-neutral-700">
+                            <GitHubIcon size={15} />
+                          </div>
                           <div className="min-w-0">
-                            <span className="text-sm text-white truncate block">{repo.full_name}</span>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                            <span className="block truncate text-[14px] font-medium text-neutral-950">{repo.full_name}</span>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-400">
                               {repo.language && <span>{repo.language}</span>}
                               {repo.private && <span>Private</span>}
                             </div>
                           </div>
                         </div>
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
-                          <path d="M5 3.5L8.5 7 5 10.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                        <div className="text-neutral-300">
+                          <ArrowRightIcon />
+                        </div>
                       </Link>
                     ))}
 
                     {session && !loadingRepos && (
-                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="border-t border-black/[0.06]">
                         {!showCreateForm ? (
                           <button
                             onClick={() => setShowCreateForm(true)}
-                            className="w-full flex items-center gap-3 px-4 py-3.5 transition-colors text-left hover:bg-white/[0.03]"
+                            className="flex w-full items-center gap-4 px-6 py-4 text-left transition hover:bg-neutral-50"
                           >
-                            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '15px' }}>+</span>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.06] bg-neutral-50 text-neutral-700">
+                              <PlusIcon />
+                            </div>
                             <div>
-                              <div className="text-sm text-white">Create new repo</div>
-                              <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>New Reform-ready repository</div>
+                              <div className="text-[14px] font-medium text-neutral-950">Create new repo</div>
+                              <div className="mt-1 text-[11px] text-neutral-400">New Reform-ready repository</div>
                             </div>
                           </button>
                         ) : createdRepo ? (
-                          <div className="px-4 py-4 text-center">
-                            <div className="inline-flex items-center gap-2 mb-2 px-3 py-1.5 rounded-full" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.16)' }}>
-                              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                                <circle cx="8" cy="8" r="7" stroke="#34d399" strokeWidth="1.5"/>
-                                <path d="M5 8l2.5 2.5L11 5.5" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                              <span className="text-[12px]" style={{ color: '#7dd3a8' }}>Created</span>
+                          <div className="p-6">
+                            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5 text-[11px] text-neutral-700">
+                              <CheckDot />
+                              Created
                             </div>
-                            <a href={createdRepo} target="_blank" rel="noopener noreferrer" className="block text-sm underline" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                            <a
+                              href={createdRepo}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-[13px] text-neutral-500 underline underline-offset-4"
+                            >
                               {createdRepo}
                             </a>
                           </div>
                         ) : (
-                          <div className="px-4 py-3.5 flex items-center gap-3">
-                            <span className="mono text-[12px]" style={{ color: 'rgba(255,255,255,0.28)', whiteSpace: 'nowrap' }}>
-                              reform-
-                            </span>
-                            <input
-                              autoFocus
-                              type="text"
-                              placeholder="my-project"
-                              value={newRepoName}
-                              onChange={(e) => setNewRepoName(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && handleCreateRepo()}
-                              className="flex-1 bg-transparent outline-none text-sm rounded-none border-b pb-1.5"
-                              style={{ color: 'rgba(255,255,255,0.84)', borderColor: 'rgba(255,255,255,0.12)' }}
-                            />
-                            <button
-                              onClick={handleCreateRepo}
-                              disabled={!newRepoName.trim() || creatingRepo}
-                              className="btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold"
-                              style={{ opacity: creatingRepo ? 0.6 : 1 }}
-                            >
-                              {creatingRepo ? 'Creating...' : 'Create'}
-                            </button>
-                            <button
-                              onClick={() => setShowCreateForm(false)}
-                              style={{ color: 'rgba(255,255,255,0.28)', fontSize: '18px', lineHeight: 1 }}
-                            >
-                              &times;
-                            </button>
+                          <div className="p-6">
+                            <div className="flex items-center gap-3 border-b border-black/[0.06] pb-3">
+                              <span className="font-mono text-[12px] text-neutral-400">reform-</span>
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="my-project"
+                                value={newRepoName}
+                                onChange={(e) => setNewRepoName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleCreateRepo()}
+                                className="w-full bg-transparent text-sm text-neutral-950 outline-none placeholder:text-neutral-300"
+                              />
+                            </div>
+                            <div className="mt-4 flex items-center gap-3">
+                              <button
+                                onClick={handleCreateRepo}
+                                disabled={!newRepoName.trim() || creatingRepo}
+                                className="rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {creatingRepo ? 'Creating...' : 'Create'}
+                              </button>
+                              <button
+                                onClick={() => setShowCreateForm(false)}
+                                className="text-[12px] text-neutral-500 transition hover:text-neutral-800"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -317,151 +410,72 @@ export default function NewPage() {
                   </div>
                 </div>
 
-                <button onClick={() => { setView('main'); setQuery('') }} className="link-muted mt-6 text-xs">
-                  &larr; Back
+                <button
+                  onClick={() => {
+                    setView('main')
+                    setQuery('')
+                  }}
+                  className="mt-5 text-[12px] text-neutral-500 transition hover:text-neutral-800"
+                >
+                  ← Back
                 </button>
               </div>
-            ) : (
-              /* ── Main view ── */
-              <div className="pb-20">
-                {/* Action rows */}
-                <div className="space-y-2">
-                  <button
-                    className="w-full flex items-center justify-between gap-4 rounded-xl px-4 py-3.5 transition-colors hover:bg-white/[0.03] text-left"
-                    style={{ border: '1px solid rgba(255,255,255,0.07)' }}
-                    onClick={() => setView('github')}
-                  >
-                    <div className="flex items-center gap-3">
-                      <GitHubIcon size={16} color="rgba(255,255,255,0.45)" />
+            )}
+          </section>
+
+          <aside className="lg:pt-10">
+            <div className="sticky top-[96px] overflow-hidden rounded-[24px] border border-black/[0.07] bg-neutral-50">
+              <div className="border-b border-black/[0.06] px-6 py-5">
+                <div className="text-[12px] uppercase tracking-[0.14em] text-neutral-500">How it works</div>
+              </div>
+
+              <div className="px-6 py-6">
+                <div className="space-y-6">
+                  {STEPS.map((step, index) => (
+                    <div key={step.num} className="flex gap-4">
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white font-mono text-[11px] text-neutral-500">
+                        {step.num}
+                      </div>
                       <div>
-                        <div className="text-sm font-medium text-white">GitHub Repository</div>
-                        <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          {session ? `Signed in as ${session.user?.name ?? 'you'}` : 'Use any public GitHub repo'}
-                        </div>
+                        <p className="pt-1 text-[14px] leading-6 text-neutral-700">{step.text}</p>
+                        {index < STEPS.length - 1 && <div className="mt-4 h-6 w-px bg-black/[0.06]" />}
                       </div>
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M5 3.5L8.5 7 5 10.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-
-                  {!showCreateForm ? (
-                    <button
-                      className="w-full flex items-center justify-between gap-4 rounded-xl px-4 py-3.5 transition-colors hover:bg-white/[0.03] text-left"
-                      style={{ border: '1px solid rgba(255,255,255,0.07)' }}
-                      onClick={() => session ? setShowCreateForm(true) : signIn('github')}
-                    >
-                      <div className="flex items-center gap-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5">
-                          <path d="M12 4v16M4 12h16" strokeLinecap="round"/>
-                        </svg>
-                        <div>
-                          <div className="text-sm font-medium text-white">Create new project</div>
-                          <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                            {session ? 'New GitHub repo from this workspace' : 'Sign in with GitHub to create'}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ) : createdRepo ? (
-                    <div
-                      className="rounded-xl px-4 py-4 text-center"
-                      style={{ border: '1px solid rgba(255,255,255,0.07)' }}
-                    >
-                      <div className="text-sm text-white mb-1">Repo created</div>
-                      <a href={createdRepo} target="_blank" rel="noopener noreferrer" className="text-sm underline" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                        {createdRepo}
-                      </a>
-                    </div>
-                  ) : (
-                    <div
-                      className="rounded-xl px-4 py-4"
-                      style={{ border: '1px solid rgba(255,255,255,0.07)' }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="mono text-[12px]" style={{ color: 'rgba(255,255,255,0.28)', whiteSpace: 'nowrap' }}>reform-</span>
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="project-name"
-                          value={newRepoName}
-                          onChange={(e) => setNewRepoName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleCreateRepo()}
-                          className="flex-1 bg-transparent outline-none text-sm rounded-none border-b pb-1.5"
-                          style={{ color: 'rgba(255,255,255,0.84)', borderColor: 'rgba(255,255,255,0.12)' }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-3 mt-3">
-                        <button
-                          onClick={handleCreateRepo}
-                          disabled={!newRepoName.trim() || creatingRepo}
-                          className="btn-primary px-4 py-2 rounded-lg text-xs font-semibold"
-                          style={{ opacity: creatingRepo ? 0.6 : 1 }}
-                        >
-                          {creatingRepo ? 'Creating...' : 'Create'}
-                        </button>
-                        <button onClick={() => setShowCreateForm(false)} className="link-muted text-xs">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  ))}
                 </div>
+              </div>
 
-                {/* Steps — minimal, no cards */}
-                <div className="mt-16 sm:mt-20">
-                  <div className="flex items-center gap-2 mb-8">
-                    <div className="w-1 h-1 rounded-full" style={{ background: 'rgba(170,180,255,0.5)' }} />
-                    <span className="mono text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>How it works</span>
-                  </div>
-                  <div className="grid sm:grid-cols-3 gap-10 sm:gap-8">
-                    {STEPS.map((step) => (
-                      <div key={step.num}>
-                        <div className="mono text-[11px] mb-2" style={{ color: 'rgba(170,180,255,0.5)' }}>{step.num}</div>
-                        <p className="text-[14px]" style={{ color: 'rgba(255,255,255,0.55)', lineHeight: 1.65 }}>{step.text}</p>
-                      </div>
-                    ))}
-                  </div>
+              <div className="border-t border-black/[0.06] px-6 py-6">
+                <div className="mb-4 text-[12px] uppercase tracking-[0.14em] text-neutral-500">What to know</div>
+                <div className="space-y-4">
+                  {PROCESS_NOTES.map((note) => (
+                    <p key={note} className="text-[13px] leading-6 text-neutral-500">
+                      {note}
+                    </p>
+                  ))}
                 </div>
+              </div>
 
-                {/* Process notes — clean list */}
-                <div className="mt-16 sm:mt-20" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '2.5rem' }}>
-                  <div className="flex items-center gap-2 mb-8">
-                    <div className="w-1 h-1 rounded-full" style={{ background: 'rgba(170,180,255,0.5)' }} />
-                    <span className="mono text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>What to know</span>
+              <div className="border-t border-black/[0.06] px-6 py-6">
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                  <div>
+                    <div className="mb-2 text-[12px] uppercase tracking-[0.14em] text-neutral-500">Outcome</div>
+                    <p className="text-[13px] leading-6 text-neutral-500">
+                      Better UI signal before any code transformation starts. The intake flow frames the repo, design intent, and next steps in one place.
+                    </p>
                   </div>
-                  <div className="space-y-5">
-                    {PROCESS_NOTES.map((note) => (
-                      <p key={note} className="text-[14px]" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.7 }}>
-                        {note}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Footer context */}
-                <div className="mt-16 sm:mt-20 pb-8" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '2.5rem' }}>
-                  <div className="sm:flex sm:items-start sm:justify-between gap-12">
-                    <div className="mb-6 sm:mb-0">
-                      <div className="mono text-[11px] mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>Outcome</div>
-                      <p className="text-[14px] max-w-sm" style={{ color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>
-                        Better UI signal before any code transformation starts. The intake flow frames the repo, design intent, and next steps in one place.
-                      </p>
-                    </div>
-                    <div>
-                      <div className="mono text-[11px] mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>Constraint</div>
-                      <p className="text-[14px] max-w-sm" style={{ color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>
-                        Frontend redesign only. This stage improves visual quality and structure, not product flows. Works with any public GitHub repo.
-                      </p>
-                    </div>
+                  <div>
+                    <div className="mb-2 text-[12px] uppercase tracking-[0.14em] text-neutral-500">Constraint</div>
+                    <p className="text-[13px] leading-6 text-neutral-500">
+                      Frontend redesign only. This stage improves visual quality and structure, not product flows.
+                    </p>
                   </div>
                 </div>
               </div>
-            )}
-
-          </div>
+            </div>
+          </aside>
         </div>
-      </div>
+      </main>
     </div>
   )
 }
