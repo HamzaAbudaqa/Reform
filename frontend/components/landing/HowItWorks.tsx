@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import FlowDemoCard from '@/components/demo/FlowDemoCard'
+
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
 const SECTIONS = [
   {
@@ -9,117 +10,152 @@ const SECTIONS = [
     headline: 'Connect your repo, we handle the rest',
     body: 'Paste any public GitHub URL. Reform scans the frontend components, detects spacing inconsistencies, poor hierarchy, and mixed design patterns — automatically, without any config.',
     detail: 'No Figma. No design system. Just a URL.',
-    visual: (
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
-      >
-        <div
-          className="px-4 py-2.5 border-b flex items-center gap-2"
-          style={{ borderColor: 'rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}
-        >
-          <div className="flex gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-red-500/40" />
-            <div className="w-2 h-2 rounded-full bg-amber-500/40" />
-            <div className="w-2 h-2 rounded-full bg-emerald-500/40" />
-          </div>
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>reform — scanner</span>
-        </div>
-        <div className="p-5 font-mono text-[11px] space-y-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          <div><span style={{ color: '#a855f7' }}>$</span> reform scan github.com/acme/dashboard</div>
-          <div style={{ color: 'rgba(255,255,255,0.2)' }}>&#8627; Cloning repository...</div>
-          <div style={{ color: 'rgba(255,255,255,0.2)' }}>&#8627; Scanning 47 components...</div>
-          <div style={{ color: '#f59e0b' }}>&#9888; 12 spacing violations</div>
-          <div style={{ color: '#f59e0b' }}>&#9888; 5 inconsistent border-radius values</div>
-          <div style={{ color: '#f59e0b' }}>&#9888; Mixed color system detected</div>
-          <div className="pt-1" style={{ color: '#34d399' }}>&#10003; Analysis complete — 19 issues found</div>
-        </div>
-      </div>
-    ),
+    visual: <AnalyzeVisual />,
   },
   {
     tag: 'Compare',
     headline: 'Same task, better path.',
     body: 'Not just a visual diff — Reform shows how user flows improve. See the old journey vs the new one side-by-side. Stakeholders immediately understand the impact.',
     detail: 'Fewer clicks · Clearer paths · Better conversions',
-    visual: (
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <div className="text-[9px] font-semibold uppercase tracking-widest mb-2.5" style={{ color: 'rgba(255,255,255,0.2)' }}>Before</div>
-          <div className="rounded-lg overflow-hidden relative" style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', height: '180px' }}>
-            <FlowDemoCard
-              steps={[
-                { label: 'Open menu', target: 'sidebar:Integrations', duration: 1000 },
-                { label: 'Find settings', target: 'nav:Settings', duration: 900 },
-                { label: 'Scroll to option', target: 'card:3', duration: 1100 },
-                { label: 'Confirm', target: 'modal:confirm', duration: 1200 },
-              ]}
-              variant="before"
-            />
-          </div>
-        </div>
-        <div>
-          <div className="text-[9px] font-semibold uppercase tracking-widest mb-2.5" style={{ color: '#a855f7' }}>After</div>
-          <div className="rounded-lg overflow-hidden relative" style={{ border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(124,58,237,0.04)', height: '180px' }}>
-            <FlowDemoCard
-              steps={[
-                { label: 'One click', target: 'cta:deploy', duration: 700 },
-              ]}
-              variant="after"
-            />
-          </div>
-        </div>
-      </div>
-    ),
+    visual: <CompareVisual />,
   },
   {
     tag: 'Export',
     headline: 'Production-ready code, not mockups.',
     body: 'Get React + Tailwind CSS components that drop straight into your codebase. The logic stays untouched — only the presentation layer is upgraded. Ship the fix, not the redesign spec.',
     detail: 'React · Tailwind CSS · TypeScript',
-    visual: (
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
-      >
-        <div
-          className="px-4 py-2.5 border-b flex items-center justify-between"
-          style={{ borderColor: 'rgba(255,255,255,0.05)' }}
-        >
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>Dashboard.tsx</span>
-          <span
-            className="text-[9px] font-medium px-2 py-0.5 rounded"
-            style={{ background: 'rgba(52,211,153,0.08)', color: '#34d399', border: '1px solid rgba(52,211,153,0.15)' }}
-          >
-            Exported
-          </span>
-        </div>
-        <div className="p-5 font-mono text-[10.5px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          <div><span style={{ color: '#c084fc' }}>export default function</span> <span style={{ color: '#67e8f9' }}>Dashboard</span>() {'{'}</div>
-          <div className="pl-4"><span style={{ color: '#c084fc' }}>return</span> (</div>
-          <div className="pl-8">&lt;<span style={{ color: '#86efac' }}>div</span> <span style={{ color: '#fcd34d' }}>className</span>=<span style={{ color: '#f9a8d4' }}>&quot;flex gap-6 p-8&quot;</span>&gt;</div>
-          <div className="pl-12">&lt;<span style={{ color: '#86efac' }}>Sidebar</span> /&gt;</div>
-          <div className="pl-12">&lt;<span style={{ color: '#86efac' }}>MainContent</span> /&gt;</div>
-          <div className="pl-8">&lt;/<span style={{ color: '#86efac' }}>div</span>&gt;</div>
-          <div className="pl-4">)</div>
-          <div>{'}'}</div>
-        </div>
-      </div>
-    ),
+    visual: <ExportVisual />,
   },
 ]
+
+// ─── Visuals ──────────────────────────────────────────────────────────────────
+
+function AnalyzeVisual() {
+  return (
+    <div style={{
+      borderRadius: 16, overflow: 'hidden',
+      border: '0.5px solid rgba(0,0,0,0.08)',
+      background: '#fafafa',
+    }}>
+      <div style={{
+        padding: '10px 16px',
+        borderBottom: '0.5px solid rgba(0,0,0,0.07)',
+        background: '#f5f5f5',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff5f57' }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#febc2e' }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#28c840' }} />
+        </div>
+        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#bbb' }}>reform — scanner</span>
+        <div style={{ width: 40 }} />
+      </div>
+      <div style={{ padding: 20, fontFamily: 'monospace', fontSize: 11, lineHeight: 2 }}>
+        <div><span style={{ color: '#888' }}>$</span> <span style={{ color: '#0a0a0a' }}>reform scan github.com/acme/dashboard</span></div>
+        <div style={{ color: '#aaa' }}>↳ Cloning repository...</div>
+        <div style={{ color: '#aaa' }}>↳ Scanning 47 components...</div>
+        <div style={{ color: '#d97706' }}>⚠ 12 spacing violations</div>
+        <div style={{ color: '#d97706' }}>⚠ 5 inconsistent border-radius values</div>
+        <div style={{ color: '#d97706' }}>⚠ Mixed color system detected</div>
+        <div style={{ color: '#16a34a', paddingTop: 4 }}>✓ Analysis complete — 19 issues found</div>
+      </div>
+    </div>
+  )
+}
+
+function CompareVisual() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      {[
+        {
+          label: 'Before', accent: false,
+          steps: ['Open menu', 'Find settings', 'Scroll to option', 'Confirm'],
+        },
+        {
+          label: 'After', accent: true,
+          steps: ['One click'],
+        },
+      ].map(({ label, accent, steps }) => (
+        <div key={label}>
+          <div style={{
+            fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '0.1em', color: accent ? '#0a0a0a' : '#aaa',
+            marginBottom: 8,
+          }}>
+            {label}
+          </div>
+          <div style={{
+            borderRadius: 12, overflow: 'hidden',
+            border: accent ? '0.5px solid rgba(0,0,0,0.16)' : '0.5px solid rgba(0,0,0,0.07)',
+            background: '#fff', padding: 12,
+          }}>
+            {steps.map((step, i) => (
+              <div key={step} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 9px', borderRadius: 7, marginBottom: 5,
+                background: i === steps.length - 1 ? '#f5f5f5' : '#fff',
+                border: '0.5px solid rgba(0,0,0,0.07)',
+                fontSize: 11, color: '#555',
+              }}>
+                <div style={{
+                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                  background: accent ? '#34c759' : '#ddd',
+                }} />
+                {step}
+                <span style={{ fontSize: 9, color: '#ccc', marginLeft: 'auto' }}>{i + 1}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ExportVisual() {
+  return (
+    <div style={{
+      borderRadius: 16, overflow: 'hidden',
+      border: '0.5px solid rgba(0,0,0,0.08)',
+      background: '#fafafa',
+    }}>
+      <div style={{
+        padding: '10px 16px',
+        borderBottom: '0.5px solid rgba(0,0,0,0.07)',
+        background: '#f5f5f5',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#888' }}>Dashboard.tsx</span>
+        <span style={{
+          fontSize: 9, fontWeight: 500, padding: '3px 8px', borderRadius: 6,
+          background: 'rgba(22,163,74,0.07)', color: '#16a34a',
+          border: '0.5px solid rgba(22,163,74,0.2)',
+        }}>
+          Exported
+        </span>
+      </div>
+      <div style={{ padding: 20, fontFamily: 'monospace', fontSize: 10.5, lineHeight: 1.9, color: '#aaa' }}>
+        <div><span style={{ color: '#7c3aed' }}>export default function</span> <span style={{ color: '#0e7490' }}>Dashboard</span>{'() {'}</div>
+        <div style={{ paddingLeft: 16 }}><span style={{ color: '#7c3aed' }}>return</span> {'('}</div>
+        <div style={{ paddingLeft: 32 }}>{'<'}<span style={{ color: '#15803d' }}>div</span> <span style={{ color: '#b45309' }}>className</span>=<span style={{ color: '#be185d' }}>&quot;flex gap-6 p-8&quot;</span>{'>'}</div>
+        <div style={{ paddingLeft: 48 }}>{'<'}<span style={{ color: '#15803d' }}>Sidebar</span> {'/>'}</div>
+        <div style={{ paddingLeft: 48 }}>{'<'}<span style={{ color: '#15803d' }}>MainContent</span> {'/>'}</div>
+        <div style={{ paddingLeft: 32 }}>{'</'}<span style={{ color: '#15803d' }}>div</span>{'>'}</div>
+        <div style={{ paddingLeft: 16 }}>{')'}</div>
+        <div>{'}'}</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Scroll reveal ─────────────────────────────────────────────────────────────
 
 function ease(t: number) {
   return 1 - Math.pow(1 - t, 3)
 }
 
-function ScrollRevealBlock({
-  children,
-  isLast,
-}: {
-  children: React.ReactNode
-  isLast: boolean
-}) {
+function ScrollRevealBlock({ children, isLast }: { children: React.ReactNode; isLast: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const progressRef = useRef(0)
   const displayRef = useRef(0)
@@ -131,10 +167,8 @@ function ScrollRevealBlock({
       if (!el) return
       const rect = el.getBoundingClientRect()
       const wh = window.innerHeight
-
       const revealRaw = (wh * 0.95 - rect.top) / (wh * 0.45)
       const reveal = Math.max(0, Math.min(1, revealRaw))
-
       let fade = 1
       if (!isLast) {
         const fadeRaw = (rect.bottom - wh * -0.05) / (wh * 0.3)
@@ -143,27 +177,23 @@ function ScrollRevealBlock({
         const fadeRaw = (rect.bottom - wh * -0.3) / (wh * 0.2)
         fade = Math.max(0, Math.min(1, fadeRaw))
       }
-
       progressRef.current = Math.min(reveal, fade)
     }
 
     const animate = () => {
       displayRef.current += (progressRef.current - displayRef.current) * 0.12
       const p = ease(displayRef.current)
-
       const el = ref.current
       if (el) {
         el.style.opacity = `${0.08 + p * 0.92}`
         el.style.transform = `translateY(${(1 - p) * 28}px)`
       }
-
       rafRef.current = requestAnimationFrame(animate)
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
     rafRef.current = requestAnimationFrame(animate)
-
     return () => {
       window.removeEventListener('scroll', onScroll)
       cancelAnimationFrame(rafRef.current)
@@ -176,6 +206,8 @@ function ScrollRevealBlock({
     </div>
   )
 }
+
+// ─── Main export ───────────────────────────────────────────────────────────────
 
 export default function HowItWorks() {
   const headerRef = useRef<HTMLDivElement>(null)
@@ -195,88 +227,95 @@ export default function HowItWorks() {
   return (
     <section
       id="features"
-      className="pt-24 sm:pt-28 pb-28 sm:pb-32"
-      style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+      style={{
+        paddingTop: 96, paddingBottom: 112,
+        borderTop: '0.5px solid rgba(0,0,0,0.07)',
+        background: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Geist", sans-serif',
+      }}
     >
-      <div className="max-w-7xl mx-auto px-6">
+      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 40px' }}>
 
         {/* Section header */}
         <div
           ref={headerRef}
-          className="text-center mb-24"
           style={{
+            textAlign: 'center', marginBottom: 96,
             opacity: headerVisible ? 1 : 0,
             transform: headerVisible ? 'translateY(0)' : 'translateY(20px)',
-            transition: 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1)',
           }}
         >
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-widest mb-6"
-            style={{
-              background: 'rgba(124,58,237,0.08)',
-              border: '1px solid rgba(124,58,237,0.15)',
-              color: '#a855f7',
-            }}
-          >
-            How it works
-          </div>
-          <h2
-            className="font-extrabold mb-4"
-            style={{ fontSize: 'clamp(28px, 4vw, 44px)', color: '#ffffff', letterSpacing: '-0.03em' }}
-          >
+          <h2 style={{
+            fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600,
+            letterSpacing: '-0.03em', color: '#0a0a0a',
+            margin: '0 0 16px', lineHeight: 1.1,
+          }}>
             From broken UI to polished product
             <br />
-            <span style={{ color: 'rgba(255,255,255,0.35)' }}>in three steps.</span>
+            <span style={{ color: 'rgba(10,10,10,0.28)' }}>in three steps.</span>
           </h2>
-          <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.3)', maxWidth: '420px', margin: '0 auto', lineHeight: 1.75 }}>
+          <p style={{
+            fontSize: 15, color: '#888', maxWidth: 400,
+            margin: '0 auto', lineHeight: 1.75,
+          }}>
             No design system required. No Figma handoff.
             Just a GitHub URL and a style choice.
           </p>
         </div>
 
         {/* Alternating sections */}
-        <div className="space-y-32">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 112 }}>
           {SECTIONS.map((section, i) => (
             <ScrollRevealBlock key={i} isLast={i === SECTIONS.length - 1}>
-              <div
-                className={`grid grid-cols-1 md:grid-cols-2 gap-16 items-center ${i % 2 === 1 ? 'md:[&>*:first-child]:order-2' : ''}`}
-              >
-                <div>
-                  <div
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest mb-5"
-                    style={{
-                      background: 'rgba(124,58,237,0.06)',
-                      border: '1px solid rgba(124,58,237,0.12)',
-                      color: '#a855f7',
-                    }}
-                  >
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 64,
+                alignItems: 'center',
+              }}>
+                {/* Text — swap order on odd rows */}
+                <div style={{ order: i % 2 === 1 ? 2 : 1 }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '4px 11px', borderRadius: 100, marginBottom: 18,
+                    fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em',
+                    background: '#f5f5f5', border: '0.5px solid rgba(0,0,0,0.08)', color: '#888',
+                  }}>
                     {section.tag}
                   </div>
-                  <h3
-                    className="font-bold mb-4 leading-snug"
-                    style={{ fontSize: 'clamp(22px, 3vw, 30px)', color: '#ffffff', letterSpacing: '-0.02em' }}
-                  >
+                  <h3 style={{
+                    fontSize: 'clamp(22px, 3vw, 30px)', fontWeight: 600,
+                    letterSpacing: '-0.02em', color: '#0a0a0a',
+                    margin: '0 0 16px', lineHeight: 1.2,
+                  }}>
                     {section.headline}
                   </h3>
-                  <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.38)', lineHeight: 1.8, marginBottom: '20px' }}>
+                  <p style={{
+                    fontSize: 15, color: '#6b6b6b',
+                    lineHeight: 1.8, margin: '0 0 20px',
+                  }}>
                     {section.body}
                   </p>
-                  <div
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-mono"
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      color: 'rgba(255,255,255,0.25)',
-                    }}
-                  >
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '7px 14px', borderRadius: 10,
+                    fontSize: 11, fontFamily: 'monospace', color: '#888',
+                    background: '#f5f5f5', border: '0.5px solid rgba(0,0,0,0.08)',
+                  }}>
                     {section.detail}
                   </div>
                 </div>
-                <div>{section.visual}</div>
+
+                {/* Visual */}
+                <div style={{ order: i % 2 === 1 ? 1 : 2 }}>
+                  {section.visual}
+                </div>
               </div>
             </ScrollRevealBlock>
           ))}
         </div>
+
       </div>
     </section>
   )

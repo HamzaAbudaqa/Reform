@@ -5,32 +5,52 @@ import { BILLING_ENABLED } from '@/lib/billing'
 
 export default function Footer() {
   return (
-    <footer
-      className="border-t"
-      style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(6,8,13,0.76)' }}
-    >
-      <div className="max-w-7xl mx-auto px-6 md:px-8 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+    <footer style={{
+      borderTop: '0.5px solid rgba(0,0,0,0.07)',
+      background: '#ffffff',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Geist", sans-serif',
+    }}>
+      <div style={{
+        maxWidth: 1160, margin: '0 auto',
+        padding: '32px 40px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap' as const, gap: 16,
+      }}>
+
+        {/* Left */}
         <div>
-          <p className="text-sm font-semibold text-white mb-1" style={{ letterSpacing: '-0.02em' }}>Reform</p>
-          <p className="text-xs max-w-xs" style={{ color: 'rgba(255,255,255,0.35)', lineHeight: 1.7 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#0a0a0a', letterSpacing: '-0.03em', margin: '0 0 4px' }}>
+            Reform
+          </p>
+          <p style={{ fontSize: 12, color: '#aaa', lineHeight: 1.7, maxWidth: 280, margin: 0 }}>
             Upgrade visual quality, preserve the logic, and ship cleaner interfaces with less churn.
           </p>
         </div>
-        <div className="flex items-center gap-6">
+
+        {/* Right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           {BILLING_ENABLED && (
-            <Link href="/subscription" className="link-muted text-xs tracking-[0.18em] uppercase">
-              Pricing
-            </Link>
+            <FooterLink href="/subscription">Pricing</FooterLink>
           )}
-          <span className="link-muted text-xs tracking-[0.18em] uppercase cursor-default">
-            Privacy
-          </span>
-          <span className="link-muted text-xs tracking-[0.18em] uppercase cursor-default">
-            Terms
-          </span>
-          <span className="text-xs mono" style={{ color: 'rgba(255,255,255,0.22)' }}>&copy; 2026</span>
+          <FooterLink href="/privacy">Privacy</FooterLink>
+          <FooterLink href="/terms">Terms</FooterLink>
+          <span style={{ fontSize: 12, color: '#ccc' }}>© 2026</span>
         </div>
+
       </div>
     </footer>
+  )
+}
+
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      style={{ fontSize: 12, color: '#aaa', textDecoration: 'none' }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = '#0a0a0a')}
+      onMouseLeave={(e) => (e.currentTarget.style.color = '#aaa')}
+    >
+      {children}
+    </Link>
   )
 }
