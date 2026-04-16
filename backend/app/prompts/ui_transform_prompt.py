@@ -6,6 +6,16 @@ def build_code_generation_prompt(
     refined_ui: dict,
     tailwind_tokens: dict,
 ) -> str:
+    # Structured competitor patterns — extracted up front so the prompt can
+    # call them out as explicit constraints, not buried inside the intelligence blob.
+    competitor_patterns = (intelligence or {}).get("competitor_patterns") or {}
+    competitor_block = ""
+    if any(competitor_patterns.get(k) for k in ("layout_patterns", "cta_hierarchy", "spacing_rhythm", "card_style", "typography_tone")):
+        competitor_block = (
+            "\n## Competitor Constraints (apply 2-4 visibly)\n"
+            + json.dumps(competitor_patterns, indent=2)[:1500]
+        )
+
     return f"""You are a senior React engineer. Generate production-quality React + Tailwind code for a developer tool called RefineUI.
 
 ## Design Intelligence (source of truth)
@@ -16,6 +26,7 @@ def build_code_generation_prompt(
 
 ## Tailwind Token Map (use these classes — no other colors)
 {json.dumps(tailwind_tokens, indent=2)}
+{competitor_block}
 
 ---
 

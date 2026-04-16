@@ -3,18 +3,27 @@
 import { useState } from 'react'
 import type { MultiPageTransformResult } from './TransformTypes'
 
+type Mode = 'stable' | 'explore'
+
 export default function TransformSummaryHeader({
   result,
   commitResult,
   publishResult,
   onRegenerate,
+  mode,
+  transformationNotes,
 }: {
   result: MultiPageTransformResult
   commitResult?: { sha: string; url: string } | null
   publishResult?: { branch_name: string; branch_url: string; files_changed: string[] } | null
-  onRegenerate?: () => void | Promise<void>
+  /** Called with the requested mode. Back-compat: old callers passing no arg default to 'stable'. */
+  onRegenerate?: (mode?: Mode) => void | Promise<void>
+  /** Mode badge source — backend-derived when present. */
+  mode?: Mode | null
+  /** Competitor-inspiration bullets to render under the stats. */
+  transformationNotes?: string[] | null
 }) {
-  const [regenerating, setRegenerating] = useState(false)
+  const [regenerating, setRegenerating] = useState<Mode | null>(null)
   const improved = result.pages.filter(p => p.status === 'transformed')
   const skipped = result.pages.filter(p => p.status === 'high_quality')
   const errors = result.pages.filter(p => p.status === 'error')
@@ -22,13 +31,13 @@ export default function TransformSummaryHeader({
     p => (p.status === 'transformed' || p.status === 'weak') && !!p.error,
   )
 
-  async function handleClick() {
+  async function handleClick(next: Mode) {
     if (!onRegenerate || regenerating) return
-    setRegenerating(true)
+    setRegenerating(next)
     try {
-      await onRegenerate()
+      await onRegenerate(next)
     } finally {
-      setRegenerating(false)
+      setRegenerating(null)
     }
   }
 
@@ -57,39 +66,60 @@ export default function TransformSummaryHeader({
             </span>
           </div>
           <span className="text-[12px] font-mono" style={{ color: 'rgba(255,255,255,0.25)' }}>{result.repo_name}</span>
-          {onRegenerate && (
-            <button
-              onClick={handleClick}
-              disabled={regenerating}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          {mode && (
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
               style={{
-                background: hasPreviewErrors ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${hasPreviewErrors ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                color: hasPreviewErrors ? '#fbbf24' : 'rgba(255,255,255,0.7)',
+                background: mode === 'explore' ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.04)',
+                color: mode === 'explore' ? 'rgba(168,85,247,0.8)' : 'rgba(255,255,255,0.55)',
+                border: mode === 'explore' ? '1px solid rgba(124,58,237,0.25)' : '1px solid rgba(255,255,255,0.08)',
               }}
-              title="Clear cache and re-run the pipeline from scratch"
+              title={mode === 'explore' ? 'Fresh competitor discovery was used' : 'Prior competitor intel was reused'}
             >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={regenerating ? { animation: 'spin 1s linear infinite' } : undefined}
-              >
-                <polyline points="23 4 23 10 17 10" />
-                <polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-              <span className="text-[11px] font-medium">
-                {regenerating ? 'Regenerating…' : hasPreviewErrors ? 'Regenerate (errors detected)' : 'Regenerate'}
-              </span>
-            </button>
+              {mode === 'explore' ? 'Exploration run' : 'Stable run'}
+            </span>
           )}
         </div>
+        {onRegenerate && (
+          <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+            <button
+              onClick={() => handleClick('stable')}
+              disabled={regenerating !== null}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                color: 'white',
+                boxShadow: '0 0 20px rgba(124,58,237,0.2)',
+              }}
+              title="Reuses prior competitor intel — fastest and most consistent"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={regenerating === 'stable' ? { animation: 'spin 1s linear infinite' } : undefined}>
+                <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+              {regenerating === 'stable' ? 'Rerunning…' : 'Run Again (Stable)'}
+            </button>
+            <div className="flex flex-col items-start">
+              <button
+                onClick={() => handleClick('explore')}
+                disabled={regenerating !== null}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: hasPreviewErrors ? 'rgba(245,158,11,0.08)' : 'rgba(168,85,247,0.06)',
+                  border: `1px solid ${hasPreviewErrors ? 'rgba(245,158,11,0.3)' : 'rgba(168,85,247,0.25)'}`,
+                  color: hasPreviewErrors ? '#fbbf24' : 'rgba(168,85,247,0.85)',
+                }}
+                title="Fresh competitor discovery — may produce a different output"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={regenerating === 'explore' ? { animation: 'spin 1s linear infinite' } : undefined}>
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M16 2l-2 4-4 2 4 2 2 4 2-4 4-2-4-2z" />
+                </svg>
+                {regenerating === 'explore' ? 'Exploring…' : 'Explore New Version'}
+              </button>
+              <span className="text-[9px] mt-1 self-center" style={{ color: 'rgba(255,255,255,0.3)' }}>Takes longer, may differ</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Publish banner */}
@@ -161,6 +191,31 @@ export default function TransformSummaryHeader({
           </div>
         ))}
       </div>
+
+      {/* Transformation notes — competitor patterns applied during the run. */}
+      {transformationNotes && transformationNotes.length > 0 && (
+        <div
+          className="rounded-xl px-5 py-4 mt-5"
+          style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.15)' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(168,85,247,0.85)' }}>
+              Competitor Patterns Applied
+            </h3>
+          </div>
+          <ul className="space-y-1.5">
+            {transformationNotes.map((note, i) => (
+              <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                <span className="mt-[7px] w-1 h-1 rounded-full flex-shrink-0" style={{ background: 'rgba(168,85,247,0.6)' }} />
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

@@ -17,6 +17,7 @@ from app.schemas.pipeline_v2 import (
     PageIssue,
     ScoreBreakdown,
 )
+from app.services.model_params import get_profile, STABLE
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ async def evaluate_page(
     page_code: str,
     dependency_code: str,
     design_intelligence: dict | None = None,
+    profile: str = STABLE,
 ) -> PageEvaluation:
     """Evaluate a single page's UI quality using Claude."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -147,12 +149,14 @@ async def evaluate_page(
 
     logger.info("Evaluating page: %s (%d chars)", page_path, len(page_code))
 
+    params = get_profile(profile)
+
     # Run synchronous Claude call in executor to avoid blocking
     loop = asyncio.get_event_loop()
     message = await loop.run_in_executor(
         None,
         lambda: client.messages.create(
-            model="claude-sonnet-4-6",
+            **params,
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         ),
@@ -181,6 +185,7 @@ async def evaluate_all_pages(
     files: list[dict],
     dependency_map: dict[str, list[dict]],
     design_intelligence: dict | None = None,
+    profile: str = STABLE,
 ) -> list[PageEvaluation]:
     """Evaluate all discovered pages concurrently with a semaphore."""
     if not pages:
@@ -203,6 +208,7 @@ async def evaluate_all_pages(
                     page_code=page_code,
                     dependency_code=dep_context,
                     design_intelligence=design_intelligence,
+                    profile=profile,
                 )
             except Exception as e:
                 logger.error("Evaluation failed for %s: %s", page.path, e)

@@ -318,7 +318,18 @@ Return ONLY valid JSON (no markdown, no explanation, no text outside the JSON) m
       "action": "concrete_actionable_instruction"
     }}
   ],
-  "avoid": ["anti_pattern_identifier"]
+  "avoid": ["anti_pattern_identifier"],
+  "competitor_patterns": {{
+    "layout_patterns": [
+      "short concrete layout pattern — e.g. '3-column feature grid with bordered cards'",
+      "e.g. 'hero + proof row + feature triptych'"
+    ],
+    "cta_hierarchy": "one sentence describing primary/secondary/tertiary CTA treatment (colors, size contrast, grouping) observed across sites",
+    "spacing_rhythm": "one sentence describing dominant vertical rhythm (e.g. 'generous 96-128px section padding with 48px intra-section gaps')",
+    "card_style": "one sentence describing card treatment (e.g. 'flat, 1px border rgba(255,255,255,0.08), 12px radius, no shadow')",
+    "typography_tone": "one sentence describing type voice (e.g. 'tight tracking, large display (56-72px), small-caps eyebrows, body 14-16px')",
+    "source_competitors": ["https://competitor1.com", "https://competitor2.com"]
+  }}
 }}
 
 RULES:
@@ -339,4 +350,5 @@ RULES:
 - common_problems: 2-4 friction points seen in multiple sites (or ["none_significant"] if sites are all strong)
 - cta_insights: synthesize CTA patterns across sites — dominant location, prominence, common labels
 - strongest_flows: 2-4 user flows that appear across multiple sites with clarity/friction ratings
+- competitor_patterns: extract the 3-6 STRONGEST cross-site patterns as concrete, structural constraints the transform pipeline can apply. Each field must be a short, concrete string — not vague advice. `source_competitors` lists the URLs these patterns were derived from.
 - Return ONLY the JSON object"""

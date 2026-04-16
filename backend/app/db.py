@@ -68,14 +68,39 @@ async def create_tables():
     if not engine:
         return
     from sqlalchemy import text
+    _log = logging.getLogger(__name__)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Lightweight in-place migrations for columns added after initial deploy.
         # `create_all` never alters existing tables, so add columns idempotently.
-        await conn.execute(text(
-            "ALTER TABLE transform_runs ADD COLUMN IF NOT EXISTS source_commit_sha VARCHAR"
-        ))
+        # Postgres supports ADD COLUMN IF NOT EXISTS since 9.6, so these are
+        # safe to run on every startup.
+        _migrations = [
+            # Pre-existing column (kept so fresh DBs stay consistent with old ones).
+            ("source_commit_sha", "VARCHAR"),
+            # Problem 1 / 4 — run metadata for deterministic mode + progress.
+            ("mode", "VARCHAR"),
+            ("current_stage", "VARCHAR"),
+            ("progress_percent", "INTEGER"),
+            ("design_intelligence_snapshot", "JSONB"),
+            ("transform_plan_snapshot", "JSONB"),
+            ("model_params", "JSONB"),
+            ("transformation_notes", "JSONB"),
+            ("error_message", "TEXT"),
+            ("updated_at", "TIMESTAMPTZ"),
+        ]
+        for col_name, col_type in _migrations:
+            await conn.execute(text(
+                f"ALTER TABLE transform_runs ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+            ))
+            _log.info("Ensured column transform_runs.%s (%s)", col_name, col_type)
+
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_transform_runs_source_commit_sha "
             "ON transform_runs (source_commit_sha)"
+        ))
+        # Active-run lookup filters on status + updated_at. Keep it cheap.
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_transform_runs_status_updated "
+            "ON transform_runs (status, updated_at DESC)"
         ))

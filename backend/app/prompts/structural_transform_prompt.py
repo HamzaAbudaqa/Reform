@@ -165,6 +165,41 @@ def build_structural_transform_prompt(
             )
         di_text = "\n\n".join(di_parts)
 
+    # Structured competitor constraints — these are HARD requirements, not
+    # vague "inspiration". The rebuild must visibly apply the strongest
+    # 2-4 patterns and name them in `transformation_notes`.
+    cp = di.get("competitor_patterns") or {}
+    competitor_block = ""
+    if cp and any(cp.get(k) for k in ("layout_patterns", "cta_hierarchy", "spacing_rhythm", "card_style", "typography_tone")):
+        lines = []
+        if cp.get("layout_patterns"):
+            pats = cp["layout_patterns"] if isinstance(cp["layout_patterns"], list) else [cp["layout_patterns"]]
+            lines.append("LAYOUT PATTERNS (pick the 1-2 most applicable and make them visible):")
+            for p in pats[:4]:
+                lines.append(f"  - {p}")
+        if cp.get("cta_hierarchy"):
+            lines.append(f"CTA HIERARCHY: {cp['cta_hierarchy']}")
+        if cp.get("spacing_rhythm"):
+            lines.append(f"SPACING RHYTHM: {cp['spacing_rhythm']}")
+        if cp.get("card_style"):
+            lines.append(f"CARD STYLE: {cp['card_style']}")
+        if cp.get("typography_tone"):
+            lines.append(f"TYPOGRAPHY TONE: {cp['typography_tone']}")
+        sources = cp.get("source_competitors") or []
+        if sources:
+            lines.append(
+                "SOURCE COMPETITORS (reference these by domain in transformation_notes): "
+                + ", ".join(sources[:6])
+            )
+        competitor_block = (
+            "## COMPETITOR CONSTRAINTS — apply 2-4 of these visibly in the rebuild\n"
+            "These are concrete structural patterns extracted from competitor sites. "
+            "They are not 'inspiration' — the rebuilt page must visibly adopt them. "
+            "You MUST reference at least 2 of these in the `transformation_notes` field of your output, "
+            "naming the competitor by domain where possible.\n\n"
+            + "\n".join(lines)
+        )
+
     intent_line = f"\nUSER INTENT: {user_intent}" if user_intent else ""
 
     ux_findings_text = ""
@@ -230,6 +265,8 @@ File: {target_path}
 
 {f"## DESIGN INTELLIGENCE{chr(10)}{di_text}" if di_text else ""}
 
+{competitor_block}
+
 ## REBUILD CHECKLIST
 
 Layout
@@ -282,5 +319,12 @@ Return ONLY this JSON, no markdown fences:
       "ux_impact": "why it's better for the user"
     }}
   ],
-  "change_summary": ["visible improvement in plain English"]
+  "change_summary": ["visible improvement in plain English"],
+  "transformation_notes": [
+    "1-4 specific, structural bullets — each naming which competitor pattern was applied and how.",
+    "Reference the competitor by URL domain when possible (e.g., 'Applied vercel.com-style section rhythm: 96px vertical gap between sections').",
+    "Describe a concrete structural move, not a feeling. Avoid cheesy / over-literal phrasing.",
+    "Good: 'Adopted github.com primary/secondary CTA pairing — solid indigo primary, ghost secondary at same size.'",
+    "Bad: 'Made it look cooler like Vercel.'"
+  ]
 }}"""

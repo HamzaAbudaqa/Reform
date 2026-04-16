@@ -9,8 +9,10 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 
 import anthropic
+from sqlalchemy import select
 
 from app.services.anthropic_errors import is_anthropic_exception, log_and_classify
 from app.services.code_ingestion import ingest_github_repo
@@ -22,6 +24,7 @@ from app.services.syntax_validator import validate_transformed_code
 from app.services.js_parser_validator import validate_jsx_parseable
 from app.services.multi_page_renderer import render_multi_page_previews
 from app.services.s3_client import upload_screenshot_and_presign
+from app.services.model_params import get_profile, describe_profile, STABLE
 from app.prompts.structural_transform_prompt import (
     build_structural_transform_prompt,
     build_transform_system_prompt,
@@ -118,18 +121,20 @@ async def _transform_single_page(
     user_intent: str,
     api_key: str,
     ux_lab_findings: list[dict] | None = None,
+    profile: str = STABLE,
 ) -> dict:
     """
     Transform a single page with validation and retry logic.
 
     Returns dict with: updated_code, diff_summary, change_annotations,
-    change_summary, retries_used, error.
+    change_summary, transformation_notes, retries_used, error.
     """
     import asyncio
 
     supporting_text = _build_supporting_context(page_path, files, dependency_map)
     client = anthropic.Anthropic(api_key=api_key)
     system_prompt = build_transform_system_prompt()
+    model_params = get_profile(profile)
 
     last_error = ""
     retries_used = 0
@@ -169,7 +174,7 @@ async def _transform_single_page(
         message = await loop.run_in_executor(
             None,
             lambda: client.messages.create(
-                model="claude-sonnet-4-6",
+                **model_params,
                 max_tokens=16384,
                 system=system_prompt,
                 messages=[{"role": "user", "content": prompt}],
@@ -244,6 +249,7 @@ async def _transform_single_page(
                 "diff_summary": result.get("diff_summary", "UI layout and structure improved."),
                 "change_annotations": result.get("change_annotations", []),
                 "change_summary": result.get("change_summary", []),
+                "transformation_notes": result.get("transformation_notes", []),
                 "validation": validation,
             }
 
@@ -254,6 +260,7 @@ async def _transform_single_page(
                 "diff_summary": result.get("diff_summary", "UI layout and structure improved."),
                 "change_annotations": result.get("change_annotations", []),
                 "change_summary": result.get("change_summary", []),
+                "transformation_notes": result.get("transformation_notes", []),
                 "retries_used": retries_used,
                 "error": "",
             }
@@ -285,6 +292,7 @@ async def _transform_single_page(
             "diff_summary": best_attempt["diff_summary"],
             "change_annotations": best_attempt["change_annotations"],
             "change_summary": best_attempt["change_summary"],
+            "transformation_notes": best_attempt.get("transformation_notes", []),
             "retries_used": MAX_TRANSFORM_RETRIES,
             "error": (
                 f"Transformation engine could not produce a dramatically different "
@@ -299,9 +307,161 @@ async def _transform_single_page(
         "diff_summary": "",
         "change_annotations": [],
         "change_summary": [],
+        "transformation_notes": [],
         "retries_used": retries_used,
         "error": last_error or "All transform attempts returned empty code.",
     }
+
+
+async def _create_run_row(
+    project_id: str | None,
+    commit_sha: str | None,
+    mode: str,
+    model_params_desc: dict,
+) -> str | None:
+    """Persist a TransformRun row with status='in_progress'.
+
+    Returns the run id (as str) or None if no DB is configured / no project_id.
+    Any failure to write is logged but non-fatal — the pipeline still runs.
+    """
+    if not project_id:
+        return None
+    from app.db import async_session
+    if not async_session:
+        return None
+    from app.models import TransformRun
+    try:
+        async with async_session() as db:
+            run = TransformRun(
+                project_id=project_id,
+                status="in_progress",
+                mode=mode,
+                source_commit_sha=commit_sha,
+                current_stage="starting",
+                progress_percent=0,
+                model_params=model_params_desc,
+                transformation_notes=[],
+            )
+            db.add(run)
+            await db.flush()
+            run_id = str(run.id)
+            await db.commit()
+            logger.info("Pipeline v2: created TransformRun %s (mode=%s)", run_id, mode)
+            return run_id
+    except Exception as e:
+        logger.warning("Failed to create TransformRun row: %s", e)
+        return None
+
+
+async def _update_run_progress(
+    run_id: str | None,
+    stage: str,
+    percent: int,
+) -> None:
+    """Update current_stage / progress_percent on the run row. Non-fatal on errors."""
+    if not run_id:
+        return
+    from app.db import async_session
+    if not async_session:
+        return
+    from app.models import TransformRun
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(TransformRun).where(TransformRun.id == run_id))
+            run = result.scalar_one_or_none()
+            if not run:
+                return
+            run.current_stage = stage
+            run.progress_percent = percent
+            run.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+    except Exception as e:
+        logger.debug("Failed to update run progress (%s @ %d): %s", stage, percent, e)
+
+
+async def _finalize_run(
+    run_id: str | None,
+    status: str,
+    error_message: str | None = None,
+    transformation_notes: list[str] | None = None,
+    design_intelligence_snapshot: dict | None = None,
+    transform_plan_snapshot: dict | None = None,
+    totals: dict | None = None,
+) -> None:
+    """Mark the run completed/failed and persist the final snapshots."""
+    if not run_id:
+        return
+    from app.db import async_session
+    if not async_session:
+        return
+    from app.models import TransformRun
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(TransformRun).where(TransformRun.id == run_id))
+            run = result.scalar_one_or_none()
+            if not run:
+                return
+            run.status = status
+            run.current_stage = "done" if status == "completed" else "failed"
+            run.progress_percent = 100 if status == "completed" else (run.progress_percent or 0)
+            run.updated_at = datetime.now(timezone.utc)
+            run.completed_at = datetime.now(timezone.utc)
+            if error_message is not None:
+                run.error_message = error_message
+            if transformation_notes is not None:
+                run.transformation_notes = transformation_notes
+            if design_intelligence_snapshot is not None:
+                run.design_intelligence_snapshot = design_intelligence_snapshot
+            if transform_plan_snapshot is not None:
+                run.transform_plan_snapshot = transform_plan_snapshot
+            if totals:
+                if "total_pages_found" in totals:
+                    run.total_pages_found = totals["total_pages_found"]
+                if "total_transformed" in totals:
+                    run.total_transformed = totals["total_transformed"]
+                if "total_skipped" in totals:
+                    run.total_skipped = totals["total_skipped"]
+                if "global_summary" in totals:
+                    run.global_summary = totals["global_summary"]
+                if "pipeline_errors" in totals:
+                    run.pipeline_errors = totals["pipeline_errors"]
+            await db.commit()
+    except Exception as e:
+        logger.warning("Failed to finalize run %s: %s", run_id, e)
+
+
+async def _load_cached_snapshots(
+    project_id: str,
+    commit_sha: str,
+) -> tuple[dict | None, dict | None]:
+    """Return (design_intelligence_snapshot, transform_plan_snapshot) from the
+    most recent completed run for this project+commit, or (None, None)."""
+    if not project_id or not commit_sha:
+        return None, None
+    from app.db import async_session
+    if not async_session:
+        return None, None
+    from app.models import TransformRun
+    try:
+        async with async_session() as db:
+            # Accept both "complete" (legacy) and "completed" (new) for safety.
+            q = (
+                select(TransformRun)
+                .where(
+                    TransformRun.project_id == project_id,
+                    TransformRun.source_commit_sha == commit_sha,
+                    TransformRun.status.in_(["complete", "completed"]),
+                )
+                .order_by(TransformRun.created_at.desc())
+            )
+            result = await db.execute(q)
+            run = result.scalars().first()
+            if not run:
+                return None, None
+            return run.design_intelligence_snapshot, run.transform_plan_snapshot
+    except Exception as e:
+        logger.debug("Failed to load cached snapshots for %s@%s: %s", project_id, commit_sha, e)
+        return None, None
 
 
 async def run_pipeline_v2(
@@ -313,6 +473,9 @@ async def run_pipeline_v2(
     quality_threshold: int = 95,
     max_pages: int = 5,
     ux_lab_findings: list[dict] | None = None,
+    mode: str = STABLE,
+    project_id: str | None = None,
+    commit_sha: str | None = None,
 ) -> dict:
     """
     Full multi-page transformation pipeline.
@@ -332,8 +495,40 @@ async def run_pipeline_v2(
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY not configured")
 
+    # Normalize + describe the params profile up front — used for both the
+    # Claude calls and the `model_params` column on the run row.
+    mode = (mode or STABLE).lower()
+    if mode not in ("stable", "explore"):
+        mode = STABLE
+    params_desc = describe_profile(mode)
+
+    # Persist the run row as soon as we commit to running. Frontend polls
+    # `/active-run` to recover state if the SSE stream drops.
+    run_id = await _create_run_row(project_id, commit_sha, mode, params_desc)
+
     pipeline_errors: list[str] = []
     di = design_intelligence or {}
+
+    # Stable reuse: if a prior completed run for this commit has snapshots,
+    # skip re-analysis and reuse them. Explore mode always does a fresh pass.
+    reused_plan_snapshot: dict | None = None
+    if mode == STABLE and project_id and commit_sha:
+        cached_di, cached_plan = await _load_cached_snapshots(project_id, commit_sha)
+        if cached_di:
+            logger.info(
+                "Pipeline v2: reusing cached design_intelligence_snapshot "
+                "from prior stable run on %s", commit_sha,
+            )
+            # Cached DI wins over whatever the caller passed in — the cached
+            # one is what produced the prior accepted result and we want
+            # byte-stable replay.
+            di = cached_di
+        if cached_plan:
+            reused_plan_snapshot = cached_plan
+            logger.info(
+                "Pipeline v2: reusing cached transform_plan_snapshot "
+                "from prior stable run on %s", commit_sha,
+            )
 
     # Stable per-run prefix used as the S3 key root for this run's
     # screenshots. Generated up front so the orchestrator can upload
@@ -342,293 +537,386 @@ async def run_pipeline_v2(
     # in browser sessionStorage and database rows.
     pipeline_run_id = str(uuid.uuid4())
 
-    # ── Step 1: Ingest ──────────────────────────────────────────────
-    logger.info("Pipeline v2: Ingesting %s (branch: %s)", github_url, branch)
-    repo_data = await ingest_github_repo(github_url, branch, access_token)
-    files = repo_data["files"]
-    file_tree = repo_data["file_tree"]
-    repo_name = repo_data["repo_name"]
+    try:
+        # ── Step 1: Ingest ──────────────────────────────────────────────
+        await _update_run_progress(run_id, "ingesting", 5)
+        logger.info("Pipeline v2: Ingesting %s (branch: %s)", github_url, branch)
+        repo_data = await ingest_github_repo(github_url, branch, access_token)
+        files = repo_data["files"]
+        file_tree = repo_data["file_tree"]
+        repo_name = repo_data["repo_name"]
 
-    if not files:
-        raise ValueError("No frontend files found in repository.")
+        if not files:
+            raise ValueError("No frontend files found in repository.")
 
-    # ── Step 2: Discover pages ──────────────────────────────────────
-    logger.info("Pipeline v2: Discovering pages")
-    pages, framework, dependency_map = discover_pages(files, file_tree)
+        # ── Step 2: Discover pages ──────────────────────────────────────
+        await _update_run_progress(run_id, "discovering_pages", 15)
+        logger.info("Pipeline v2: Discovering pages")
+        pages, framework, dependency_map = discover_pages(files, file_tree)
 
-    if not pages:
-        raise ValueError(
-            "No pages detected. This repo may not use a traditional pages "
-            "structure. Falling back to single-page analysis."
-        )
-
-    logger.info("Pipeline v2: Found %d pages (%s)", len(pages), framework)
-
-    # ── Step 3: Evaluate all pages ──────────────────────────────────
-    logger.info("Pipeline v2: Evaluating %d pages", len(pages))
-    evaluations = await evaluate_all_pages(pages, files, dependency_map, di)
-
-    for ev in evaluations:
-        logger.info(
-            "  %s: score=%d verdict=%s", ev.page_path, ev.score, ev.verdict,
-        )
-
-    # ── Step 4: Plan transformations ────────────────────────────────
-    to_transform, high_quality, overflow = plan_transformations(
-        evaluations, threshold=quality_threshold, max_pages=max_pages,
-    )
-
-    logger.info(
-        "Pipeline v2: %d pages to transform, %d high-quality, %d overflow",
-        len(to_transform), len(high_quality), len(overflow),
-    )
-
-    # ── Step 5: Transform selected pages (in parallel) ──────────────
-    content_lookup = {f["path"]: f["content"] for f in files}
-    transform_results: dict[str, dict] = {}
-
-    async def _run_one(ev) -> tuple[str, dict]:
-        page_code = content_lookup.get(ev.page_path, "")
-        if not page_code:
-            return ev.page_path, {
-                "updated_code": "", "diff_summary": "", "change_annotations": [],
-                "change_summary": [], "retries_used": 0,
-                "error": f"No content found for {ev.page_path}",
-            }
-        eval_dict = {
-            "score": ev.score,
-            "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
-            "issues": [i.model_dump() for i in ev.issues],
-            "reasoning": ev.reasoning,
-        }
-        try:
-            result = await _transform_single_page(
-                page_path=ev.page_path,
-                page_code=page_code,
-                evaluation=eval_dict,
-                files=files,
-                dependency_map=dependency_map,
-                design_intelligence=di,
-                user_intent=user_intent,
-                api_key=api_key,
-                ux_lab_findings=ux_lab_findings,
+        if not pages:
+            raise ValueError(
+                "No pages detected. This repo may not use a traditional pages "
+                "structure. Falling back to single-page analysis."
             )
-            return ev.page_path, result
-        except Exception as e:
-            if is_anthropic_exception(e):
-                info = log_and_classify(e)
+
+        logger.info("Pipeline v2: Found %d pages (%s)", len(pages), framework)
+
+        # ── Step 3: Evaluate all pages ──────────────────────────────────
+        await _update_run_progress(run_id, "evaluating", 25)
+        logger.info("Pipeline v2: Evaluating %d pages", len(pages))
+        evaluations = await evaluate_all_pages(
+            pages, files, dependency_map, di, profile=mode,
+        )
+
+        for ev in evaluations:
+            logger.info(
+                "  %s: score=%d verdict=%s", ev.page_path, ev.score, ev.verdict,
+            )
+
+        # ── Step 4: Plan transformations ────────────────────────────────
+        await _update_run_progress(run_id, "planning", 40)
+
+        # On a stable re-run with a cached plan, replay the same targets so
+        # the model receives the same evaluation inputs it did before —
+        # this is the piece that actually makes "stable" reproducible.
+        if reused_plan_snapshot and isinstance(reused_plan_snapshot, dict):
+            cached_paths = set(reused_plan_snapshot.get("to_transform_paths") or [])
+            if cached_paths:
+                ev_by_path = {ev.page_path: ev for ev in evaluations}
+                to_transform = [ev_by_path[p] for p in cached_paths if p in ev_by_path]
+                high_quality = [
+                    ev for ev in evaluations
+                    if ev.page_path not in cached_paths and ev.score >= quality_threshold
+                ]
+                overflow = [
+                    ev for ev in evaluations
+                    if ev.page_path not in cached_paths and ev.score < quality_threshold
+                ]
+                logger.info(
+                    "Pipeline v2: replayed cached plan — %d pages to transform",
+                    len(to_transform),
+                )
+            else:
+                to_transform, high_quality, overflow = plan_transformations(
+                    evaluations, threshold=quality_threshold, max_pages=max_pages,
+                )
+        else:
+            to_transform, high_quality, overflow = plan_transformations(
+                evaluations, threshold=quality_threshold, max_pages=max_pages,
+            )
+
+        logger.info(
+            "Pipeline v2: %d pages to transform, %d high-quality, %d overflow",
+            len(to_transform), len(high_quality), len(overflow),
+        )
+
+        plan_snapshot = {
+            "to_transform_paths": [ev.page_path for ev in to_transform],
+            "high_quality_paths": [ev.page_path for ev in high_quality],
+            "overflow_paths": [ev.page_path for ev in overflow],
+            "quality_threshold": quality_threshold,
+            "max_pages": max_pages,
+        }
+
+        # ── Step 5: Transform selected pages (in parallel) ──────────────
+        await _update_run_progress(run_id, "transforming", 50)
+        content_lookup = {f["path"]: f["content"] for f in files}
+        transform_results: dict[str, dict] = {}
+
+        async def _run_one(ev) -> tuple[str, dict]:
+            page_code = content_lookup.get(ev.page_path, "")
+            if not page_code:
                 return ev.page_path, {
                     "updated_code": "", "diff_summary": "", "change_annotations": [],
-                    "change_summary": [], "retries_used": 0,
-                    "error": info.user_message,
-                    "error_kind": info.kind,
+                    "change_summary": [], "transformation_notes": [], "retries_used": 0,
+                    "error": f"No content found for {ev.page_path}",
                 }
-            logger.error("Transform failed for %s: %s", ev.page_path, e, exc_info=True)
-            return ev.page_path, {
-                "updated_code": "", "diff_summary": "", "change_annotations": [],
-                "change_summary": [], "retries_used": 0, "error": str(e),
+            eval_dict = {
+                "score": ev.score,
+                "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
+                "issues": [i.model_dump() for i in ev.issues],
+                "reasoning": ev.reasoning,
             }
+            try:
+                result = await _transform_single_page(
+                    page_path=ev.page_path,
+                    page_code=page_code,
+                    evaluation=eval_dict,
+                    files=files,
+                    dependency_map=dependency_map,
+                    design_intelligence=di,
+                    user_intent=user_intent,
+                    api_key=api_key,
+                    ux_lab_findings=ux_lab_findings,
+                    profile=mode,
+                )
+                return ev.page_path, result
+            except Exception as e:
+                if is_anthropic_exception(e):
+                    info = log_and_classify(e)
+                    return ev.page_path, {
+                        "updated_code": "", "diff_summary": "", "change_annotations": [],
+                        "change_summary": [], "transformation_notes": [], "retries_used": 0,
+                        "error": info.user_message,
+                        "error_kind": info.kind,
+                    }
+                logger.error("Transform failed for %s: %s", ev.page_path, e, exc_info=True)
+                return ev.page_path, {
+                    "updated_code": "", "diff_summary": "", "change_annotations": [],
+                    "change_summary": [], "transformation_notes": [],
+                    "retries_used": 0, "error": str(e),
+                }
 
-    logger.info("Pipeline v2: Transforming %d pages in parallel", len(to_transform))
-    results = await asyncio.gather(*[_run_one(ev) for ev in to_transform])
-    for path, result in results:
-        transform_results[path] = result
-        if result.get("error") and not result.get("updated_code"):
-            pipeline_errors.append(f"Transform failed for {path}: {result['error']}")
+        logger.info("Pipeline v2: Transforming %d pages in parallel", len(to_transform))
+        results = await asyncio.gather(*[_run_one(ev) for ev in to_transform])
+        for path, result in results:
+            transform_results[path] = result
+            if result.get("error") and not result.get("updated_code"):
+                pipeline_errors.append(f"Transform failed for {path}: {result['error']}")
 
-    # ── Step 6: Render screenshots ──────────────────────────────────
-    # Build list of successful transforms for screenshotting
-    screenshot_transforms = []
-    eval_lookup = {ev.page_path: ev for ev in to_transform}
-    page_lookup = {p.path: p for p in pages}
+        await _update_run_progress(run_id, "rendering", 75)
 
-    for page_path, result in transform_results.items():
-        if result["updated_code"]:
-            page = page_lookup.get(page_path)
-            screenshot_transforms.append({
-                "path": page_path,
+        # ── Step 6: Render screenshots ──────────────────────────────────
+        # Build list of successful transforms for screenshotting
+        screenshot_transforms = []
+        eval_lookup = {ev.page_path: ev for ev in to_transform}
+        page_lookup = {p.path: p for p in pages}
+
+        for page_path, result in transform_results.items():
+            if result["updated_code"]:
+                page = page_lookup.get(page_path)
+                screenshot_transforms.append({
+                    "path": page_path,
+                    "route": page.route if page else "/",
+                    "updated_code": result["updated_code"],
+                })
+
+        screenshot_results: dict[str, dict] = {}
+        if screenshot_transforms:
+            repo_clone_url = f"https://github.com/{repo_name}.git"
+            try:
+                logger.info(
+                    "Pipeline v2: Rendering screenshots for %d pages",
+                    len(screenshot_transforms),
+                )
+                screenshot_results = await render_multi_page_previews(
+                    repo_clone_url=repo_clone_url,
+                    branch=branch,
+                    transforms=screenshot_transforms,
+                    access_token=access_token or "",
+                    max_screenshots=len(screenshot_transforms),
+                )
+            except Exception as e:
+                logger.error("Screenshot rendering failed: %s", e, exc_info=True)
+                pipeline_errors.append(f"Screenshot rendering failed: {e}")
+
+        # Log screenshot results for debugging
+        for path, sdata in screenshot_results.items():
+            has_before = bool(sdata.get("before_screenshot"))
+            has_after = bool(sdata.get("after_screenshot"))
+            perr = sdata.get("preview_error", "")
+            logger.info("Screenshots for %s: before=%s after=%s error=%s", path, has_before, has_after, perr or "none")
+
+        # ── Step 6.5: Upload screenshots to S3 ─────────────────────────
+        await _update_run_progress(run_id, "uploading", 90)
+        # Replace the inline base64 blobs with presigned URLs so the
+        # response payload stays small (a 5-page run with screenshots
+        # was ~6-12 MB of base64; this drops it to a few KB of URLs).
+        # We mutate screenshot_results in place so the existing
+        # aggregation loop below picks up the URLs and keys without
+        # any further changes.
+        for path, sdata in screenshot_results.items():
+            before_b64 = sdata.get("before_screenshot", "")
+            after_b64 = sdata.get("after_screenshot", "")
+            before_key, before_url = await asyncio.to_thread(
+                upload_screenshot_and_presign, pipeline_run_id, path, "before", before_b64,
+            )
+            after_key, after_url = await asyncio.to_thread(
+                upload_screenshot_and_presign, pipeline_run_id, path, "after", after_b64,
+            )
+            # Overwrite the base64 fields with the presigned URL. The frontend
+            # auto-detects URL vs base64, so existing rendering paths keep
+            # working. The *_key fields are passed through to /projects/save-run
+            # so the database persists the S3 key directly without re-uploading.
+            sdata["before_screenshot"] = before_url
+            sdata["after_screenshot"] = after_url
+            sdata["before_screenshot_key"] = before_key
+            sdata["after_screenshot_key"] = after_key
+
+        # ── Step 7: Aggregate results ───────────────────────────────────
+        page_results = []
+
+        # Collect transformation_notes across all transformed pages. Dedupe
+        # while preserving first-seen order — the model often repeats the
+        # same pattern name across pages, and the UI wants one clean list.
+        aggregated_notes: list[str] = []
+        seen_notes: set[str] = set()
+
+        # Add transformed pages
+        for ev in to_transform:
+            result = transform_results.get(ev.page_path, {})
+            screenshots = screenshot_results.get(ev.page_path, {})
+            page = page_lookup.get(ev.page_path)
+
+            has_code = bool(result.get("updated_code"))
+            is_weak = result.get("weak_transformation", False)
+
+            if has_code and is_weak:
+                # Weak transformation: still has code, but the engine warns the
+                # change isn't dramatic. Show it to the user with a banner — never
+                # silently demote to "high_quality".
+                status = "weak"
+            elif has_code:
+                status = "transformed"
+            else:
+                status = "error"
+
+            # Only pull notes from pages that actually produced code.
+            if has_code:
+                for note in result.get("transformation_notes", []) or []:
+                    if not isinstance(note, str):
+                        continue
+                    key = note.strip()
+                    if key and key not in seen_notes:
+                        seen_notes.add(key)
+                        aggregated_notes.append(key)
+
+            page_results.append({
+                "page_path": ev.page_path,
+                "page_name": ev.page_name,
                 "route": page.route if page else "/",
-                "updated_code": result["updated_code"],
+                "status": status,
+                "score": ev.score,
+                "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
+                "reasoning": ev.reasoning,
+                "issues": [i.model_dump() for i in ev.issues],
+                "original_code": content_lookup.get(ev.page_path, ""),
+                "updated_code": result.get("updated_code", ""),
+                "diff_summary": result.get("diff_summary", ""),
+                "change_annotations": result.get("change_annotations", []),
+                "change_summary": result.get("change_summary", []),
+                "transformation_notes": result.get("transformation_notes", []),
+                "before_screenshot": screenshots.get("before_screenshot", ""),
+                "after_screenshot": screenshots.get("after_screenshot", ""),
+                "before_screenshot_key": screenshots.get("before_screenshot_key", ""),
+                "after_screenshot_key": screenshots.get("after_screenshot_key", ""),
+                "error": result.get("error", "") or screenshots.get("preview_error", ""),
+                "retries_used": result.get("retries_used", 0),
             })
 
-    screenshot_results: dict[str, dict] = {}
-    if screenshot_transforms:
-        repo_clone_url = f"https://github.com/{repo_name}.git"
-        try:
-            logger.info(
-                "Pipeline v2: Rendering screenshots for %d pages",
-                len(screenshot_transforms),
+        # Add high-quality (genuinely good) pages
+        for ev in high_quality:
+            page = page_lookup.get(ev.page_path)
+            page_results.append({
+                "page_path": ev.page_path,
+                "page_name": ev.page_name,
+                "route": page.route if page else "/",
+                "status": "high_quality",
+                "score": ev.score,
+                "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
+                "reasoning": ev.reasoning,
+                "issues": [i.model_dump() for i in ev.issues],
+                "diff_summary": f"Page scored {ev.score}/100 — no transformation needed.",
+            })
+
+        # Add overflow pages — below threshold but skipped due to max_pages cap
+        for ev in overflow:
+            page = page_lookup.get(ev.page_path)
+            page_results.append({
+                "page_path": ev.page_path,
+                "page_name": ev.page_name,
+                "route": page.route if page else "/",
+                "status": "skipped_overflow",
+                "score": ev.score,
+                "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
+                "reasoning": ev.reasoning,
+                "issues": [i.model_dump() for i in ev.issues],
+                "diff_summary": (
+                    f"Page scored {ev.score}/100 — needs work but skipped because "
+                    f"the per-run page cap was reached. Re-run to process it."
+                ),
+            })
+
+        # Sort results: transformed first, then weak, then errors, then high-quality, then overflow
+        def _sort_key(p):
+            bucket = {
+                "transformed": 0,
+                "weak": 0,
+                "error": 0,
+                "high_quality": 1,
+                "skipped_overflow": 2,
+            }.get(p["status"], 3)
+            return (bucket, p["score"])
+        page_results.sort(key=_sort_key)
+
+        # Build global summary
+        total_transformed = sum(1 for p in page_results if p["status"] == "transformed")
+        total_weak = sum(1 for p in page_results if p["status"] == "weak")
+        total_skipped = sum(1 for p in page_results if p["status"] == "high_quality")
+        total_overflow = sum(1 for p in page_results if p["status"] == "skipped_overflow")
+        total_errors = sum(1 for p in page_results if p["status"] == "error")
+
+        global_summary = [
+            f"Evaluated {len(evaluations)} pages across the repository.",
+            f"Transformed {total_transformed} page(s), "
+            f"skipped {total_skipped} high-quality page(s).",
+        ]
+
+        if total_weak:
+            global_summary.append(
+                f"{total_weak} page(s) received only a weak transformation — "
+                f"the engine could not produce a dramatic restructure. Re-running may help."
             )
-            screenshot_results = await render_multi_page_previews(
-                repo_clone_url=repo_clone_url,
-                branch=branch,
-                transforms=screenshot_transforms,
-                access_token=access_token or "",
-                max_screenshots=len(screenshot_transforms),
+        if total_overflow:
+            global_summary.append(
+                f"{total_overflow} page(s) need work but were deferred — re-run to process them."
             )
-        except Exception as e:
-            logger.error("Screenshot rendering failed: %s", e, exc_info=True)
-            pipeline_errors.append(f"Screenshot rendering failed: {e}")
+        if total_errors:
+            global_summary.append(f"{total_errors} page(s) encountered errors during transformation.")
 
-    # Log screenshot results for debugging
-    for path, sdata in screenshot_results.items():
-        has_before = bool(sdata.get("before_screenshot"))
-        has_after = bool(sdata.get("after_screenshot"))
-        perr = sdata.get("preview_error", "")
-        logger.info("Screenshots for %s: before=%s after=%s error=%s", path, has_before, has_after, perr or "none")
+        for p in page_results:
+            if p["status"] == "transformed" and p.get("diff_summary"):
+                global_summary.append(f"{p['page_name']}: {p['diff_summary']}")
 
-    # ── Step 6.5: Upload screenshots to S3 ─────────────────────────
-    # Replace the inline base64 blobs with presigned URLs so the
-    # response payload stays small (a 5-page run with screenshots
-    # was ~6-12 MB of base64; this drops it to a few KB of URLs).
-    # We mutate screenshot_results in place so the existing
-    # aggregation loop below picks up the URLs and keys without
-    # any further changes.
-    for path, sdata in screenshot_results.items():
-        before_b64 = sdata.get("before_screenshot", "")
-        after_b64 = sdata.get("after_screenshot", "")
-        before_key, before_url = await asyncio.to_thread(
-            upload_screenshot_and_presign, pipeline_run_id, path, "before", before_b64,
+        # Mark the run complete and persist the snapshots used this run so
+        # future stable re-runs on the same commit can skip re-analysis.
+        await _finalize_run(
+            run_id,
+            status="completed",
+            transformation_notes=aggregated_notes,
+            design_intelligence_snapshot=di if isinstance(di, dict) else None,
+            transform_plan_snapshot=plan_snapshot,
+            totals={
+                "total_pages_found": len(pages),
+                "total_transformed": total_transformed,
+                "total_skipped": total_skipped,
+                "global_summary": global_summary,
+                "pipeline_errors": pipeline_errors,
+            },
         )
-        after_key, after_url = await asyncio.to_thread(
-            upload_screenshot_and_presign, pipeline_run_id, path, "after", after_b64,
+
+        return {
+            "repo_name": repo_name,
+            "branch": branch,
+            "framework": framework,
+            "total_pages_found": len(pages),
+            "total_evaluated": len(evaluations),
+            "total_transformed": total_transformed,
+            "total_skipped": total_skipped,
+            "pages": page_results,
+            "global_summary": global_summary,
+            "pipeline_errors": pipeline_errors,
+            "transformation_notes": aggregated_notes,
+            "mode": mode,
+            "run_id": run_id,
+        }
+    except Exception as e:
+        # Persist the failure on the run row before re-raising so the
+        # /active-run and /progress endpoints can show what went wrong.
+        await _finalize_run(
+            run_id,
+            status="failed",
+            error_message=str(e),
         )
-        # Overwrite the base64 fields with the presigned URL. The frontend
-        # auto-detects URL vs base64, so existing rendering paths keep
-        # working. The *_key fields are passed through to /projects/save-run
-        # so the database persists the S3 key directly without re-uploading.
-        sdata["before_screenshot"] = before_url
-        sdata["after_screenshot"] = after_url
-        sdata["before_screenshot_key"] = before_key
-        sdata["after_screenshot_key"] = after_key
-
-    # ── Step 7: Aggregate results ───────────────────────────────────
-    page_results = []
-
-    # Add transformed pages
-    for ev in to_transform:
-        result = transform_results.get(ev.page_path, {})
-        screenshots = screenshot_results.get(ev.page_path, {})
-        page = page_lookup.get(ev.page_path)
-
-        has_code = bool(result.get("updated_code"))
-        is_weak = result.get("weak_transformation", False)
-
-        if has_code and is_weak:
-            # Weak transformation: still has code, but the engine warns the
-            # change isn't dramatic. Show it to the user with a banner — never
-            # silently demote to "high_quality".
-            status = "weak"
-        elif has_code:
-            status = "transformed"
-        else:
-            status = "error"
-
-        page_results.append({
-            "page_path": ev.page_path,
-            "page_name": ev.page_name,
-            "route": page.route if page else "/",
-            "status": status,
-            "score": ev.score,
-            "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
-            "reasoning": ev.reasoning,
-            "issues": [i.model_dump() for i in ev.issues],
-            "original_code": content_lookup.get(ev.page_path, ""),
-            "updated_code": result.get("updated_code", ""),
-            "diff_summary": result.get("diff_summary", ""),
-            "change_annotations": result.get("change_annotations", []),
-            "change_summary": result.get("change_summary", []),
-            "before_screenshot": screenshots.get("before_screenshot", ""),
-            "after_screenshot": screenshots.get("after_screenshot", ""),
-            "before_screenshot_key": screenshots.get("before_screenshot_key", ""),
-            "after_screenshot_key": screenshots.get("after_screenshot_key", ""),
-            "error": result.get("error", "") or screenshots.get("preview_error", ""),
-            "retries_used": result.get("retries_used", 0),
-        })
-
-    # Add high-quality (genuinely good) pages
-    for ev in high_quality:
-        page = page_lookup.get(ev.page_path)
-        page_results.append({
-            "page_path": ev.page_path,
-            "page_name": ev.page_name,
-            "route": page.route if page else "/",
-            "status": "high_quality",
-            "score": ev.score,
-            "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
-            "reasoning": ev.reasoning,
-            "issues": [i.model_dump() for i in ev.issues],
-            "diff_summary": f"Page scored {ev.score}/100 — no transformation needed.",
-        })
-
-    # Add overflow pages — below threshold but skipped due to max_pages cap
-    for ev in overflow:
-        page = page_lookup.get(ev.page_path)
-        page_results.append({
-            "page_path": ev.page_path,
-            "page_name": ev.page_name,
-            "route": page.route if page else "/",
-            "status": "skipped_overflow",
-            "score": ev.score,
-            "breakdown": ev.breakdown.model_dump() if ev.breakdown else {},
-            "reasoning": ev.reasoning,
-            "issues": [i.model_dump() for i in ev.issues],
-            "diff_summary": (
-                f"Page scored {ev.score}/100 — needs work but skipped because "
-                f"the per-run page cap was reached. Re-run to process it."
-            ),
-        })
-
-    # Sort results: transformed first, then weak, then errors, then high-quality, then overflow
-    def _sort_key(p):
-        bucket = {
-            "transformed": 0,
-            "weak": 0,
-            "error": 0,
-            "high_quality": 1,
-            "skipped_overflow": 2,
-        }.get(p["status"], 3)
-        return (bucket, p["score"])
-    page_results.sort(key=_sort_key)
-
-    # Build global summary
-    total_transformed = sum(1 for p in page_results if p["status"] == "transformed")
-    total_weak = sum(1 for p in page_results if p["status"] == "weak")
-    total_skipped = sum(1 for p in page_results if p["status"] == "high_quality")
-    total_overflow = sum(1 for p in page_results if p["status"] == "skipped_overflow")
-    total_errors = sum(1 for p in page_results if p["status"] == "error")
-
-    global_summary = [
-        f"Evaluated {len(evaluations)} pages across the repository.",
-        f"Transformed {total_transformed} page(s), "
-        f"skipped {total_skipped} high-quality page(s).",
-    ]
-
-    if total_weak:
-        global_summary.append(
-            f"{total_weak} page(s) received only a weak transformation — "
-            f"the engine could not produce a dramatic restructure. Re-running may help."
-        )
-    if total_overflow:
-        global_summary.append(
-            f"{total_overflow} page(s) need work but were deferred — re-run to process them."
-        )
-    if total_errors:
-        global_summary.append(f"{total_errors} page(s) encountered errors during transformation.")
-
-    for p in page_results:
-        if p["status"] == "transformed" and p.get("diff_summary"):
-            global_summary.append(f"{p['page_name']}: {p['diff_summary']}")
-
-    return {
-        "repo_name": repo_name,
-        "branch": branch,
-        "framework": framework,
-        "total_pages_found": len(pages),
-        "total_evaluated": len(evaluations),
-        "total_transformed": total_transformed,
-        "total_skipped": total_skipped,
-        "pages": page_results,
-        "global_summary": global_summary,
-        "pipeline_errors": pipeline_errors,
-    }
+        raise

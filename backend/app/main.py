@@ -78,8 +78,8 @@ async def startup():
 _default_origins = (
     "http://localhost:3000,"
     "https://refineui-chi.vercel.app,"
-    "https://reformui.ca,"
-    "https://www.reformui.ca"
+    "https://uireform.com,"
+    "https://www.uireform.com"
 )
 _allowed_origins = os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
 if not os.environ.get("ALLOWED_ORIGINS"):
