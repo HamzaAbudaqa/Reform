@@ -15,6 +15,14 @@ class TransformRepoV2Request(BaseModel):
     max_pages: int = 5
     github_user_id: str = ""
     ux_lab_findings: list[dict] | None = None
+    # Optional project id — when supplied the orchestrator persists a
+    # TransformRun row from the start and reuses cached design
+    # intelligence for stable re-runs on the same commit.
+    project_id: str | None = None
+    commit_sha: str | None = None
+    # Transformation determinism / exploration toggle. Also accepted as
+    # a query string `?mode=stable|explore` on POST /transform-repo-v2.
+    mode: str = "stable"
 
 
 # ── Page Discovery ──────────────────────────────────────────────────
@@ -94,3 +102,10 @@ class TransformRepoV2Response(BaseModel):
     pages: list[PageTransformResult]
     global_summary: list[str]
     pipeline_errors: list[str] = []
+    # Human-readable bullets describing which competitor patterns were
+    # applied. Aggregated across all transformed pages.
+    transformation_notes: list[str] = []
+    # Echo the mode back so the frontend can surface "re-analyzed" vs "reused".
+    mode: str = "stable"
+    # Echoed when the orchestrator persisted a TransformRun at start.
+    run_id: str | None = None

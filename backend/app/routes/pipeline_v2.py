@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ _HEARTBEAT_INTERVAL_SECONDS = 10
 @router.post("/transform-repo-v2")
 async def transform_repo_v2(
     req: TransformRepoV2Request,
+    mode: str = Query("stable", pattern="^(stable|explore)$"),
     db: AsyncSession | None = Depends(get_optional_db),
 ):
     """
@@ -36,7 +37,18 @@ async def transform_repo_v2(
     warm across proxies and NATs that silently kill idle TCP connections
     during long runs. The frontend reads the stream, drops heartbeats,
     and uses the single `result` message as the final payload.
+
+    The `mode` query param controls determinism:
+      - stable (default): low temperature, reuses cached design intelligence
+        and transform plan for a repeat run on the same commit.
+      - explore: higher temperature, always does a fresh competitor
+        analysis + re-planning pass.
+
+    `mode` can also be supplied in the request body for clients that prefer
+    that channel; the query param wins when both are present.
     """
+    # Body can also carry `mode`; the query string is authoritative.
+    effective_mode = (mode or req.mode or "stable").lower()
     # ── Feature gating (before the stream opens so 402/429 errors stay
     #    as normal HTTP status codes the frontend already knows how to
     #    parse via parseResponseError). ────────────────────────────────
@@ -57,6 +69,9 @@ async def transform_repo_v2(
             quality_threshold=req.quality_threshold,
             max_pages=req.max_pages,
             ux_lab_findings=req.ux_lab_findings,
+            mode=effective_mode,
+            project_id=req.project_id,
+            commit_sha=req.commit_sha,
         ))
 
         while not task.done():

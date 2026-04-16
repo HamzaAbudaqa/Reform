@@ -6,7 +6,7 @@ and load full results including screenshots from S3.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -128,6 +128,17 @@ class SaveRunRequest(BaseModel):
     global_summary: list[str] = []
     pipeline_errors: list[str] = []
     pages: list[dict] = []
+    # Problem 1/2 additions — mode + snapshots for reuse on stable re-runs.
+    # All optional so pre-existing clients stay compatible.
+    mode: str | None = None
+    design_intelligence_snapshot: dict | None = None
+    transform_plan_snapshot: dict | None = None
+    model_params: dict | None = None
+    transformation_notes: list[str] | None = None
+    # Allow the frontend to attach results to a row the orchestrator already
+    # created at pipeline start. When supplied, we update that row instead
+    # of creating a second one.
+    run_id: str | None = None
 
 
 # ─── Routes ──────────────────────────────────────────────────────────
@@ -435,22 +446,59 @@ async def save_run(req: SaveRunRequest, db: AsyncSession = Depends(get_db)):
         s3_key = upload_snapshot(str(project.id), str(snapshot.id), req.files)
         snapshot.s3_key = s3_key
 
-    # 3. Create transform run
-    run = TransformRun(
-        project_id=project.id,
-        snapshot_id=snapshot.id,
-        status="complete",
-        design_intelligence=req.design_intelligence,
-        user_intent=req.user_intent,
-        source_commit_sha=req.source_commit_sha,
-        total_pages_found=req.total_pages_found,
-        total_transformed=req.total_transformed,
-        total_skipped=req.total_skipped,
-        global_summary=req.global_summary,
-        pipeline_errors=req.pipeline_errors,
-        completed_at=datetime.now(timezone.utc),
-    )
-    db.add(run)
+    # 3. Create (or update) transform run.
+    # If the frontend passes a run_id the orchestrator created at start, we
+    # update that row so we don't end up with two rows per pipeline execution.
+    run: TransformRun | None = None
+    if req.run_id:
+        existing_result = await db.execute(
+            select(TransformRun).where(TransformRun.id == req.run_id)
+        )
+        run = existing_result.scalar_one_or_none()
+
+    if run:
+        run.snapshot_id = snapshot.id
+        run.status = "complete"
+        run.design_intelligence = req.design_intelligence
+        run.user_intent = req.user_intent
+        run.source_commit_sha = req.source_commit_sha or run.source_commit_sha
+        run.total_pages_found = req.total_pages_found
+        run.total_transformed = req.total_transformed
+        run.total_skipped = req.total_skipped
+        run.global_summary = req.global_summary
+        run.pipeline_errors = req.pipeline_errors
+        run.completed_at = datetime.now(timezone.utc)
+        if req.mode is not None:
+            run.mode = req.mode
+        if req.design_intelligence_snapshot is not None:
+            run.design_intelligence_snapshot = req.design_intelligence_snapshot
+        if req.transform_plan_snapshot is not None:
+            run.transform_plan_snapshot = req.transform_plan_snapshot
+        if req.model_params is not None:
+            run.model_params = req.model_params
+        if req.transformation_notes is not None:
+            run.transformation_notes = req.transformation_notes
+    else:
+        run = TransformRun(
+            project_id=project.id,
+            snapshot_id=snapshot.id,
+            status="complete",
+            design_intelligence=req.design_intelligence,
+            user_intent=req.user_intent,
+            source_commit_sha=req.source_commit_sha,
+            total_pages_found=req.total_pages_found,
+            total_transformed=req.total_transformed,
+            total_skipped=req.total_skipped,
+            global_summary=req.global_summary,
+            pipeline_errors=req.pipeline_errors,
+            completed_at=datetime.now(timezone.utc),
+            mode=req.mode,
+            design_intelligence_snapshot=req.design_intelligence_snapshot,
+            transform_plan_snapshot=req.transform_plan_snapshot,
+            model_params=req.model_params,
+            transformation_notes=req.transformation_notes,
+        )
+        db.add(run)
     await db.flush()
 
     # 4. Create page results, persisting S3 keys for screenshots.
@@ -500,4 +548,74 @@ async def save_run(req: SaveRunRequest, db: AsyncSession = Depends(get_db)):
         "project_id": str(project.id),
         "run_id": str(run.id),
         "snapshot_id": str(snapshot.id),
+    }
+
+
+# ── Resumable progress endpoints ────────────────────────────────────
+#
+# Frontend polls these when the SSE stream disconnects mid-pipeline.
+# `/active-run` answers "is there a run I should reconnect to?" and
+# `/runs/{run_id}/progress` answers "what stage is that run at?".
+
+
+# Minutes after which an in_progress row is considered stale and no
+# longer returned by /active-run. Matches the typical Railway worker
+# timeout — past this we assume the process died without finalizing.
+_ACTIVE_RUN_STALE_MINUTES = 30
+
+
+@router.get("/{project_id}/active-run")
+async def get_active_run(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Return the most recent in_progress run for this project, if any.
+
+    Stale rows (older than _ACTIVE_RUN_STALE_MINUTES on updated_at) are
+    filtered out so a crashed worker doesn't leave a ghost row that keeps
+    the frontend in a reconnect loop forever. Returns 404 when nothing
+    qualifies.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=_ACTIVE_RUN_STALE_MINUTES)
+    result = await db.execute(
+        select(TransformRun)
+        .where(
+            TransformRun.project_id == project_id,
+            TransformRun.status == "in_progress",
+            TransformRun.updated_at >= cutoff,
+        )
+        .order_by(TransformRun.updated_at.desc())
+        .limit(1)
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="No active run")
+
+    return {
+        "run_id": str(run.id),
+        "status": run.status,
+        "current_stage": run.current_stage,
+        "progress_percent": run.progress_percent,
+        "mode": run.mode,
+        "started_at": run.created_at.isoformat() if run.created_at else None,
+        "commit_sha": run.source_commit_sha,
+    }
+
+
+@router.get("/runs/{run_id}/progress")
+async def get_run_progress(run_id: str, db: AsyncSession = Depends(get_db)):
+    """Lightweight progress snapshot for a single run.
+
+    Used by the frontend to poll when SSE reconnect isn't viable. Returns
+    just the fields needed to render the progress UI — full run data stays
+    on /runs/{run_id}.
+    """
+    result = await db.execute(select(TransformRun).where(TransformRun.id == run_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    return {
+        "status": run.status,
+        "current_stage": run.current_stage,
+        "progress_percent": run.progress_percent,
+        "transformation_notes": run.transformation_notes or [],
+        "error_message": run.error_message,
     }

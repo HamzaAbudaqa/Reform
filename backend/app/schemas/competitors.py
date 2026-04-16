@@ -119,6 +119,22 @@ class Recommendation(BaseModel):
     action: str
 
 
+class CompetitorPatterns(BaseModel):
+    """Structured cross-site patterns the transform pipeline applies as hard constraints.
+
+    These are distinct from `global_patterns` / `recommendations` because
+    they're phrased as concrete, layout-level moves a transform prompt can
+    execute (specific radii, spacing values, CTA treatment). Everything is
+    optional so older aggregator runs still deserialize cleanly.
+    """
+    layout_patterns: list[str] = []
+    cta_hierarchy: str = ""
+    spacing_rhythm: str = ""
+    card_style: str = ""
+    typography_tone: str = ""
+    source_competitors: list[str] = []
+
+
 class CompetitorAnalysisResponse(BaseModel):
     meta: Meta
     sources: list[SourceAnalysis]
@@ -129,3 +145,6 @@ class CompetitorAnalysisResponse(BaseModel):
     ux_intelligence: UxIntelligence = UxIntelligence()
     recommendations: list[Recommendation]
     avoid: list[str]
+    # Structured competitor constraints for the transform prompt. Empty on
+    # legacy analyses; populated by the updated aggregation prompt.
+    competitor_patterns: CompetitorPatterns = CompetitorPatterns()

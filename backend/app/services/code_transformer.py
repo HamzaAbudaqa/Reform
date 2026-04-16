@@ -5,6 +5,7 @@ import os
 import anthropic
 
 from app.prompts.code_transform_prompt import build_code_transform_prompt
+from app.services.model_params import get_profile, STABLE
 from app.services.preview_renderer import render_previews
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ async def transform_code(
     design_intelligence: dict, user_intent: str = "",
     repo_clone_url: str = "", branch: str = "main",
     access_token: str = "",
+    profile: str = STABLE,
 ) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -55,8 +57,9 @@ async def transform_code(
     client = anthropic.Anthropic(api_key=api_key)
     logger.info("Transforming %s (%d chars)", target_file, len(target["content"]))
 
+    params = get_profile(profile)
     message = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=16384,
+        **params, max_tokens=16384,
         messages=[{"role": "user", "content": prompt}],
     )
 
