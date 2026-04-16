@@ -54,6 +54,15 @@ def build_code_transform_prompt(
     global_patterns = design_intelligence.get("global_patterns", {})
     components = design_intelligence.get("components", {})
     avoid = design_intelligence.get("avoid", [])
+    competitor_patterns = design_intelligence.get("competitor_patterns", {}) or {}
+
+    competitor_block = ""
+    if any(competitor_patterns.get(k) for k in ("layout_patterns", "cta_hierarchy", "spacing_rhythm", "card_style", "typography_tone")):
+        competitor_block = (
+            "\n### Competitor Constraints (apply 2-4 visibly)\n"
+            "These are concrete structural patterns, not inspiration. The output must visibly apply at least 2.\n"
+            + json.dumps(competitor_patterns, indent=2)[:1500]
+        )
 
     return f"""You are a senior UI engineer performing an AGGRESSIVE UI transformation.
 
@@ -84,6 +93,7 @@ If a user cannot instantly see the improvement in under 1 second, you have FAILE
 
 ### Anti-Patterns to AVOID
 {json.dumps(avoid, indent=2)}
+{competitor_block}
 {intent_line}
 
 ---
@@ -174,6 +184,11 @@ Return a JSON object with this exact structure:
   ],
   "change_summary": [
     "Plain English description of a visible improvement"
+  ],
+  "transformation_notes": [
+    "1-4 bullets describing which competitor patterns were applied.",
+    "Name competitors by URL domain (e.g., 'Applied vercel.com-style 96px section rhythm').",
+    "Be structural and specific. No cheesy phrasing."
   ]
 }}
 

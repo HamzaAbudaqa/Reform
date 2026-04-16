@@ -15,6 +15,13 @@ import RepoWideImprovementsPanel from '@/components/dashboard/RepoWideImprovemen
 import { adaptLegacyResult } from '@/components/dashboard/TransformTypes'
 import type { MultiPageTransformResult } from '@/components/dashboard/TransformTypes'
 import { safeSetTransformCache } from '@/lib/transformCache'
+import {
+  fetchActiveRun,
+  fetchRunProgress,
+  isTerminalStatus,
+  normalizeStatus,
+  type RunMode,
+} from '@/lib/projectsApi'
 
 interface CommitEntry {
   hash: string
@@ -84,7 +91,22 @@ const PIPELINE_TIPS = [
   'The transform keeps all your imports, state, and handlers. Only the JSX tree changes.',
 ]
 
-function PipelineProgress({ repoName, startedAt }: { repoName: string; startedAt: number }) {
+function PipelineProgress({
+  repoName,
+  startedAt,
+  resumeLabel,
+  overrideProgress,
+  overrideStage,
+}: {
+  repoName: string
+  startedAt: number
+  /** Banner text shown when we resumed from an existing run. */
+  resumeLabel?: string | null
+  /** 0-100 — when provided, pins the progress bar (e.g. from the backend). */
+  overrideProgress?: number | null
+  /** Backend-provided stage key ('evaluating', 'transforming', etc.). */
+  overrideStage?: string | null
+}) {
   // Force re-render ~4x/sec so elapsed / stage / bar always reflect real
   // wall-clock, regardless of tab throttling or when the last tick fired.
   // On visibilitychange we force an immediate tick so users see fresh state
@@ -106,7 +128,8 @@ function PipelineProgress({ repoName, startedAt }: { repoName: string; startedAt
   const elapsedMs = Math.max(0, Date.now() - startedAt)
   const elapsed = Math.floor(elapsedMs / 1000)
 
-  // Find the current substage by consuming durations left-to-right.
+  // Find the current substage by consuming durations left-to-right — the
+  // time-based fallback when the backend hasn't surfaced a stage yet.
   let acc = 0
   let currentIdx = PIPELINE_STAGES.length - 1
   for (let i = 0; i < PIPELINE_STAGES.length; i++) {
@@ -114,9 +137,28 @@ function PipelineProgress({ repoName, startedAt }: { repoName: string; startedAt
     if (elapsed < acc) { currentIdx = i; break }
   }
 
+  // Prefer an explicit stage from the backend when available — map it onto
+  // the closest PIPELINE_STAGES index so the step list still lines up.
+  if (overrideStage) {
+    const key = overrideStage.toLowerCase().trim()
+    const mapping: Record<string, number> = {
+      cloning: 0, ingesting: 0, clone: 0,
+      discovering: 1, discover: 1,
+      evaluating: 2, evaluate: 2, scoring: 2,
+      planning: 3, plan: 3,
+      transforming: 4, rebuild: 4, rebuilding: 4,
+      rendering: 5, render: 5, saving: 5,
+    }
+    const mapped = mapping[key]
+    if (typeof mapped === 'number') currentIdx = mapped
+  }
+
   // Cap at 98% so the bar never looks "done" until the pipeline actually
   // finishes (which unmounts this component).
-  const overallProgress = Math.min(98, (elapsedMs / (PIPELINE_TOTAL_DURATION * 1000)) * 100)
+  const timeProgress = Math.min(98, (elapsedMs / (PIPELINE_TOTAL_DURATION * 1000)) * 100)
+  const overallProgress = typeof overrideProgress === 'number'
+    ? Math.max(timeProgress, Math.min(98, overrideProgress))
+    : timeProgress
   const remaining = Math.max(0, PIPELINE_TOTAL_DURATION - elapsed)
 
   const tipIdx = Math.floor(elapsed / 8) % PIPELINE_TIPS.length
@@ -133,6 +175,15 @@ function PipelineProgress({ repoName, startedAt }: { repoName: string; startedAt
 
   return (
     <div className="max-w-xl mx-auto pt-6 pb-10 w-full px-4">
+      {resumeLabel && (
+        <div
+          className="rounded-lg px-3 py-2 mb-5 flex items-center gap-2"
+          style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}
+        >
+          <div className="w-3 h-3 rounded-full animate-spin flex-shrink-0" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+          <span className="text-[11px]" style={{ color: 'rgba(168,85,247,0.8)' }}>{resumeLabel}</span>
+        </div>
+      )}
       <div className="flex items-center justify-center flex-wrap gap-y-2 mb-6">
         {PIPELINE_STAGES.map((s, i) => {
           const isDone = i < currentIdx
@@ -894,6 +945,26 @@ function TransformPage() {
   const [reRendering, setReRendering] = useState(false)
   const [reRenderStatus, setReRenderStatus] = useState('')
 
+  // ── Mode selection + resumable run state ──
+  // Which variant of the pipeline to run. Default stable — matches backend default.
+  const [runMode, setRunMode] = useState<RunMode>(() => {
+    const m = searchParams?.get('mode')
+    return m === 'explore' ? 'explore' : 'stable'
+  })
+  // Progress snapshot for a resumed run — pre-seeds PipelineProgress so the
+  // bar doesn't restart at 0s when the user reloads mid-run.
+  const [resumeState, setResumeState] = useState<{
+    runId: string
+    stage: string | null
+    progressPercent: number | null
+    mode: RunMode | null
+    banner: string
+  } | null>(null)
+  // Transformation notes from the latest completed run — rendered beneath
+  // the result header so users see which competitor patterns were applied.
+  const [transformationNotes, setTransformationNotes] = useState<string[]>([])
+  const [resultMode, setResultMode] = useState<RunMode | null>(null)
+
   // Clear the persisted start timestamp whenever the pipeline settles into
   // a non-running state. Skip if a background promise is still attached —
   // the rehydrate effect below is about to flip us back into 'ingesting'.
@@ -964,6 +1035,10 @@ function TransformPage() {
             setMultiPageResult(r)
             setRepoName(r.repo_name || '')
             setRepoBranch(r.branch || 'main')
+            const notes = (r as unknown as { transformation_notes?: unknown }).transformation_notes
+            if (Array.isArray(notes)) setTransformationNotes(notes.filter((n): n is string => typeof n === 'string'))
+            const rMode = (r as unknown as { mode?: unknown }).mode
+            if (rMode === 'stable' || rMode === 'explore') setResultMode(rMode)
             setPipelineStep('complete')
           } else {
             autoStartedRef.current = false
@@ -1012,6 +1087,10 @@ function TransformPage() {
   const restoredProjectRef = useRef<string | null>(null)
   useEffect(() => {
     const projectId = searchParams?.get('project')
+    const wantsResume = searchParams?.get('resume') === '1'
+    // When the user asked to resume an active run, the resume effect above
+    // owns the progress UI — don't clobber it by rendering a past result.
+    if (wantsResume) return
     if (!projectId || restoredProjectRef.current === projectId) return
     restoredProjectRef.current = projectId
     autoStartedRef.current = true // prevent auto-start from sessionStorage repo
@@ -1056,12 +1135,193 @@ function TransformPage() {
         setMultiPageResult(multi)
         setRepoName(run.repo_name)
         setRepoBranch(run.branch || 'main')
+        const notes = (run as { transformation_notes?: unknown }).transformation_notes
+        if (Array.isArray(notes)) setTransformationNotes(notes.filter((n): n is string => typeof n === 'string'))
+        const mode = (run as { mode?: unknown }).mode
+        if (mode === 'stable' || mode === 'explore') setResultMode(mode)
         setPipelineStep('complete')
       } catch (e) {
         setPipelineError(e instanceof Error ? e.message : 'Failed to load past run')
         setPipelineStep('idle')
       }
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // Resume a mid-run transform when landing on the page with ?project=<id>
+  // and ?resume=1. We poll /projects/runs/<run_id>/progress because the
+  // original SSE stream is tied to the request that started it — once this
+  // tab is gone the stream can't be reconnected. 404 on /active-run means
+  // nothing is running; we just fall through to the normal idle/restore flow.
+  const activeRunPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    const projectId = searchParams?.get('project')
+    const explicitRun = searchParams?.get('run')
+    const wantsFresh = searchParams?.get('forceFresh') === '1' || searchParams?.get('resume') === '0'
+    const wantsResume = searchParams?.get('resume') === '1'
+    // Only run when the user explicitly asked to resume. Without the flag
+    // the normal "restore latest completed run" path handles project= URLs
+    // and we don't want to race with it.
+    if (!projectId || !wantsResume || explicitRun || wantsFresh) return
+    if (typeof window === 'undefined') return
+    const hasBgPromise = !!(window as { __reformPipelinePromise?: unknown }).__reformPipelinePromise
+    if (hasBgPromise) return
+
+    let cancelled = false
+
+    ;(async () => {
+      const active = await fetchActiveRun(projectId)
+      if (cancelled) return
+      if (!active || isTerminalStatus(active.status)) {
+        // Nothing live to resume — fetch the latest run instead so the user
+        // lands on a useful screen. Mirrors the restore-latest effect which
+        // bails early when resume=1 is in the URL.
+        try {
+          const runsRes = await fetch(apiUrl(`/projects/${projectId}/runs`))
+          if (!runsRes.ok) throw new Error('runs fetch failed')
+          const runs: { id: string }[] = await runsRes.json()
+          const latest = runs[0]
+          if (!latest) { setPipelineStep('idle'); return }
+          const runRes = await fetch(apiUrl(`/projects/runs/${latest.id}`))
+          if (!runRes.ok) throw new Error('run fetch failed')
+          const run = await runRes.json()
+          if (cancelled) return
+          const multi: MultiPageTransformResult = {
+            repo_name: run.repo_name,
+            branch: run.branch,
+            framework: run.framework,
+            total_pages_found: run.total_pages_found,
+            total_evaluated: run.total_pages_found,
+            total_transformed: run.total_transformed,
+            total_skipped: run.total_skipped,
+            global_summary: run.global_summary || [],
+            pipeline_errors: run.pipeline_errors || [],
+            pages: (run.pages || []) as MultiPageTransformResult['pages'],
+          }
+          setMultiPageResult(multi)
+          setRepoName(run.repo_name)
+          setRepoBranch(run.branch || 'main')
+          const notes = (run as { transformation_notes?: unknown }).transformation_notes
+          if (Array.isArray(notes)) setTransformationNotes(notes.filter((n): n is string => typeof n === 'string'))
+          const mode = (run as { mode?: unknown }).mode
+          if (mode === 'stable' || mode === 'explore') setResultMode(mode)
+          setPipelineStep('complete')
+        } catch (e) {
+          if (!cancelled) {
+            setPipelineError(e instanceof Error ? e.message : 'Failed to load run')
+            setPipelineStep('idle')
+          }
+        }
+        return
+      }
+      autoStartedRef.current = true
+      restoredProjectRef.current = projectId // prevent the restore-latest effect from clobbering
+      setResumeState({
+        runId: active.run_id,
+        stage: active.current_stage,
+        progressPercent: active.progress_percent,
+        mode: active.mode,
+        banner: 'Resuming your run…',
+      })
+      if (active.mode === 'stable' || active.mode === 'explore') setRunMode(active.mode)
+      // Seed a timer baseline from when the run originally started, so the
+      // elapsed counter reflects real wall-clock. Fallback to "now" when the
+      // backend didn't send started_at.
+      const started = active.started_at ? new Date(active.started_at).getTime() : Date.now()
+      setPipelineStartedAt(Number.isFinite(started) ? started : Date.now())
+      setPipelineStep('ingesting')
+
+      let pollsSinceUpdate = 0
+      activeRunPollRef.current = setInterval(async () => {
+        if (cancelled) return
+        const progress = await fetchRunProgress(active.run_id)
+        if (cancelled) return
+        if (!progress) {
+          // Transient failure — keep polling (up to ~2min) before giving up.
+          pollsSinceUpdate += 1
+          if (pollsSinceUpdate > 60) {
+            if (activeRunPollRef.current) clearInterval(activeRunPollRef.current)
+            activeRunPollRef.current = null
+            setPipelineError('Lost connection to the server. Please reload to retry.')
+            setPipelineStep('idle')
+          }
+          return
+        }
+        pollsSinceUpdate = 0
+        setResumeState(prev => prev ? { ...prev, stage: progress.current_stage, progressPercent: progress.progress_percent, banner: '' } : prev)
+
+        const status = normalizeStatus(progress.status)
+        if (status === 'failed') {
+          if (activeRunPollRef.current) clearInterval(activeRunPollRef.current)
+          activeRunPollRef.current = null
+          setPipelineError(progress.error_message || 'Transform failed')
+          setPipelineStep('idle')
+          setResumeState(null)
+          try { localStorage.removeItem('refineui_pipeline_started_at') } catch { /* */ }
+          return
+        }
+
+        if (status === 'completed' || status === 'published') {
+          if (activeRunPollRef.current) clearInterval(activeRunPollRef.current)
+          activeRunPollRef.current = null
+          // Terminal: pull the full run result so we can render the carousel.
+          try {
+            const runRes = await fetch(apiUrl(`/projects/runs/${active.run_id}`))
+            if (!runRes.ok) throw new Error('run fetch failed')
+            const run = await runRes.json()
+            const multi: MultiPageTransformResult = {
+              repo_name: run.repo_name,
+              branch: run.branch,
+              framework: run.framework,
+              total_pages_found: run.total_pages_found,
+              total_evaluated: run.total_pages_found,
+              total_transformed: run.total_transformed,
+              total_skipped: run.total_skipped,
+              global_summary: run.global_summary || [],
+              pipeline_errors: run.pipeline_errors || [],
+              pages: (run.pages || []).map((p: Record<string, unknown>) => ({
+                page_path: p.page_path as string,
+                page_name: p.page_name as string,
+                route: p.route as string,
+                status: (p.status as 'transformed' | 'high_quality' | 'error') || 'transformed',
+                score: (p.score as number) || 0,
+                original_code: p.original_code as string,
+                updated_code: p.updated_code as string,
+                diff_summary: p.diff_summary as string,
+                change_annotations: (p.change_annotations as ChangeAnnotation[]) || [],
+                change_summary: (p.change_summary as string[]) || [],
+                before_screenshot: p.before_screenshot as string,
+                after_screenshot: p.after_screenshot as string,
+                error: p.error as string,
+                retries_used: (p.retries_used as number) || 0,
+              })),
+            }
+            setMultiPageResult(multi)
+            setRepoName(run.repo_name)
+            setRepoBranch(run.branch || 'main')
+            const notes = progress.transformation_notes || (run as { transformation_notes?: unknown }).transformation_notes
+            if (Array.isArray(notes)) setTransformationNotes(notes.filter((n): n is string => typeof n === 'string'))
+            const mode = active.mode || ((run as { mode?: unknown }).mode as RunMode | undefined)
+            if (mode === 'stable' || mode === 'explore') setResultMode(mode)
+            setPipelineStep('complete')
+            setResumeState(null)
+            try { localStorage.removeItem('refineui_pipeline_started_at') } catch { /* */ }
+          } catch (e) {
+            setPipelineError(e instanceof Error ? e.message : 'Failed to load completed run')
+            setPipelineStep('idle')
+            setResumeState(null)
+          }
+        }
+      }, 2000)
+    })()
+
+    return () => {
+      cancelled = true
+      if (activeRunPollRef.current) {
+        clearInterval(activeRunPollRef.current)
+        activeRunPollRef.current = null
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
@@ -1074,6 +1334,8 @@ function TransformPage() {
     // Prefer URL params (passed by UX Lab navigation) — more reliable than storage.
     const paramRepo = searchParams?.get('repo')
     const paramBranch = searchParams?.get('branch')
+    const paramMode = searchParams?.get('mode')
+    const paramForceFresh = searchParams?.get('forceFresh') === '1'
     const selected = paramRepo
       ? { url: paramRepo, branch: paramBranch || 'main' }
       : getSelectedRepo()
@@ -1088,13 +1350,15 @@ function TransformPage() {
     const match = selected.url.match(/github\.com\/([^/]+\/[^/]+)/)
     if (!match) return
     const fullName = match[1].replace(/\.git$/, '')
+    const mode: RunMode = paramMode === 'explore' ? 'explore' : 'stable'
+    setRunMode(mode)
 
     // Create a minimal GithubRepo object and start pipeline
     runPipeline({
       id: 0, full_name: fullName, name: fullName.split('/')[1],
       private: false, language: null, updated_at: '', default_branch: selected.branch || 'main',
       homepage: null, html_url: selected.url,
-    })
+    }, { mode, forceFresh: paramForceFresh })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pipelineStep])
 
@@ -1108,9 +1372,16 @@ function TransformPage() {
 
   const filteredRepos = repos.filter(r => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
 
-  async function runPipeline(repo: GithubRepo, { forceFresh = false }: { forceFresh?: boolean } = {}) {
+  async function runPipeline(
+    repo: GithubRepo,
+    { forceFresh = false, mode }: { forceFresh?: boolean; mode?: RunMode } = {},
+  ) {
     setPipelineError(''); setGateError(null); setRepoName(repo.full_name); setRepoBranch(repo.default_branch || 'main')
+    setResumeState(null)
+    setTransformationNotes([])
+    setResultMode(null)
     const branch = repo.default_branch || 'main'
+    const effectiveMode: RunMode = mode || runMode
 
     // Show loading immediately so the user gets instant visual feedback.
     setPipelineStep('ingesting')
@@ -1197,7 +1468,7 @@ function TransformPage() {
       // mounted; we just need a handle to its result.
       type PipelineWindow = Window & { __reformPipelinePromise?: Promise<MultiPageTransformResult | null> }
       const pipelinePromise: Promise<MultiPageTransformResult | null> = (async () => {
-        const res = await fetch(apiUrl('/transform-repo-v2'), {
+        const res = await fetch(apiUrl(`/transform-repo-v2?mode=${effectiveMode}`), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             github_url: `https://github.com/${repo.full_name}`,
@@ -1278,6 +1549,14 @@ function TransformPage() {
       }
 
       setMultiPageResult(result)
+      setResultMode(effectiveMode)
+      // Pipeline v2 may return transformation_notes on the top-level result.
+      const topLevelNotes = (result as unknown as { transformation_notes?: unknown }).transformation_notes
+      if (Array.isArray(topLevelNotes)) {
+        setTransformationNotes(topLevelNotes.filter((n): n is string => typeof n === 'string'))
+      } else {
+        setTransformationNotes([])
+      }
       setPipelineStep('complete')
 
       // Save for session persistence (legacy). Uses safeSetTransformCache
@@ -1331,7 +1610,7 @@ function TransformPage() {
     } catch (e) { setPipelineError(e instanceof Error ? e.message : 'Transform failed'); setPipelineStep('idle') }
   }
 
-  async function handleRegenerate() {
+  async function handleRegenerate(mode: RunMode = 'stable') {
     if (!repoName) return
     // Clear every cache layer so the pipeline runs fresh.
     sessionStorage.removeItem('refineui_transform')
@@ -1339,6 +1618,9 @@ function TransformPage() {
     setMultiPageResult(null)
     setTransformResult(null)
     setPublishResult(null)
+    setTransformationNotes([])
+    setResultMode(null)
+    setRunMode(mode)
     autoStartedRef.current = true
     setPipelineStep('idle')
     // Reconstruct a minimal GithubRepo from the current state so runPipeline
@@ -1355,7 +1637,7 @@ function TransformPage() {
         homepage: null,
         html_url: `https://github.com/${repoName}`,
       },
-      { forceFresh: true },
+      { forceFresh: true, mode },
     )
   }
 
@@ -1555,7 +1837,13 @@ function TransformPage() {
 
         {/* ── HEADER ── */}
         {pipelineStep === 'complete' && multiPageResult ? (
-          <TransformSummaryHeader result={multiPageResult} publishResult={publishResult} onRegenerate={handleRegenerate} />
+          <TransformSummaryHeader
+            result={multiPageResult}
+            publishResult={publishResult}
+            onRegenerate={handleRegenerate}
+            mode={resultMode}
+            transformationNotes={transformationNotes}
+          />
         ) : (
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-white mb-3">UI Transformation</h1>
@@ -1590,10 +1878,38 @@ function TransformPage() {
               <div className="px-5 pb-3">
                 <input type="text" value={userIntent} onChange={e => setUserIntent(e.target.value)} placeholder="Optional: describe your goal (e.g., 'make it more modern')" className="w-full bg-transparent px-4 py-2 text-[12px] outline-none rounded-lg text-white/60 placeholder:text-white/15" style={{ border: '1px solid rgba(255,255,255,0.04)' }} />
               </div>
+              <div className="px-5 pb-4">
+                <p className="text-[10px] font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>Mode</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setRunMode('stable')}
+                    className="flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg text-left transition-all"
+                    style={{
+                      background: runMode === 'stable' ? 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(109,40,217,0.12))' : 'rgba(255,255,255,0.02)',
+                      border: runMode === 'stable' ? '1px solid rgba(124,58,237,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                      boxShadow: runMode === 'stable' ? '0 0 20px rgba(124,58,237,0.15)' : 'none',
+                    }}
+                  >
+                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'stable' ? 'white' : 'rgba(255,255,255,0.7)' }}>Run Again (Stable)</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Reuses prior competitor intel for consistency.</span>
+                  </button>
+                  <button
+                    onClick={() => setRunMode('explore')}
+                    className="flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg text-left transition-all"
+                    style={{
+                      background: runMode === 'explore' ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
+                      border: runMode === 'explore' ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'explore' ? 'white' : 'rgba(255,255,255,0.7)' }}>Explore New Version</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Fresh competitor discovery. Takes longer, may differ.</span>
+                  </button>
+                </div>
+              </div>
               <div style={{ maxHeight: '340px', overflowY: 'auto', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                 {session && loadingRepos && <div className="flex items-center justify-center py-8"><div className="w-6 h-6 rounded-full animate-spin mr-3" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} /><span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading repos...</span></div>}
                 {session && !loadingRepos && filteredRepos.map(repo => (
-                  <div key={repo.id} onClick={() => runPipeline(repo)} className="flex items-center justify-between px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.04]" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div key={repo.id} onClick={() => runPipeline(repo, { mode: runMode })} className="flex items-center justify-between px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.04]" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <div className="flex items-center gap-3 min-w-0">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.25)"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" /></svg>
                       <div className="min-w-0"><span className="text-[13px] text-white/70 truncate block">{repo.full_name}</span><span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{repo.language || 'Unknown'}</span></div>
@@ -1622,7 +1938,13 @@ function TransformPage() {
 
         {/* ── PIPELINE PROGRESS ── */}
         {(pipelineStep === 'ingesting' || pipelineStep === 'analyzing' || pipelineStep === 'transforming') && (
-          <PipelineProgress repoName={repoName} startedAt={pipelineStartedAt ?? Date.now()} />
+          <PipelineProgress
+            repoName={repoName}
+            startedAt={pipelineStartedAt ?? Date.now()}
+            resumeLabel={resumeState?.banner || null}
+            overrideProgress={resumeState?.progressPercent ?? null}
+            overrideStage={resumeState?.stage ?? null}
+          />
         )}
 
         {/* ── RE-RENDER PROGRESS BAR ── */}

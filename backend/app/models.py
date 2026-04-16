@@ -83,7 +83,13 @@ class TransformRun(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     snapshot_id = Column(UUID(as_uuid=True), ForeignKey("repo_snapshots.id"), nullable=True)
-    status = Column(String, nullable=False, default="running")   # running / complete / failed
+    # Status values used across the codebase:
+    #   running / in_progress — pipeline still executing
+    #   complete / completed  — finished successfully
+    #   failed                — pipeline raised or reported unrecoverable errors
+    # We accept both `complete` and `completed` for backwards compat with
+    # pre-existing rows; new code writes `completed`.
+    status = Column(String, nullable=False, default="running")
     design_intelligence = Column(JSON, nullable=True)
     user_intent = Column(String, default="")
     source_commit_sha = Column(String, nullable=True, index=True)   # GitHub HEAD SHA the run was built against
@@ -92,6 +98,16 @@ class TransformRun(Base):
     total_skipped = Column(Integer, default=0)
     global_summary = Column(JSON, default=list)
     pipeline_errors = Column(JSON, default=list)
+    # Problem 1 / 2 / 4 additions. All nullable so existing rows stay valid.
+    mode = Column(String, nullable=True, default="stable")           # "stable" | "explore"
+    current_stage = Column(String, nullable=True)                    # e.g. "evaluating"
+    progress_percent = Column(Integer, nullable=True)                # 0..100
+    design_intelligence_snapshot = Column(JSON, nullable=True)       # full DI used this run
+    transform_plan_snapshot = Column(JSON, nullable=True)            # planner output reused on stable re-runs
+    model_params = Column(JSON, nullable=True)                       # {"profile", "temperature", "model"}
+    transformation_notes = Column(JSON, nullable=True, default=list) # competitor-inspiration bullets
+    error_message = Column(Text, nullable=True)                      # set when status=failed
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
