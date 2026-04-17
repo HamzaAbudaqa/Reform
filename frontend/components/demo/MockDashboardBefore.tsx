@@ -9,7 +9,7 @@ export default function MockDashboardBefore() {
 
       {/* Top nav */}
       <div className="flex items-center px-5 gap-6 flex-shrink-0" style={{ height: '52px', background: '#1e40af', borderBottom: '3px solid #1d4ed8' }}>
-        <span className="text-white font-bold text-base tracking-tight">ProjectHub</span>
+        <span className="text-neutral-950 font-bold text-base tracking-tight">ProjectHub</span>
         <div className="flex items-center gap-5 text-blue-200 text-xs">
           {['Dashboard', 'Projects', 'Team', 'Reports', 'Settings'].map((item, i) => (
             <span key={item} className="cursor-pointer" style={{ color: i === 0 ? '#ffffff' : '#93c5fd', borderBottom: i === 0 ? '2px solid white' : 'none', paddingBottom: '2px' }}>
@@ -80,7 +80,7 @@ export default function MockDashboardBefore() {
               <button className="text-xs px-3 py-1.5 rounded" style={{ background: '#ffffff', border: '1px solid #d1d5db', color: '#374151' }}>
                 Export CSV
               </button>
-              <button className="text-xs px-3 py-1.5 rounded font-medium" style={{ background: '#1d4ed8', color: 'white' }}>
+              <button className="text-xs px-3 py-1.5 rounded font-medium" style={{ background: '#1d4ed8', color: '#0a0a0a' }}>
                 + New Project
               </button>
             </div>

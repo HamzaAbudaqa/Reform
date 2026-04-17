@@ -60,7 +60,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
     <section id="demo" className="py-24 relative">
       {/* Subtle background glow */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full blur-3xl" style={{ background: 'rgba(124,58,237,0.06)' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full blur-3xl" style={{ background: 'rgba(0,0,0,0.06)' }} />
       </div>
 
       <div className="max-w-[1280px] mx-auto px-6 relative">
@@ -68,7 +68,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
         <div className="flex flex-col items-center text-center mb-10">
           <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-4"
-            style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)', color: '#a855f7' }}
+            style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(0,0,0,0.2)', color: '#0a0a0a' }}
           >
             <Zap size={11} />
             Live demo
@@ -76,7 +76,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
           <h2 className="font-bold tracking-tight mb-3" style={{ fontSize: 'clamp(24px, 3.5vw, 36px)', color: '#ffffff' }}>
             See it in action
           </h2>
-          <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', maxWidth: '480px', lineHeight: 1.7 }}>
+          <p style={{ fontSize: '15px', color: 'rgba(0,0,0,0.35)', maxWidth: '480px', lineHeight: 1.7 }}>
             Paste a GitHub repo URL, choose a style preset, and watch Reform transform your
             frontend in seconds.
           </p>
@@ -85,12 +85,12 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
         {/* Workspace panel */}
         <div
           className="rounded-2xl overflow-hidden shadow-2xl"
-          style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(8px)' }}
+          style={{ border: '1px solid rgba(0,0,0,0.07)', background: 'rgba(0,0,0,0.02)', backdropFilter: 'blur(8px)' }}
         >
           {/* Title bar */}
           <div
             className="px-5 py-3 flex items-center gap-3"
-            style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
+            style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', background: 'rgba(0,0,0,0.02)' }}
           >
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-red-500/60 hover:bg-red-500 transition-colors" />
@@ -98,7 +98,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
               <div className="w-3 h-3 rounded-full bg-emerald-500/60 hover:bg-emerald-500 transition-colors" />
             </div>
             <div className="flex-1 flex items-center justify-center">
-              <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>reform — workspace</span>
+              <span className="text-xs font-mono" style={{ color: 'rgba(0,0,0,0.2)' }}>reform — workspace</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div
@@ -109,9 +109,9 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
                       ? 'bg-emerald-400'
                       : ''
                 }`}
-                style={state === 'empty' || state === 'uploaded' ? { background: 'rgba(255,255,255,0.15)' } : {}}
+                style={state === 'empty' || state === 'uploaded' ? { background: 'rgba(0,0,0,0.15)' } : {}}
               />
-              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              <span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.2)' }}>
                 {state === 'empty' && 'Waiting for input'}
                 {state === 'uploaded' && 'Ready to refine'}
                 {state === 'loading' && 'Processing...'}
@@ -131,7 +131,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
             onDrop={handleDrop}
           >
             {/* Left: repo input */}
-            <div className="p-5" style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="p-5" style={{ borderRight: '1px solid rgba(0,0,0,0.06)' }}>
               <RepoInputPanel
                 state={state}
                 repoUrl={repoUrl}
@@ -154,8 +154,8 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
                 <div className="mt-4 flex justify-center animate-slide-up">
                   <button
                     onClick={handleRefine}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-all"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.3)' }}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-neutral-950 text-sm font-semibold transition-all"
+                    style={{ background: 'linear-gradient(135deg, #0a0a0a, #0a0a0a)', boxShadow: '0 0 20px rgba(0,0,0,0.3)' }}
                   >
                     <Zap size={14} strokeWidth={2.5} />
                     Refine UI
@@ -165,7 +165,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
             </div>
 
             {/* Right: controls */}
-            <div className="p-5" style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="p-5" style={{ borderLeft: '1px solid rgba(0,0,0,0.06)' }}>
               <ControlsPanel
                 state={state}
                 preset={preset}
@@ -177,7 +177,7 @@ export default function DemoWorkspace({ initialRepoUrl }: { initialRepoUrl?: str
           </div>
         </div>
 
-        <p className="text-center text-xs mt-5" style={{ color: 'rgba(255,255,255,0.18)' }}>
+        <p className="text-center text-xs mt-5" style={{ color: 'rgba(0,0,0,0.18)' }}>
           Works with any public GitHub repository. No account required.
         </p>
       </div>

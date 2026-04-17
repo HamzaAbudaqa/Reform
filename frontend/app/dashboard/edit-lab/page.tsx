@@ -5,6 +5,12 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { apiUrl } from '@/lib/api'
 import { getSelectedRepo } from '@/lib/selectedRepo'
+import {
+  ingestStitchUrls,
+  StitchApiError,
+  STITCH_MAX_URLS,
+  type StitchDesign,
+} from '@/lib/stitchApi'
 
 interface Rect {
   x: number
@@ -248,6 +254,12 @@ export default function EditLabPage() {
   const [acceptedFiles, setAcceptedFiles] = useState<string[]>([])
   const [publishing, setPublishing] = useState(false)
   const [publishResult, setPublishResult] = useState<{ branch_name: string; branch_url: string; files_changed: string[] } | null>(null)
+
+  const [stitchOpen, setStitchOpen] = useState(false)
+  const [stitchInput, setStitchInput] = useState('')
+  const [stitchStatus, setStitchStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [stitchDesigns, setStitchDesigns] = useState<StitchDesign[]>([])
+  const [stitchError, setStitchError] = useState<string | null>(null)
 
   const githubUserId = (session as unknown as { githubId?: string } | null)?.githubId || ''
 
@@ -655,6 +667,69 @@ export default function EditLabPage() {
       setReverting(false)
     }
   }, [sessionId, runLoad])
+
+  const parsedStitchUrls = useMemo(() => {
+    return stitchInput
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }, [stitchInput])
+
+  const stitchValidationError = useMemo(() => {
+    if (parsedStitchUrls.length === 0) return null
+    if (parsedStitchUrls.length > STITCH_MAX_URLS) {
+      return `Up to ${STITCH_MAX_URLS} URLs per batch.`
+    }
+    const bad = parsedStitchUrls.find((u) => {
+      try {
+        const parsed = new URL(u)
+        return parsed.protocol !== 'https:' && parsed.protocol !== 'http:'
+      } catch {
+        return true
+      }
+    })
+    if (bad) return `Not a valid URL: ${bad.length > 48 ? `${bad.slice(0, 48)}…` : bad}`
+    return null
+  }, [parsedStitchUrls])
+
+  const handleIngestStitch = useCallback(async () => {
+    if (parsedStitchUrls.length === 0 || stitchValidationError) return
+    setStitchStatus('loading')
+    setStitchError(null)
+    try {
+      const data = await ingestStitchUrls(parsedStitchUrls)
+      setStitchDesigns(data.designs)
+      const succeeded = data.designs.filter((d) => !d.error)
+      if (succeeded.length === 0) {
+        const firstErr = data.designs.find((d) => d.error)?.error
+        setStitchError(firstErr || 'All URLs failed to process.')
+        setStitchStatus('error')
+        return
+      }
+      setStitchStatus('success')
+    } catch (e) {
+      let msg: string
+      if (e instanceof StitchApiError) {
+        msg =
+          e.status === 503
+            ? 'Stitch ingestion is currently unavailable.'
+            : e.message
+      } else if (e instanceof Error) {
+        msg = e.message || 'Could not reach the Stitch service.'
+      } else {
+        msg = 'Unknown error ingesting references.'
+      }
+      setStitchError(msg)
+      setStitchStatus('error')
+    }
+  }, [parsedStitchUrls, stitchValidationError])
+
+  const handleClearStitch = useCallback(() => {
+    setStitchStatus('idle')
+    setStitchDesigns([])
+    setStitchError(null)
+    setStitchInput('')
+  }, [])
 
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1450,6 +1525,20 @@ export default function EditLabPage() {
             </>
           )}
 
+          <StitchReferencesPanel
+            open={stitchOpen}
+            onToggle={() => setStitchOpen((v) => !v)}
+            input={stitchInput}
+            onInputChange={setStitchInput}
+            parsedUrls={parsedStitchUrls}
+            validationError={stitchValidationError}
+            status={stitchStatus}
+            designs={stitchDesigns}
+            errorMessage={stitchError}
+            onIngest={handleIngestStitch}
+            onClear={handleClearStitch}
+          />
+
           {toast && (
             <div
               className="rounded-lg px-3 py-2 text-[11px]"
@@ -1578,6 +1667,257 @@ function LastEditCard({
               <>✕ Reject</>
             )}
           </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StitchReferencesPanel({
+  open,
+  onToggle,
+  input,
+  onInputChange,
+  parsedUrls,
+  validationError,
+  status,
+  designs,
+  errorMessage,
+  onIngest,
+  onClear,
+}: {
+  open: boolean
+  onToggle: () => void
+  input: string
+  onInputChange: (value: string) => void
+  parsedUrls: string[]
+  validationError: string | null
+  status: 'idle' | 'loading' | 'success' | 'error'
+  designs: StitchDesign[]
+  errorMessage: string | null
+  onIngest: () => void
+  onClear: () => void
+}) {
+  const succeeded = designs.filter((d) => !d.error)
+  const failed = designs.filter((d) => d.error)
+  const urlCount = parsedUrls.length
+  const urlNoun = urlCount === 1 ? 'reference' : 'references'
+
+  const ingestDisabled =
+    status === 'loading' || urlCount === 0 || !!validationError
+
+  let buttonLabel: string
+  if (status === 'loading') {
+    buttonLabel = `Ingesting ${urlCount} ${urlNoun}…`
+  } else if (status === 'error') {
+    buttonLabel = 'Retry'
+  } else if (urlCount === 0) {
+    buttonLabel = 'Ingest references'
+  } else {
+    buttonLabel = `Ingest ${urlCount} ${urlNoun}`
+  }
+
+  return (
+    <div
+      className="mt-1 pt-4"
+      style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="text-[10px] mono uppercase tracking-wider"
+            style={{ color: 'rgba(255,255,255,0.3)' }}
+          >
+            Stitch references
+          </div>
+          <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            optional
+          </span>
+          {status === 'success' && succeeded.length > 0 && (
+            <span
+              className="text-[10px] px-1.5 py-[1px] rounded-full"
+              style={{
+                background: 'rgba(34,197,94,0.15)',
+                color: 'rgba(187,247,208,0.9)',
+                border: '1px solid rgba(34,197,94,0.22)',
+              }}
+            >
+              {succeeded.length}
+            </span>
+          )}
+        </div>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms' }}
+        >
+          <path d="M2 4l3 3 3-3" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-3 flex flex-col gap-2.5">
+          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            Paste up to {STITCH_MAX_URLS} Google Stitch share URLs, one per line. Reform will
+            capture each as a design reference.
+          </div>
+
+          <textarea
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            placeholder="https://stitch.withgoogle.com/…"
+            rows={3}
+            disabled={status === 'loading'}
+            spellCheck={false}
+            className="w-full rounded-lg px-3 py-2.5 text-[12px] resize-none outline-none disabled:opacity-50"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'white',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}
+          />
+
+          {validationError && (
+            <div className="text-[10px]" style={{ color: 'rgba(254,202,202,0.85)' }}>
+              {validationError}
+            </div>
+          )}
+
+          <button
+            onClick={onIngest}
+            disabled={ingestDisabled}
+            className="w-full py-2 rounded-lg text-[12px] font-medium transition-all disabled:cursor-not-allowed"
+            style={{
+              background: ingestDisabled
+                ? 'rgba(124,140,255,0.08)'
+                : 'rgba(124,140,255,0.18)',
+              border: '1px solid rgba(170,180,255,0.22)',
+              color: ingestDisabled ? 'rgba(255,255,255,0.35)' : 'white',
+            }}
+          >
+            {buttonLabel}
+          </button>
+
+          {status === 'loading' && (
+            <div
+              className="text-[10px] flex items-center gap-1.5"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
+              <div
+                className="w-2.5 h-2.5 rounded-full animate-spin flex-shrink-0"
+                style={{
+                  border: '1.5px solid rgba(124,140,255,0.2)',
+                  borderTopColor: '#7c8cff',
+                }}
+              />
+              Capturing screenshots and extracting design tokens. Up to ~30s per URL.
+            </div>
+          )}
+
+          {status === 'success' && succeeded.length > 0 && (
+            <div
+              className="rounded-lg p-3 flex flex-col gap-2.5"
+              style={{
+                background: 'rgba(34,197,94,0.08)',
+                border: '1px solid rgba(34,197,94,0.22)',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="rgba(187,247,208,0.95)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2 6.5l2.5 2.5L10 3.5" />
+                </svg>
+                <div
+                  className="text-[11px]"
+                  style={{ color: 'rgba(187,247,208,0.95)' }}
+                >
+                  {succeeded.length} Stitch {succeeded.length === 1 ? 'reference' : 'references'} ingested
+                  {failed.length > 0 && (
+                    <span style={{ color: 'rgba(254,202,202,0.85)' }}>
+                      {' · '}
+                      {failed.length} failed
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {succeeded.slice(0, STITCH_MAX_URLS).map((d, i) =>
+                  d.screenshot_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${d.url}-${i}`}
+                      src={d.screenshot_url}
+                      alt={d.summary || 'Stitch reference'}
+                      title={d.summary || d.url}
+                      className="rounded-md object-cover flex-shrink-0"
+                      style={{
+                        width: 54,
+                        height: 54,
+                        background: 'rgba(0,0,0,0.3)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      key={`${d.url}-${i}`}
+                      title={d.url}
+                      className="rounded-md flex-shrink-0 text-[9px] flex items-center justify-center px-1 text-center"
+                      style={{
+                        width: 54,
+                        height: 54,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'rgba(255,255,255,0.4)',
+                      }}
+                    >
+                      no preview
+                    </div>
+                  ),
+                )}
+              </div>
+              <button
+                onClick={onClear}
+                className="text-[10px] self-start underline-offset-2 hover:underline"
+                style={{ color: 'rgba(187,247,208,0.7)' }}
+              >
+                Clear references
+              </button>
+            </div>
+          )}
+
+          {status === 'error' && errorMessage && (
+            <div
+              className="rounded-lg p-3 text-[11px] flex flex-col gap-0.5"
+              style={{
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.22)',
+                color: 'rgba(254,202,202,0.95)',
+              }}
+            >
+              <div className="font-medium">Couldn&rsquo;t ingest references</div>
+              <div style={{ color: 'rgba(254,202,202,0.7)' }}>{errorMessage}</div>
+            </div>
+          )}
         </div>
       )}
     </div>

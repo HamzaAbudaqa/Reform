@@ -6,9 +6,8 @@ import { useSession } from 'next-auth/react'
 import { useProgress } from '@/components/dashboard/ProgressContext'
 import { apiUrl } from '@/lib/api'
 import { setSelectedRepo } from '@/lib/selectedRepo'
-import GateErrorBanner, { type GateErrorData } from '@/components/dashboard/GateError'
+import GateErrorBanner from '@/components/dashboard/GateError'
 
-// Set to true to skip API calls and use mock data for local testing
 const MOCK_MODE = false
 
 const MOCK_DISCOVERY: DiscoveryData = {
@@ -24,13 +23,9 @@ const MOCK_DISCOVERY: DiscoveryData = {
 }
 
 const MOCK_ANALYSIS = {
-  meta: { project_style_goal: 'minimal, dark, developer-focused', description: 'Mock analysis for local testing' },
+  meta: { project_style_goal: 'minimal, developer-focused', description: 'Mock analysis' },
   sources: MOCK_DISCOVERY.selected_for_analysis.map(url => ({ url, page_type: 'landing' })),
-  design_tokens: {
-    colors: { primary: '#7c3aed', background: '#0d0c16', surface: '#13111c', text: '#ffffff' },
-    typography: { fontFamily: 'Inter', baseFontSize: '14px' },
-    spacing: { unit: '4px' },
-  },
+  design_tokens: { colors: { primary: '#0a0a0a', background: '#ffffff', surface: '#fafafa', text: '#0a0a0a' }, typography: { fontFamily: 'Inter', baseFontSize: '14px' }, spacing: { unit: '4px' } },
 }
 
 const FLAVOR_LINES = [
@@ -43,7 +38,7 @@ const FLAVOR_LINES = [
   'Grading spacing with a very harsh eye…',
   'Interrogating CTAs about their intentions…',
   'Sniffing out design systems under the hood…',
-  'Judging color palettes like it’s fashion week…',
+  'Judging color palettes like it\u2019s fashion week…',
   'Taking notes on every hover state…',
   'Weighing typography choices carefully…',
   'Comparing shadows for competitive advantage…',
@@ -52,17 +47,31 @@ const FLAVOR_LINES = [
 ]
 
 const QUESTIONS = [
-  { key: 'product_type', label: 'What are you building?', placeholder: 'e.g., Dashboard, Mobile app, SaaS platform', optional: false },
-  { key: 'industry', label: 'What industry or field?', placeholder: 'e.g., Fintech, Healthcare, Education, DevTools', optional: false },
-  { key: 'target_audience', label: 'Who is your target user?', placeholder: 'e.g., Developers, Small business owners, Students', optional: false },
-  { key: 'core_feature', label: 'What is the core feature?', placeholder: 'e.g., AI code completion, Invoice management', optional: false },
-  { key: 'competitors_known', label: 'Name any competitors you already know', placeholder: 'e.g., Linear, Notion, Stripe, Figma', optional: true },
+  { key: 'product_type', label: 'What are you building?', placeholder: 'e.g. SaaS dashboard, marketplace, mobile app', optional: false },
+  { key: 'industry', label: 'What industry or field?', placeholder: 'e.g. Fintech, Healthcare, Education, DevTools', optional: false },
+  { key: 'target_audience', label: 'Who is your target user?', placeholder: 'e.g. Developers, Small business owners, Students', optional: false },
+  { key: 'core_feature', label: 'What is the core feature?', placeholder: 'e.g. AI code completion, Invoice management', optional: false },
+  { key: 'competitors_known', label: 'Any competitors you already know?', placeholder: 'e.g. Linear, Notion, Stripe, Figma', optional: true },
+]
+
+const NEXT_STEPS = [
+  { num: '01', title: 'Analyze your product type', desc: 'Classify what you\u2019re building and how users interact with it.' },
+  { num: '02', title: 'Find design references', desc: 'Surface relevant competitors and adjacent products worth studying.' },
+  { num: '03', title: 'Generate UI direction', desc: 'Shape a visual and structural direction for the redesign.' },
 ]
 
 interface DiscoveryData {
   project_category: string
   competitors: { name: string; url: string; reason: string; relevance: number }[]
   selected_for_analysis: string[]
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M3.5 7h7M8 4.5 10.5 7 8 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 export default function DiscoveryPage() {
@@ -118,6 +127,7 @@ function DiscoveryPageInner() {
   const currentQ = QUESTIONS[currentStep]
   const isLastStep = currentStep === QUESTIONS.length - 1
   const isOptional = currentQ?.optional
+  const canProceed = isOptional || !!answers[currentQ.key]?.trim()
 
   function handleNext() {
     if (!isOptional && !answers[currentQ.key]?.trim()) return
@@ -156,12 +166,10 @@ function DiscoveryPageInner() {
       setLoadingStatus(`Analyzing ${discoveryData.selected_for_analysis.length} sites with TinyFish...`)
       updateProgress(30)
 
-      // Pass extra discovered URLs as backups in case primary ones are blocked
       const backupUrls = (discoveryData.deduped_urls || []).filter(
         (u: string) => !discoveryData.selected_for_analysis.includes(u)
       )
 
-      // SSE streaming: get live progress as each site completes
       const analyzeUrl = apiUrl('/analyze-competitors-stream')
       const sseBody = JSON.stringify({ urls: discoveryData.selected_for_analysis, style_goal: '', backup_urls: backupUrls })
       let analysis = null
@@ -171,10 +179,7 @@ function DiscoveryPageInner() {
         const sseRes = await fetch(analyzeUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: sseBody })
         if (!sseRes.ok) {
           let detail = ''
-          try {
-            const body = await sseRes.json()
-            detail = body?.detail || ''
-          } catch { /* non-JSON body */ }
+          try { const body = await sseRes.json(); detail = body?.detail || '' } catch {}
           throw new Error(detail || `Analysis stream returned ${sseRes.status}`)
         }
         const reader = sseRes.body?.getReader()
@@ -209,12 +214,9 @@ function DiscoveryPageInner() {
                 } else if (evt.event === 'complete') {
                   analysis = evt.data
                 } else if (evt.event === 'error') {
-                  // Backend surfaced a classified failure (TinyFish wipeout,
-                  // Claude credits, aggregation crash). Capture so it
-                  // propagates instead of the generic "no data" message.
                   streamErrorMessage = evt.message || 'Analysis failed with an unknown error'
                 }
-              } catch { /* skip malformed events */ }
+              } catch {}
             }
           }
         }
@@ -224,20 +226,14 @@ function DiscoveryPageInner() {
         const analyzeRes = await fetch(apiUrl('/analyze-competitors'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: fallbackBody })
         if (!analyzeRes.ok) {
           let detail = ''
-          try {
-            const body = await analyzeRes.json()
-            detail = body?.detail || ''
-          } catch { /* non-JSON body */ }
+          try { const body = await analyzeRes.json(); detail = body?.detail || '' } catch {}
           throw new Error(detail || (streamErr instanceof Error ? streamErr.message : 'Analysis failed'))
         }
         analysis = await analyzeRes.json()
       }
 
       if (!analysis) {
-        throw new Error(
-          streamErrorMessage ||
-          'Analysis stream ended without returning results. This usually means Anthropic credits ran out, TinyFish blocked every URL, or the worker hit the 120s batch timeout — check the Railway backend logs.',
-        )
+        throw new Error(streamErrorMessage || 'Analysis stream ended without returning results.')
       }
 
       updateProgress(95); setLoadingStatus('Analysis complete!')
@@ -251,157 +247,135 @@ function DiscoveryPageInner() {
     }
   }
 
-  // ── COMPLETED ──
-  function handleViewReport() {
-    router.push('/dashboard/simulation')
-  }
+  function handleViewReport() { router.push('/dashboard/simulation') }
 
+  // ─── COMPLETED ───────────────────────────────────────────────────────
   if (completed && discovery) {
     return (
-      <div className="flex items-start justify-center px-4 sm:px-6 py-8 sm:py-12">
-        {/* Success notification popup */}
+      <div className="mx-auto w-full max-w-6xl bg-white px-5 sm:px-6 pb-24 pt-10 sm:pt-14">
         {showNotification && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
-            <div
-              className="rounded-2xl p-8 max-w-md w-full mx-4 text-center animate-in fade-in zoom-in duration-300"
-              style={{
-                background: 'linear-gradient(180deg, rgba(19,17,28,1) 0%, rgba(11,10,18,1) 100%)',
-                border: '1px solid rgba(34,197,94,0.15)',
-                boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 60px rgba(34,197,94,0.08)',
-              }}
-            >
-              <div
-                className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center"
-                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)' }}
-              >
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center px-4" style={{ background: 'rgba(10,10,10,0.38)', backdropFilter: 'blur(6px)' }}>
+            <div className="w-full max-w-md rounded-[24px] bg-white p-8 text-center" style={{ border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 24px 80px rgba(0,0,0,0.12)' }}>
+              <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full" style={{ background: '#f4f4f5' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
               </div>
-              <h2 className="text-xl font-bold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Analysis Complete</h2>
-              <p className="text-[13px] mb-7" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: '1.7' }}>
-                We&apos;ve successfully analyzed your competitors, let us help you beat them.
+              <h2 className="text-[20px] font-semibold text-neutral-950" style={{ letterSpacing: '-0.02em' }}>Analysis complete</h2>
+              <p className="mt-2 mb-7 text-[14px] leading-relaxed text-neutral-500">
+                We&apos;ve mapped your competitive landscape. Let&apos;s put it to work.
               </p>
-              <button
-                onClick={() => setShowNotification(false)}
-                className="btn-primary px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
-              >
-                Let&apos;s Go
+              <button onClick={() => setShowNotification(false)} className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-6 py-2.5 text-[13px] font-medium text-white transition hover:bg-neutral-800">
+                Let&apos;s go <ArrowRightIcon />
               </button>
             </div>
           </div>
         )}
 
-        <div className="w-full max-w-4xl space-y-6">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-3" style={{ letterSpacing: '-0.02em' }}>Project Discovery</h1>
-            <div className="flex items-center justify-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.12)' }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
-                <span className="text-[11px] font-medium" style={{ color: '#86efac' }}>Complete</span>
-              </div>
-              <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{discovery.project_category} · {discovery.competitors.length} competitors</span>
-            </div>
+        <div className="mb-10">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-neutral-950" />
+            <span className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Discovery complete</span>
           </div>
+          <h1 className="max-w-3xl text-[clamp(34px,4.8vw,56px)] font-semibold leading-[1.02] tracking-[-0.04em] text-neutral-950">
+            Your competitive landscape.
+            <br />
+            <span className="text-neutral-300">Mapped and ready.</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-[15px] leading-7 text-neutral-500">
+            {discovery.project_category} · {discovery.competitors.length} competitors discovered, {discovery.selected_for_analysis.length} analyzed in depth.
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-            {/* Project Brief */}
-            <div className="lg:col-span-3 surface-interactive rounded-xl p-6">
-              <h3 className="text-[11px] font-medium uppercase tracking-wider mb-5" style={{ color: 'rgba(255,255,255,0.25)' }}>Project Brief</h3>
-              <div className="space-y-0">
-                {QUESTIONS.map((q) => (
-                  <div key={q.key} className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{q.label}</span>
-                    <span className="text-[13px] font-medium text-white">{answers[q.key] || '—'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Competitors + CTA */}
-            <div className="lg:col-span-2 space-y-5">
-              <div className="surface-interactive rounded-xl p-6">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Top Competitors</h3>
-                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.15)' }}>{discovery.selected_for_analysis.length} analyzed</span>
-                </div>
-                <div className="space-y-0">
-                  {discovery.competitors.slice(0, 3).map((c, i) => (
-                    <div key={i} className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-semibold"
-                          style={{ background: 'rgba(124,58,237,0.08)', color: 'rgba(168,85,247,0.7)' }}
-                        >
-                          {i + 1}
-                        </span>
-                        <span className="text-[13px] font-medium text-white">{c.name}</span>
-                      </div>
-                      <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.15)' }}>{(c.relevance * 100).toFixed(0)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={handleViewReport}
-                className="btn-primary w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
-              >
-                View UI/UX Analysis Report →
-              </button>
-            </div>
-          </div>
-
-          {/* Stats row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            {[
-              { label: 'Competitors Found', value: discovery.competitors.length.toString(), sub: 'in category' },
-              { label: 'Sites Analyzed', value: discovery.selected_for_analysis.length.toString(), sub: 'with TinyFish' },
-              { label: 'Avg Relevance', value: `${Math.round(discovery.competitors.slice(0, 3).reduce((a, c) => a + c.relevance, 0) / 3 * 100)}%`, sub: 'top 3 match' },
-            ].map((stat) => (
-              <div key={stat.label} className="surface-interactive rounded-xl p-5 text-center">
-                <p className="text-2xl font-bold text-white mb-1" style={{ letterSpacing: '-0.02em' }}>{stat.value}</p>
-                <p className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>{stat.label}</p>
-                <p className="text-[9px] mt-0.5" style={{ color: 'rgba(255,255,255,0.12)' }}>{stat.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Full competitor list */}
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>All Discovered Competitors</h3>
-              <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.12)' }}>{discovery.competitors.length} total</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {discovery.competitors.slice(0, 15).map((c, i) => (
-                <div key={i} className="flex items-center justify-between px-5 py-2.5 transition-colors hover:bg-white/[0.02]" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', borderRight: '1px solid rgba(255,255,255,0.03)' }}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[9px] font-mono w-4 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.12)' }}>{i + 1}</span>
-                    <span className="text-[12px] font-medium text-white truncate">{c.name}</span>
-                  </div>
-                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-mono flex-shrink-0 ml-2 transition-colors hover:text-purple-400" style={{ color: 'rgba(168,85,247,0.4)' }}>
-                    {c.url.replace('https://', '').replace(/\/$/, '').substring(0, 20)}
-                  </a>
+        <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-[22px] border border-black/[0.07] bg-white p-6 sm:p-7">
+            <div className="mb-5 text-[10px] uppercase tracking-[0.16em] text-neutral-400">Project brief</div>
+            <dl>
+              {QUESTIONS.map((q, i) => (
+                <div key={q.key} className="flex items-start justify-between gap-6 py-3.5" style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)' }}>
+                  <dt className="text-[13px] text-neutral-500">{q.label}</dt>
+                  <dd className="text-right text-[13px] font-medium text-neutral-950">{answers[q.key] || '—'}</dd>
                 </div>
               ))}
-            </div>
-            {discovery.competitors.length > 15 && (
-              <div className="px-5 py-2 text-center" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.12)' }}>+ {discovery.competitors.length - 15} more competitors discovered</span>
-              </div>
-            )}
+            </dl>
           </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="rounded-[22px] border border-black/[0.07] bg-white p-6 sm:p-7">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-neutral-400">Top competitors</div>
+                <span className="text-[10px] text-neutral-300">{discovery.selected_for_analysis.length} analyzed</span>
+              </div>
+              <ul>
+                {discovery.competitors.slice(0, 3).map((c, i) => (
+                  <li key={c.url} className="flex items-center justify-between gap-4 py-3" style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(0,0,0,0.05)' }}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-neutral-50 font-mono text-[10px] text-neutral-500">{i + 1}</span>
+                      <span className="truncate text-[14px] font-medium text-neutral-950">{c.name}</span>
+                    </div>
+                    <span className="font-mono text-[11px] text-neutral-400">{(c.relevance * 100).toFixed(0)}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <button onClick={handleViewReport} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 px-6 py-3 text-[14px] font-medium text-white transition hover:bg-neutral-800">
+              View UX analysis report <ArrowRightIcon />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          {[
+            { label: 'Competitors found', value: discovery.competitors.length.toString(), sub: 'in category' },
+            { label: 'Sites analyzed', value: discovery.selected_for_analysis.length.toString(), sub: 'via TinyFish' },
+            { label: 'Avg relevance', value: `${Math.round((discovery.competitors.slice(0, 3).reduce((a, c) => a + c.relevance, 0) / 3) * 100)}%`, sub: 'top 3 match' },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-[22px] border border-black/[0.07] bg-white p-6">
+              <div className="text-[28px] font-semibold tracking-[-0.035em] text-neutral-950">{stat.value}</div>
+              <div className="mt-2 text-[12px] font-medium text-neutral-600">{stat.label}</div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">{stat.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-[22px] border border-black/[0.07] bg-white">
+          <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">All discovered competitors</div>
+            <span className="font-mono text-[11px] text-neutral-400">{discovery.competitors.length} total</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {discovery.competitors.slice(0, 15).map((c, i) => {
+              const col = i % 3
+              return (
+                <div key={c.url} className="flex items-center justify-between gap-3 px-6 py-3 transition-colors hover:bg-neutral-50" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)', borderRight: col < 2 ? '1px solid rgba(0,0,0,0.04)' : 'none' }}>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="w-5 flex-shrink-0 font-mono text-[10px] text-neutral-300">{i + 1}</span>
+                    <span className="truncate text-[13px] font-medium text-neutral-950">{c.name}</span>
+                  </div>
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 font-mono text-[10px] text-neutral-400 transition-colors hover:text-neutral-950">
+                    {c.url.replace('https://', '').replace(/\/$/, '').substring(0, 22)}
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+          {discovery.competitors.length > 15 && (
+            <div className="px-6 py-3 text-center text-[11px] text-neutral-400" style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+              + {discovery.competitors.length - 15} more competitors discovered
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
-  // ── LOADING ──
+  // ─── LOADING ─────────────────────────────────────────────────────────
   if (loading) {
     const STAGES = [
-      { label: 'Finding competitors in your space...', est: 10 },
-      { label: 'Analyzing sites with TinyFish...', est: 30 },
-      { label: 'Synthesizing design intelligence...', est: 5 },
+      { label: 'Finding competitors in your space', est: 10 },
+      { label: 'Analyzing sites with TinyFish', est: 30 },
+      { label: 'Synthesizing design intelligence', est: 5 },
     ]
     const currentStage = STAGES[stageIdx] || STAGES[0]
     const completedEst = STAGES.slice(0, stageIdx).reduce((a, s) => a + s.est, 0)
@@ -409,194 +383,228 @@ function DiscoveryPageInner() {
     const progressPct = Math.min(95, ((completedEst + currentStage.est * 0.5) / totalEst) * 100)
 
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="w-full max-w-md px-6">
-          <div className="text-center mb-8">
-            <h2 className="text-xl font-bold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Analyzing Your Space</h2>
-            <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{loadingStatus}</p>
+      <div className="mx-auto w-full max-w-xl bg-white px-6 pb-24 pt-16 sm:pt-24">
+        <div className="text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-950 opacity-40" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-neutral-950" />
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Analyzing</span>
           </div>
-
-          {/* Progress bar */}
-          <div className="w-full h-1.5 rounded-full mb-5" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <div
-              className="h-full rounded-full transition-all duration-1000 ease-out"
-              style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, #7c3aed, #a855f7)', boxShadow: '0 0 12px rgba(168,85,247,0.25)' }}
-            />
-          </div>
-
-          {/* Stages */}
-          <div className="space-y-3">
-            {STAGES.map((stage, i) => {
-              const isDone = i < stageIdx
-              const isActive = i === stageIdx
-              return (
-                <div key={i} className="flex items-center gap-3">
-                  {isDone ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  ) : isActive ? (
-                    <div className="w-3.5 h-3.5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.15)', borderTopColor: '#a855f7' }} />
-                  ) : (
-                    <div className="w-3.5 h-3.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }} />
-                  )}
-                  <span className="text-[12px]" style={{ color: isActive ? 'rgba(255,255,255,0.6)' : isDone ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.15)' }}>
-                    {stage.label}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Per-site live progress */}
-          {siteProgress.length > 0 && (
-            <div className="mt-6 pt-5 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-              <p className="text-[9px] font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                Sites
-              </p>
-              {siteProgress.map(site => {
-                const domain = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
-                const color = site.status === 'ok' ? '#22c55e'
-                  : site.status === 'timeout' || site.status === 'failed' ? '#ef4444'
-                  : '#a855f7'
-                return (
-                  <div key={site.url} className="flex items-center gap-2.5">
-                    {site.status === 'pending' ? (
-                      <div className="w-3 h-3 rounded-full animate-spin flex-shrink-0" style={{ border: '1.5px solid rgba(168,85,247,0.15)', borderTopColor: '#a855f7' }} />
-                    ) : site.status === 'ok' ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
-                    ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    )}
-                    <span className="text-[11px] font-mono truncate" style={{ color: site.status === 'pending' ? 'rgba(255,255,255,0.45)' : site.status === 'ok' ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.5)' }}>
-                      {domain}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          <style>{`
-            @keyframes discoveryFlavorFade {
-              0%   { opacity: 0; transform: translateY(3px); }
-              15%  { opacity: 0.55; transform: translateY(0); }
-              85%  { opacity: 0.55; transform: translateY(0); }
-              100% { opacity: 0; transform: translateY(-3px); }
-            }
-            @keyframes discoveryDotPulse {
-              0%, 100% { opacity: 0.15; }
-              50%      { opacity: 0.5; }
-            }
-          `}</style>
-
-          <div className="mt-8 flex items-center justify-center gap-2 min-h-[18px]">
-            <span
-              className="w-1 h-1 rounded-full"
-              style={{ background: '#a855f7', animation: 'discoveryDotPulse 1.4s ease-in-out infinite' }}
-            />
-            <span
-              className="w-1 h-1 rounded-full"
-              style={{ background: '#a855f7', animation: 'discoveryDotPulse 1.4s ease-in-out infinite 0.2s' }}
-            />
-            <span
-              className="w-1 h-1 rounded-full"
-              style={{ background: '#a855f7', animation: 'discoveryDotPulse 1.4s ease-in-out infinite 0.4s' }}
-            />
-          </div>
-
-          <p
-            key={flavorIdx}
-            className="text-[11px] italic text-center mt-3"
-            style={{
-              color: 'rgba(255,255,255,0.4)',
-              animation: 'discoveryFlavorFade 2.8s ease-in-out',
-              letterSpacing: '0.01em',
-            }}
-          >
-            {FLAVOR_LINES[flavorIdx]}
+          <h1 className="text-[clamp(30px,4vw,44px)] font-semibold leading-[1.05] tracking-[-0.04em] text-neutral-950">
+            Mapping your space.
+          </h1>
+          <p className="mt-4 text-[14px] leading-7 text-neutral-500">
+            {loadingStatus || 'Getting started…'}
           </p>
         </div>
+
+        <div className="mt-10 h-[3px] w-full overflow-hidden rounded-full bg-black/[0.06]">
+          <div className="h-full rounded-full bg-neutral-950 transition-all duration-1000 ease-out" style={{ width: `${progressPct}%` }} />
+        </div>
+
+        <ul className="mt-8 space-y-3.5">
+          {STAGES.map((stage, i) => {
+            const isDone = i < stageIdx
+            const isActive = i === stageIdx
+            return (
+              <li key={i} className="flex items-center gap-3">
+                {isDone ? (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-neutral-950">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </span>
+                ) : isActive ? (
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    <span className="h-4 w-4 animate-spin rounded-full" style={{ border: '2px solid rgba(0,0,0,0.10)', borderTopColor: '#0a0a0a' }} />
+                  </span>
+                ) : (
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    <span className="h-1.5 w-1.5 rounded-full bg-black/[0.12]" />
+                  </span>
+                )}
+                <span className="text-[13px]" style={{ color: isActive ? '#0a0a0a' : isDone ? '#737373' : '#a3a3a3', fontWeight: isActive ? 500 : 400 }}>
+                  {stage.label}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+
+        {siteProgress.length > 0 && (
+          <div className="mt-8 rounded-[22px] border border-black/[0.07] bg-white p-5">
+            <p className="mb-3 text-[10px] uppercase tracking-[0.16em] text-neutral-400">Sites</p>
+            <ul className="space-y-2.5">
+              {siteProgress.map(site => {
+                const domain = site.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+                return (
+                  <li key={site.url} className="flex items-center gap-2.5">
+                    {site.status === 'pending' ? (
+                      <span className="h-3 w-3 flex-shrink-0 animate-spin rounded-full" style={{ border: '1.5px solid rgba(0,0,0,0.10)', borderTopColor: '#0a0a0a' }} />
+                    ) : site.status === 'ok' ? (
+                      <svg className="flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    ) : (
+                      <svg className="flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    )}
+                    <span className="truncate font-mono text-[11px]" style={{ color: site.status === 'pending' ? '#525252' : site.status === 'ok' ? '#0a0a0a' : '#a3a3a3', textDecoration: site.status === 'timeout' || site.status === 'failed' ? 'line-through' : 'none' }}>
+                      {domain}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        <style>{`
+          @keyframes discoveryFlavorFade {
+            0%   { opacity: 0; transform: translateY(3px); }
+            15%  { opacity: 0.6; transform: translateY(0); }
+            85%  { opacity: 0.6; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-3px); }
+          }
+        `}</style>
+        <p key={flavorIdx} className="mt-8 text-center text-[12px] italic text-neutral-400" style={{ animation: 'discoveryFlavorFade 2.8s ease-in-out' }}>
+          {FLAVOR_LINES[flavorIdx]}
+        </p>
       </div>
     )
   }
 
-  // ── QUESTIONNAIRE ──
+  // ─── QUESTIONNAIRE ───────────────────────────────────────────────────
   return (
-    <div className="flex items-center justify-center min-h-[70vh] px-6">
-      <div className="w-full max-w-lg">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Project Discovery</h1>
-          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Answer a few questions to find the best design references.</p>
-        </div>
+    <div className="mx-auto w-full max-w-6xl bg-white px-5 sm:px-6 pb-24 pt-10 sm:pt-14 lg:pt-20">
+      <div className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr] lg:gap-20">
 
-        {/* Progress */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.2)' }}>Question {currentStep + 1} of {QUESTIONS.length}</span>
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.12)' }}>{Math.round(((currentStep + 1) / QUESTIONS.length) * 100)}%</span>
-        </div>
-        <div className="w-full h-[2px] rounded-full mb-8" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((currentStep + 1) / QUESTIONS.length) * 100}%`, background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }} />
-        </div>
+        <section>
+          <div className="mb-6 inline-flex items-center rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">Project discovery</span>
+          </div>
 
-        {/* Question */}
-        <div className="surface-interactive rounded-xl p-6">
-          <label className="block text-white font-semibold text-lg mb-4" style={{ letterSpacing: '-0.01em' }}>{currentQ.label}</label>
-          <input
-            autoFocus
-            type="text"
-            placeholder={currentQ.placeholder}
-            value={answers[currentQ.key] || ''}
-            onChange={(e) => setAnswers({ ...answers, [currentQ.key]: e.target.value })}
-            onKeyDown={handleKeyDown}
-            className="w-full bg-transparent px-4 py-3 text-sm outline-none rounded-lg transition-colors focus:border-purple-500/30"
-            style={{ color: 'white', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
-          />
+          <h1 className="max-w-2xl text-[clamp(38px,5vw,64px)] font-semibold leading-[1.02] tracking-[-0.055em] text-neutral-950">
+            Tell us about your product.
+          </h1>
 
-          <div className="flex items-center gap-3 mt-5">
-            {currentStep > 0 && (
-              <button onClick={() => setCurrentStep(currentStep - 1)} className="btn-ghost px-4 py-2 rounded-lg text-[12px] font-medium">
-                Back
+          <p className="mt-6 max-w-xl text-[16px] leading-8 text-neutral-500">
+            We&apos;ll tailor design direction and references based on your product type.
+          </p>
+
+          <div className="mt-14">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-neutral-400">
+                Step {currentStep + 1} of {QUESTIONS.length}
+              </span>
+              <span className="font-mono text-[11px] text-neutral-300">
+                {Math.round(((currentStep + 1) / QUESTIONS.length) * 100)}%
+              </span>
+            </div>
+            <div className="mt-3 h-[2px] w-full overflow-hidden rounded-full bg-black/[0.05]">
+              <div className="h-full rounded-full bg-neutral-950 transition-all duration-500" style={{ width: `${((currentStep + 1) / QUESTIONS.length) * 100}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-10">
+            <label htmlFor={`question-${currentQ.key}`} className="block text-[22px] font-medium leading-[1.3] tracking-[-0.02em] text-neutral-950">
+              {currentQ.label}
+              {isOptional && <span className="ml-2 text-[12px] font-normal text-neutral-400">· optional</span>}
+            </label>
+            <div className="mt-5 rounded-full border border-black/[0.08] bg-neutral-50 px-5 py-3.5 transition-colors focus-within:border-black/[0.25] focus-within:bg-white">
+              <input
+                id={`question-${currentQ.key}`}
+                autoFocus
+                type="text"
+                placeholder={currentQ.placeholder}
+                value={answers[currentQ.key] || ''}
+                onChange={(e) => setAnswers({ ...answers, [currentQ.key]: e.target.value })}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent text-[15px] text-neutral-950 outline-none placeholder:text-neutral-400"
+              />
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleNext}
+                disabled={!canProceed}
+                className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-6 py-3 text-[14px] font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+              >
+                {isLastStep ? 'Discover competitors' : 'Continue'}
+                <ArrowRightIcon />
               </button>
-            )}
-            <button
-              onClick={handleNext}
-              disabled={!isOptional && !answers[currentQ.key]?.trim()}
-              className="px-5 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.98]"
-              style={{
-                background: (isOptional || answers[currentQ.key]?.trim()) ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.03)',
-                color: (isOptional || answers[currentQ.key]?.trim()) ? 'white' : 'rgba(255,255,255,0.15)',
-                boxShadow: (isOptional || answers[currentQ.key]?.trim()) ? '0 0 20px rgba(124,58,237,0.12)' : 'none',
-              }}
-            >
-              {isLastStep ? 'Discover Competitors' : 'Next'}
-            </button>
-            {isOptional && !answers[currentQ.key]?.trim() && (
-              <button onClick={handleNext} className="text-[11px] font-medium transition-colors hover:text-white/40" style={{ color: 'rgba(255,255,255,0.2)' }}>Skip</button>
-            )}
-            <span className="text-[10px] ml-auto" style={{ color: 'rgba(255,255,255,0.1)' }}>Enter ↵</span>
-          </div>
-        </div>
 
-        {/* Previous answers */}
-        {currentStep > 0 && (
-          <div className="mt-6 space-y-1">
-            {QUESTIONS.slice(0, currentStep).map((q) => (
-              <div key={q.key} className="flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => setCurrentStep(QUESTIONS.indexOf(q))}>
-                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.15)' }}>{q.label}</span>
-                <span className="text-[11px] font-medium text-white">{answers[q.key]}</span>
-              </div>
-            ))}
-          </div>
-        )}
+              {currentStep > 0 && (
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="inline-flex items-center gap-2 rounded-full border border-black/[0.12] bg-white px-5 py-3 text-[14px] font-medium text-neutral-950 transition hover:bg-neutral-50">
+                  Back
+                </button>
+              )}
 
-        {error && (
-          <div className="mt-4">
-            <GateErrorBanner
-              error={null}
-              fallbackMessage={error}
-              onDismiss={() => setError('')}
-            />
+              {isOptional && !answers[currentQ.key]?.trim() && (
+                <button onClick={handleNext} className="text-[13px] font-medium text-neutral-400 transition hover:text-neutral-950">
+                  Skip
+                </button>
+              )}
+
+              <span className="ml-auto hidden text-[11px] text-neutral-300 sm:inline-flex">
+                Press <kbd className="mx-1.5 rounded-md border border-black/[0.1] bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px] text-neutral-600">Enter</kbd> to continue
+              </span>
+            </div>
           </div>
-        )}
+
+          {currentStep > 0 && (
+            <div className="mt-14">
+              <p className="mb-4 text-[10px] uppercase tracking-[0.16em] text-neutral-400">Answered</p>
+              <ul className="space-y-0.5">
+                {QUESTIONS.slice(0, currentStep).map((q) => (
+                  <li key={q.key}>
+                    <button onClick={() => setCurrentStep(QUESTIONS.indexOf(q))} className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-neutral-50">
+                      <span className="text-[12.5px] text-neutral-400">{q.label}</span>
+                      <span className="truncate text-[12.5px] font-medium text-neutral-700">{answers[q.key] || '—'}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-6">
+              <GateErrorBanner error={null} fallbackMessage={error} onDismiss={() => setError('')} />
+            </div>
+          )}
+        </section>
+
+        <aside className="lg:pt-2">
+          <div className="sticky top-[96px] overflow-hidden rounded-[24px] border border-black/[0.07] bg-white">
+            <div className="border-b border-black/[0.06] px-6 py-5">
+              <div className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">What happens next</div>
+            </div>
+
+            <div className="px-6 py-6">
+              <ol className="space-y-7">
+                {NEXT_STEPS.map((step, i) => (
+                  <li key={step.num} className="flex gap-4">
+                    <div className="flex flex-shrink-0 flex-col items-center">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.08] bg-neutral-50 font-mono text-[11px] text-neutral-500">{step.num}</span>
+                      {i < NEXT_STEPS.length - 1 && <span className="mt-2 h-8 w-px bg-black/[0.07]" />}
+                    </div>
+                    <div className="pt-1">
+                      <div className="text-[14px] font-medium text-neutral-950" style={{ letterSpacing: '-0.01em' }}>{step.title}</div>
+                      <p className="mt-1.5 text-[12.5px] leading-5 text-neutral-500">{step.desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="border-t border-black/[0.06] px-6 py-5">
+              <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-neutral-500">Time</div>
+              <p className="text-[12.5px] leading-5 text-neutral-500">
+                A full discovery run typically takes about two minutes. You can refine answers anytime before continuing.
+              </p>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   )

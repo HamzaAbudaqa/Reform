@@ -26,7 +26,7 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isAfter = variant === 'after'
-  const accent = isAfter ? '#a855f7' : 'rgba(100,100,120,0.6)'
+  const accent = isAfter ? '#0a0a0a' : 'rgba(100,100,120,0.6)'
 
   useEffect(() => {
     let mounted = true
@@ -80,10 +80,10 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
       {/* Mock app UI */}
       <div className="flex-1 flex" style={{ background: isAfter ? '#0a0918' : '#f5f5f7', minHeight: '160px', fontSize: '7px' }}>
         {/* Sidebar */}
-        <div className="flex flex-col py-2 px-1.5" style={{ width: isAfter ? '52px' : '60px', borderRight: `1px solid ${isAfter ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.08)'}`, background: isAfter ? 'rgba(255,255,255,0.01)' : '#ffffff' }}>
+        <div className="flex flex-col py-2 px-1.5" style={{ width: isAfter ? '52px' : '60px', borderRight: `1px solid ${isAfter ? 'rgba(0,0,0,0.04)' : 'rgba(0,0,0,0.08)'}`, background: isAfter ? 'rgba(0,0,0,0.01)' : '#ffffff' }}>
           <div className="flex items-center gap-1 px-1 mb-2">
-            <div className="w-2 h-2 rounded-sm" style={{ background: isAfter ? '#7c3aed' : '#d1d5db' }} />
-            <span style={{ color: isAfter ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.4)', fontSize: '6px', fontWeight: 600 }}>App</span>
+            <div className="w-2 h-2 rounded-sm" style={{ background: isAfter ? '#0a0a0a' : '#d1d5db' }} />
+            <span style={{ color: isAfter ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.4)', fontSize: '6px', fontWeight: 600 }}>App</span>
           </div>
           {sidebarItems.map((item) => {
             const isTarget = step?.target === `sidebar:${item}`
@@ -93,11 +93,11 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
                 className="px-1.5 py-[3px] rounded transition-all duration-300"
                 style={{
                   background: isTarget && phase !== 'idle'
-                    ? (isAfter ? 'rgba(168,85,247,0.15)' : 'rgba(0,0,0,0.06)')
+                    ? (isAfter ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.06)')
                     : 'transparent',
                   color: isTarget && phase !== 'idle'
-                    ? (isAfter ? 'rgba(168,85,247,0.9)' : 'rgba(0,0,0,0.8)')
-                    : (isAfter ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.35)'),
+                    ? (isAfter ? 'rgba(0,0,0,0.9)' : 'rgba(0,0,0,0.8)')
+                    : (isAfter ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.35)'),
                   fontSize: '6px',
                 }}
               >
@@ -120,8 +120,8 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
                     className="transition-all duration-300"
                     style={{
                       color: isTarget && phase !== 'idle'
-                        ? (isAfter ? '#a855f7' : 'rgba(0,0,0,0.9)')
-                        : (isAfter ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)'),
+                        ? (isAfter ? '#0a0a0a' : 'rgba(0,0,0,0.9)')
+                        : (isAfter ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.3)'),
                       fontSize: '6px',
                       fontWeight: isTarget ? 600 : 400,
                     }}
@@ -135,11 +135,11 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
               <div
                 className="rounded px-1.5 py-[2px] transition-all duration-300"
                 style={{
-                  background: step?.target === 'cta:deploy' && phase !== 'idle' ? 'rgba(168,85,247,0.5)' : 'rgba(168,85,247,0.2)',
-                  color: 'white',
+                  background: step?.target === 'cta:deploy' && phase !== 'idle' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)',
+                  color: '#0a0a0a',
                   fontSize: '6px',
                   fontWeight: 600,
-                  boxShadow: step?.target === 'cta:deploy' && phase === 'clicking' ? '0 0 12px rgba(168,85,247,0.4)' : 'none',
+                  boxShadow: step?.target === 'cta:deploy' && phase === 'clicking' ? '0 0 12px rgba(0,0,0,0.4)' : 'none',
                 }}
               >
                 Deploy
@@ -157,16 +157,16 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
                   className="rounded p-1.5 transition-all duration-300"
                   style={{
                     background: isTarget && phase !== 'idle'
-                      ? (isAfter ? 'rgba(168,85,247,0.06)' : 'rgba(0,0,0,0.04)')
-                      : (isAfter ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'),
+                      ? (isAfter ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.04)')
+                      : (isAfter ? 'rgba(0,0,0,0.02)' : 'rgba(0,0,0,0.02)'),
                     border: isTarget && phase !== 'idle'
-                      ? `1px solid ${isAfter ? 'rgba(168,85,247,0.2)' : 'rgba(0,0,0,0.1)'}`
-                      : `1px solid ${isAfter ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)'}`,
+                      ? `1px solid ${isAfter ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.1)'}`
+                      : `1px solid ${isAfter ? 'rgba(0,0,0,0.03)' : 'rgba(0,0,0,0.04)'}`,
                   }}
                 >
                   <div className="flex gap-1">
-                    <div className="h-1 rounded-full flex-1" style={{ background: isAfter ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)', width: `${50 + n * 10}%` }} />
-                    <div className="h-1 rounded-full" style={{ background: isAfter ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', width: '20%' }} />
+                    <div className="h-1 rounded-full flex-1" style={{ background: isAfter ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.06)', width: `${50 + n * 10}%` }} />
+                    <div className="h-1 rounded-full" style={{ background: isAfter ? 'rgba(0,0,0,0.03)' : 'rgba(0,0,0,0.03)', width: '20%' }} />
                   </div>
                 </div>
               )
@@ -179,7 +179,7 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
                   <div style={{ fontSize: '6px', color: 'rgba(0,0,0,0.5)', marginBottom: '3px' }}>Confirm deployment?</div>
                   <div className="flex gap-1 justify-center">
                     <div className="rounded px-1.5 py-[2px]" style={{ background: 'rgba(0,0,0,0.04)', fontSize: '5px', color: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,0,0,0.1)' }}>Cancel</div>
-                    <div className="rounded px-1.5 py-[2px]" style={{ background: '#2563eb', fontSize: '5px', color: 'white' }}>Confirm</div>
+                    <div className="rounded px-1.5 py-[2px]" style={{ background: '#2563eb', fontSize: '5px', color: '#0a0a0a' }}>Confirm</div>
                   </div>
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
       />
 
       {/* Step indicator + caption */}
-      <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderTop: `1px solid ${isAfter ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)'}`, background: isAfter ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.02)' }}>
+      <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderTop: `1px solid ${isAfter ? 'rgba(0,0,0,0.04)' : 'rgba(0,0,0,0.06)'}`, background: isAfter ? 'rgba(0,0,0,0.01)' : 'rgba(0,0,0,0.02)' }}>
         <div className="flex items-center gap-1">
           {steps.map((_, i) => (
             <div
@@ -218,19 +218,19 @@ export default function FlowDemoCard({ steps, caption, variant }: FlowDemoCardPr
               style={{
                 width: i === currentStep ? '10px' : '3px',
                 height: '3px',
-                background: i === currentStep ? accent : (isAfter ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                background: i === currentStep ? accent : (isAfter ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.1)'),
               }}
             />
           ))}
         </div>
-        <span style={{ fontSize: '6px', color: isAfter ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)' }}>
+        <span style={{ fontSize: '6px', color: isAfter ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.3)' }}>
           {step?.label}
         </span>
       </div>
 
       {/* Caption */}
       {caption && (
-        <div className="text-center py-1" style={{ fontSize: '9px', color: isAfter ? 'rgba(168,85,247,0.6)' : 'rgba(0,0,0,0.35)' }}>
+        <div className="text-center py-1" style={{ fontSize: '9px', color: isAfter ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.35)' }}>
           {caption}
         </div>
       )}

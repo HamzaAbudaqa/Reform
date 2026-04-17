@@ -153,13 +153,26 @@ function PipelineProgress({
     if (typeof mapped === 'number') currentIdx = mapped
   }
 
-  // Cap at 98% so the bar never looks "done" until the pipeline actually
-  // finishes (which unmounts this component).
-  const timeProgress = Math.min(98, (elapsedMs / (PIPELINE_TOTAL_DURATION * 1000)) * 100)
+  // Stage-based progress: every completed stage bumps the bar by 1/N, and the
+  // active stage contributes fractional progress based on how far through
+  // its estimated duration we are. Purely time-based progress was dishonest
+  // because stage durations are inaccurate — the bar would max out while
+  // the pipeline was still grinding through "Render preview".
+  const stageCount = PIPELINE_STAGES.length
+  const elapsedInCurrentStage = Math.max(0, elapsed - (acc - PIPELINE_STAGES[currentIdx].duration))
+  const currentStageRatio = Math.min(0.95, elapsedInCurrentStage / PIPELINE_STAGES[currentIdx].duration)
+  // Cap the per-stage contribution so the bar never reaches 100% until the
+  // pipeline actually completes and the component unmounts.
+  const stageProgress = Math.min(95, ((currentIdx + currentStageRatio) / stageCount) * 100)
   const overallProgress = typeof overrideProgress === 'number'
-    ? Math.max(timeProgress, Math.min(98, overrideProgress))
-    : timeProgress
-  const remaining = Math.max(0, PIPELINE_TOTAL_DURATION - elapsed)
+    ? Math.max(stageProgress, Math.min(95, overrideProgress))
+    : stageProgress
+  // Estimate remaining from the stages that haven't started + time left in
+  // the current stage. When elapsed exceeds the full estimate (pipeline is
+  // taking longer than expected), surface "finishing up" instead of 0s.
+  const stagesLeft = PIPELINE_STAGES.slice(currentIdx + 1).reduce((s, st) => s + st.duration, 0)
+  const timeLeftInCurrentStage = Math.max(0, PIPELINE_STAGES[currentIdx].duration - elapsedInCurrentStage)
+  const remaining = stagesLeft + timeLeftInCurrentStage
 
   const tipIdx = Math.floor(elapsed / 8) % PIPELINE_TIPS.length
   const tip = PIPELINE_TIPS[tipIdx]
@@ -178,10 +191,10 @@ function PipelineProgress({
       {resumeLabel && (
         <div
           className="rounded-lg px-3 py-2 mb-5 flex items-center gap-2"
-          style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}
+          style={{ background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.15)' }}
         >
-          <div className="w-3 h-3 rounded-full animate-spin flex-shrink-0" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
-          <span className="text-[11px]" style={{ color: 'rgba(168,85,247,0.8)' }}>{resumeLabel}</span>
+          <div className="w-3 h-3 rounded-full animate-spin flex-shrink-0" style={{ border: '2px solid rgba(0,0,0,0.2)', borderTopColor: '#0a0a0a' }} />
+          <span className="text-[11px]" style={{ color: 'rgba(0,0,0,0.8)' }}>{resumeLabel}</span>
         </div>
       )}
       <div className="flex items-center justify-center flex-wrap gap-y-2 mb-6">
@@ -190,48 +203,52 @@ function PipelineProgress({
           const isActive = i === currentIdx
           return (
             <div key={s.key} className="flex items-center">
-              {i > 0 && <div className="w-4 h-px" style={{ background: isDone || isActive ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.06)' }} />}
+              {i > 0 && <div className="w-4 h-px" style={{ background: isDone || isActive ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.06)' }} />}
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{
-                background: isActive ? 'rgba(168,85,247,0.12)' : isDone ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${isActive ? 'rgba(168,85,247,0.3)' : isDone ? 'rgba(34,197,94,0.18)' : 'rgba(255,255,255,0.05)'}`,
+                background: isActive ? 'rgba(0,0,0,0.12)' : isDone ? 'rgba(34,197,94,0.08)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${isActive ? 'rgba(0,0,0,0.3)' : isDone ? 'rgba(34,197,94,0.18)' : 'rgba(0,0,0,0.05)'}`,
               }}>
                 {isDone ? (
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 ) : isActive ? (
-                  <div className="w-2.5 h-2.5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+                  <div className="w-2.5 h-2.5 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.2)', borderTopColor: '#0a0a0a' }} />
                 ) : (
-                  <div className="w-2 h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'rgba(0,0,0,0.1)' }} />
                 )}
-                <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: isActive ? 'rgba(168,85,247,0.9)' : isDone ? 'rgba(34,197,94,0.7)' : 'rgba(255,255,255,0.25)' }}>{s.label}</span>
+                <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: isActive ? 'rgba(0,0,0,0.9)' : isDone ? 'rgba(34,197,94,0.7)' : 'rgba(0,0,0,0.25)' }}>{s.label}</span>
               </div>
             </div>
           )
         })}
       </div>
 
-      <div className="w-full h-1.5 rounded-full mb-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+      <div className="w-full h-1.5 rounded-full mb-3" style={{ background: 'rgba(0,0,0,0.04)' }}>
         <div
           className="h-full rounded-full transition-[width] duration-300 ease-out"
           style={{
             width: `${Math.max(2, overallProgress)}%`,
-            background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-            boxShadow: '0 0 14px rgba(168,85,247,0.35)',
+            background: 'linear-gradient(90deg, #0a0a0a, #0a0a0a)',
+            boxShadow: '0 0 14px rgba(0,0,0,0.35)',
           }}
         />
       </div>
 
-      <div className="flex items-center justify-between text-[11px] font-mono mb-6" style={{ color: 'rgba(255,255,255,0.3)' }}>
+      <div className="flex items-center justify-between text-[11px] font-mono mb-6" style={{ color: 'rgba(0,0,0,0.3)' }}>
         <span>{fmt(elapsed)} elapsed</span>
-        <span>~{fmt(remaining)} remaining</span>
+        <span>
+          {currentIdx === PIPELINE_STAGES.length - 1 && remaining < 10
+            ? 'finishing up…'
+            : `~${fmt(remaining)} remaining`}
+        </span>
       </div>
 
       <div className="rounded-xl px-4 py-3 mb-5" style={{
-        background: 'rgba(255,255,255,0.015)',
-        border: '1px solid rgba(255,255,255,0.05)',
+        background: 'rgba(0,0,0,0.015)',
+        border: '1px solid rgba(0,0,0,0.05)',
       }}>
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#a855f7' }} />
-          <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#0a0a0a' }} />
+          <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.35)' }}>
             {repoName || 'reform pipeline'}
           </span>
         </div>
@@ -241,9 +258,9 @@ function PipelineProgress({
               {line.done ? (
                 <span style={{ color: '#22c55e' }}>✓</span>
               ) : (
-                <span className="animate-pulse" style={{ color: '#a855f7' }}>◐</span>
+                <span className="animate-pulse" style={{ color: '#0a0a0a' }}>◐</span>
               )}
-              <span style={{ color: line.done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.78)' }}>
+              <span style={{ color: line.done ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.78)' }}>
                 {line.text}
               </span>
             </div>
@@ -252,8 +269,8 @@ function PipelineProgress({
       </div>
 
       <div className="text-center">
-        <p className="text-[11px] leading-relaxed max-w-md mx-auto" style={{ color: 'rgba(255,255,255,0.42)' }}>
-          <span style={{ color: 'rgba(168,85,247,0.65)' }}>◆ </span>
+        <p className="text-[11px] leading-relaxed max-w-md mx-auto" style={{ color: 'rgba(0,0,0,0.42)' }}>
+          <span style={{ color: 'rgba(0,0,0,0.65)' }}>◆ </span>
           {tip}
         </p>
       </div>
@@ -265,19 +282,19 @@ function BrowserFrame({ children, label, accent = false }: { children: React.Rea
   return (
     <div className="flex flex-col gap-2 flex-1 min-w-0">
       <div className="flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full" style={{ background: accent ? '#a855f7' : 'rgba(255,255,255,0.2)' }} />
-        <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>{label}</span>
+        <div className="w-1.5 h-1.5 rounded-full" style={{ background: accent ? '#0a0a0a' : 'rgba(0,0,0,0.2)' }} />
+        <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.35)' }}>{label}</span>
       </div>
       <div className="rounded-xl overflow-hidden flex flex-col" style={{
-        border: accent ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: accent ? '0 0 40px rgba(124,58,237,0.15)' : '0 20px 60px rgba(0,0,0,0.5)',
+        border: accent ? '1px solid rgba(0,0,0,0.3)' : '1px solid rgba(0,0,0,0.06)',
+        boxShadow: accent ? '0 0 40px rgba(0,0,0,0.15)' : '0 20px 60px rgba(0,0,0,0.5)',
       }}>
-        <div className="border-b px-3 py-1.5 flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="border-b px-3 py-1.5 flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.03)', borderColor: 'rgba(0,0,0,0.06)' }}>
           <div className="w-2 h-2 rounded-full bg-red-500/60" />
           <div className="w-2 h-2 rounded-full bg-amber-500/60" />
           <div className="w-2 h-2 rounded-full bg-emerald-500/60" />
         </div>
-        <div style={{ background: '#0d0c16', minHeight: '280px' }}>
+        <div style={{ background: '#fafafa', minHeight: '280px' }}>
           {children}
         </div>
       </div>
@@ -707,7 +724,7 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
       {/* Ambient background glow */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="absolute w-72 h-72 rounded-full transition-all duration-300" style={{
-          background: `radial-gradient(circle, rgba(124,58,237,${isActive ? 0.06 + intensity * 0.12 : phase === 'thinking' ? 0.06 : 0.03}) 0%, transparent 70%)`,
+          background: `radial-gradient(circle, rgba(0,0,0,${isActive ? 0.06 + intensity * 0.12 : phase === 'thinking' ? 0.06 : 0.03}) 0%, transparent 70%)`,
           transform: `scale(${isActive ? 1 + intensity * 0.3 : 1})`,
         }} />
       </div>
@@ -719,7 +736,7 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
           className="absolute -inset-3 transition-all duration-150"
           style={{
             borderRadius: '50%',
-            background: `radial-gradient(circle, rgba(124,58,237,${isActive ? 0.08 + intensity * 0.15 : 0.03}), transparent 70%)`,
+            background: `radial-gradient(circle, rgba(0,0,0,${isActive ? 0.08 + intensity * 0.15 : 0.03}), transparent 70%)`,
             filter: `blur(${isActive ? 12 + intensity * 15 : 8}px)`,
             transform: `scale(${1 + intensity * 0.4})`,
           }}
@@ -736,15 +753,15 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
                 ? 'pulseThink 1.5s ease-in-out infinite'
                 : 'blobIdle 4s ease-in-out infinite',
             background: isActive
-              ? `radial-gradient(circle at ${45 + intensity * 10}% ${40 - intensity * 5}%, rgba(168,85,247,${0.4 + intensity * 0.5}), rgba(124,58,237,${0.2 + intensity * 0.3}) 50%, rgba(59,130,246,${0.08 + intensity * 0.15}))`
+              ? `radial-gradient(circle at ${45 + intensity * 10}% ${40 - intensity * 5}%, rgba(0,0,0,${0.4 + intensity * 0.5}), rgba(0,0,0,${0.2 + intensity * 0.3}) 50%, rgba(59,130,246,${0.08 + intensity * 0.15}))`
               : phase === 'thinking'
-                ? 'radial-gradient(circle at 45% 40%, rgba(168,85,247,0.35), rgba(124,58,237,0.18) 55%, rgba(59,130,246,0.08))'
-                : 'radial-gradient(circle at 45% 40%, rgba(168,85,247,0.25), rgba(124,58,237,0.12) 55%, rgba(59,130,246,0.06))',
+                ? 'radial-gradient(circle at 45% 40%, rgba(0,0,0,0.35), rgba(0,0,0,0.18) 55%, rgba(59,130,246,0.08))'
+                : 'radial-gradient(circle at 45% 40%, rgba(0,0,0,0.25), rgba(0,0,0,0.12) 55%, rgba(59,130,246,0.06))',
             boxShadow: isActive
-              ? `0 0 ${20 + intensity * 50}px rgba(124,58,237,${0.15 + intensity * 0.4}), 0 0 ${40 + intensity * 80}px rgba(124,58,237,${0.05 + intensity * 0.15}), inset 0 0 ${20 + intensity * 30}px rgba(168,85,247,${0.1 + intensity * 0.25})`
+              ? `0 0 ${20 + intensity * 50}px rgba(0,0,0,${0.15 + intensity * 0.4}), 0 0 ${40 + intensity * 80}px rgba(0,0,0,${0.05 + intensity * 0.15}), inset 0 0 ${20 + intensity * 30}px rgba(0,0,0,${0.1 + intensity * 0.25})`
               : phase === 'thinking'
-                ? '0 0 40px rgba(124,58,237,0.15), 0 0 80px rgba(124,58,237,0.06), inset 0 0 25px rgba(168,85,247,0.12)'
-                : '0 0 30px rgba(124,58,237,0.1), 0 0 60px rgba(124,58,237,0.04), inset 0 0 20px rgba(168,85,247,0.08)',
+                ? '0 0 40px rgba(0,0,0,0.15), 0 0 80px rgba(0,0,0,0.06), inset 0 0 25px rgba(0,0,0,0.12)'
+                : '0 0 30px rgba(0,0,0,0.1), 0 0 60px rgba(0,0,0,0.04), inset 0 0 20px rgba(0,0,0,0.08)',
             transform: `scale(${orbScale})`,
             transition: 'transform 80ms ease-out, box-shadow 150ms ease-out',
           }}
@@ -752,13 +769,13 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
       </div>
 
       {/* Phase label */}
-      <p className="text-[14px] font-semibold text-white mb-0.5 relative">{phaseLabel}</p>
+      <p className="text-[14px] font-semibold text-neutral-950 mb-0.5 relative">{phaseLabel}</p>
 
       {/* Typewriter text */}
       <p className="text-[12px] mt-2 max-w-sm text-center relative leading-relaxed" style={{
-        color: phase === 'listening' ? 'rgba(255,255,255,0.5)'
-          : (phase === 'responding' || phase === 'thinking') ? 'rgba(168,85,247,0.6)'
-          : 'rgba(255,255,255,0.2)',
+        color: phase === 'listening' ? 'rgba(0,0,0,0.5)'
+          : (phase === 'responding' || phase === 'thinking') ? 'rgba(0,0,0,0.6)'
+          : 'rgba(0,0,0,0.2)',
         minHeight: '18px',
       }}>
         {displayText || phaseSub}
@@ -771,9 +788,9 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
       {/* Interpreted intent card — shown in ready phase */}
       {phase === 'ready' && interpretedIntent && (
         <div className="relative mt-2 mb-3 w-full max-w-sm">
-          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
-            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(168,85,247,0.6)' }}>Interpreted intent</p>
-            <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>{interpretedIntent}</p>
+          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.15)' }}>
+            <p className="text-[9px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(0,0,0,0.6)' }}>Interpreted intent</p>
+            <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(0,0,0,0.75)' }}>{interpretedIntent}</p>
           </div>
         </div>
       )}
@@ -784,7 +801,7 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
           <button
             onClick={() => { setPendingPrompt(null); setInterpretedIntent(''); setPhase('idle'); startListening() }}
             className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-medium transition-all active:scale-95"
-            style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ color: 'rgba(0,0,0,0.5)', border: '1px solid rgba(0,0,0,0.08)' }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -795,7 +812,7 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
           <button
             onClick={() => { if (pendingPrompt) onFinalPrompt(pendingPrompt) }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: 'white', boxShadow: '0 0 25px rgba(124,58,237,0.25)' }}
+            style={{ background: 'linear-gradient(135deg, #0a0a0a, #0a0a0a)', color: '#ffffff', boxShadow: '0 0 25px rgba(0,0,0,0.25)' }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
             Send to AI
@@ -811,14 +828,14 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
             border: '1px solid rgba(239,68,68,0.2)',
             boxShadow: '0 0 15px rgba(239,68,68,0.1)',
           } : phase === 'thinking' ? {
-            background: 'rgba(168,85,247,0.05)',
-            color: 'rgba(168,85,247,0.4)',
-            border: '1px solid rgba(168,85,247,0.1)',
+            background: 'rgba(0,0,0,0.05)',
+            color: 'rgba(0,0,0,0.4)',
+            border: '1px solid rgba(0,0,0,0.1)',
           } : {
-            background: 'rgba(168,85,247,0.1)',
-            color: 'rgba(168,85,247,0.8)',
-            border: '1px solid rgba(168,85,247,0.2)',
-            boxShadow: '0 0 15px rgba(124,58,237,0.1)',
+            background: 'rgba(0,0,0,0.1)',
+            color: 'rgba(0,0,0,0.8)',
+            border: '1px solid rgba(0,0,0,0.2)',
+            boxShadow: '0 0 15px rgba(0,0,0,0.1)',
           }}
         >
           {phase === 'listening' || phase === 'responding' ? (
@@ -828,7 +845,7 @@ function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }
             </>
           ) : phase === 'thinking' ? (
             <>
-              <div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.15)', borderTopColor: 'rgba(168,85,247,0.5)' }} />
+              <div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
               Processing...
             </>
           ) : (
@@ -1476,7 +1493,7 @@ function TransformPage() {
             access_token: session?.accessToken || null,
             design_intelligence: analysis || null,
             user_intent: userIntent,
-            max_pages: 5,
+            max_pages: 50,
             github_user_id: session?.githubId,
             ux_lab_findings: uxLabFindings,
           }),
@@ -1846,15 +1863,15 @@ function TransformPage() {
           />
         ) : (
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-3">UI Transformation</h1>
+            <h1 className="text-3xl font-bold text-neutral-950 mb-3">UI Transformation</h1>
             <div className="flex items-center justify-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 6px rgba(168,85,247,0.4)' }} />
-                <span className="text-[11px] font-medium" style={{ color: 'rgba(168,85,247,0.8)' }}>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.15)' }}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#0a0a0a', boxShadow: '0 0 6px rgba(0,0,0,0.4)' }} />
+                <span className="text-[11px] font-medium" style={{ color: 'rgba(0,0,0,0.8)' }}>
                   {pipelineStep === 'idle' ? 'Select a Repository' : 'Processing...'}
                 </span>
               </div>
-              <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{repoName || `${analysis?.sources?.length || 0} sources analyzed`}</span>
+              <span className="text-[12px]" style={{ color: 'rgba(0,0,0,0.25)' }}>{repoName || `${analysis?.sources?.length || 0} sources analyzed`}</span>
             </div>
           </div>
         )}
@@ -1862,66 +1879,66 @@ function TransformPage() {
         {/* ── REPO PICKER ── */}
         {pipelineStep === 'idle' && (
           <div className="max-w-2xl mx-auto">
-            <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-3 px-5 pt-5 pb-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.12)' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></svg>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.12)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></svg>
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold text-[14px]">Select a Repository</h3>
-                  <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{session ? 'Choose a repo to analyze and improve' : 'Sign in with GitHub to see your repos'}</p>
+                  <h3 className="text-neutral-950 font-semibold text-[14px]">Select a Repository</h3>
+                  <p className="text-[11px]" style={{ color: 'rgba(0,0,0,0.3)' }}>{session ? 'Choose a repo to analyze and improve' : 'Sign in with GitHub to see your repos'}</p>
                 </div>
               </div>
               <div className="px-5 pb-3">
-                <input type="text" value={repoSearch} onChange={e => setRepoSearch(e.target.value)} placeholder="Search repositories..." className="w-full bg-transparent px-4 py-2.5 text-[13px] outline-none rounded-lg text-white placeholder:text-white/20" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }} />
+                <input type="text" value={repoSearch} onChange={e => setRepoSearch(e.target.value)} placeholder="Search repositories..." className="w-full bg-transparent px-4 py-2.5 text-[13px] outline-none rounded-lg text-neutral-950 placeholder:text-neutral-950/20" style={{ border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(0,0,0,0.02)' }} />
               </div>
               <div className="px-5 pb-3">
-                <input type="text" value={userIntent} onChange={e => setUserIntent(e.target.value)} placeholder="Optional: describe your goal (e.g., 'make it more modern')" className="w-full bg-transparent px-4 py-2 text-[12px] outline-none rounded-lg text-white/60 placeholder:text-white/15" style={{ border: '1px solid rgba(255,255,255,0.04)' }} />
+                <input type="text" value={userIntent} onChange={e => setUserIntent(e.target.value)} placeholder="Optional: describe your goal (e.g., 'make it more modern')" className="w-full bg-transparent px-4 py-2 text-[12px] outline-none rounded-lg text-neutral-950/60 placeholder:text-neutral-950/15" style={{ border: '1px solid rgba(0,0,0,0.04)' }} />
               </div>
               <div className="px-5 pb-4">
-                <p className="text-[10px] font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>Mode</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(0,0,0,0.3)' }}>Mode</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setRunMode('stable')}
                     className="flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg text-left transition-all"
                     style={{
-                      background: runMode === 'stable' ? 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(109,40,217,0.12))' : 'rgba(255,255,255,0.02)',
-                      border: runMode === 'stable' ? '1px solid rgba(124,58,237,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                      boxShadow: runMode === 'stable' ? '0 0 20px rgba(124,58,237,0.15)' : 'none',
+                      background: runMode === 'stable' ? 'linear-gradient(135deg, rgba(0,0,0,0.18), rgba(109,40,217,0.12))' : 'rgba(0,0,0,0.02)',
+                      border: runMode === 'stable' ? '1px solid rgba(0,0,0,0.4)' : '1px solid rgba(0,0,0,0.06)',
+                      boxShadow: runMode === 'stable' ? '0 0 20px rgba(0,0,0,0.15)' : 'none',
                     }}
                   >
-                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'stable' ? 'white' : 'rgba(255,255,255,0.7)' }}>Run Again (Stable)</span>
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Reuses prior competitor intel for consistency.</span>
+                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'stable' ? 'white' : 'rgba(0,0,0,0.7)' }}>Run Again (Stable)</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.4)' }}>Reuses prior competitor intel for consistency.</span>
                   </button>
                   <button
                     onClick={() => setRunMode('explore')}
                     className="flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg text-left transition-all"
                     style={{
-                      background: runMode === 'explore' ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
-                      border: runMode === 'explore' ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                      background: runMode === 'explore' ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.02)',
+                      border: runMode === 'explore' ? '1px solid rgba(0,0,0,0.3)' : '1px solid rgba(0,0,0,0.06)',
                     }}
                   >
-                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'explore' ? 'white' : 'rgba(255,255,255,0.7)' }}>Explore New Version</span>
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Fresh competitor discovery. Takes longer, may differ.</span>
+                    <span className="text-[12px] font-semibold" style={{ color: runMode === 'explore' ? 'white' : 'rgba(0,0,0,0.7)' }}>Explore New Version</span>
+                    <span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.4)' }}>Fresh competitor discovery. Takes longer, may differ.</span>
                   </button>
                 </div>
               </div>
-              <div style={{ maxHeight: '340px', overflowY: 'auto', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                {session && loadingRepos && <div className="flex items-center justify-center py-8"><div className="w-6 h-6 rounded-full animate-spin mr-3" style={{ border: '2px solid rgba(255,255,255,0.06)', borderTopColor: '#a855f7' }} /><span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading repos...</span></div>}
+              <div style={{ maxHeight: '340px', overflowY: 'auto', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+                {session && loadingRepos && <div className="flex items-center justify-center py-8"><div className="w-6 h-6 rounded-full animate-spin mr-3" style={{ border: '2px solid rgba(0,0,0,0.06)', borderTopColor: '#0a0a0a' }} /><span className="text-[13px]" style={{ color: 'rgba(0,0,0,0.3)' }}>Loading repos...</span></div>}
                 {session && !loadingRepos && filteredRepos.map(repo => (
-                  <div key={repo.id} onClick={() => runPipeline(repo, { mode: runMode })} className="flex items-center justify-between px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.04]" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div key={repo.id} onClick={() => runPipeline(repo, { mode: runMode })} className="flex items-center justify-between px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.04]" style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
                     <div className="flex items-center gap-3 min-w-0">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.25)"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" /></svg>
-                      <div className="min-w-0"><span className="text-[13px] text-white/70 truncate block">{repo.full_name}</span><span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{repo.language || 'Unknown'}</span></div>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.25)"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" /></svg>
+                      <div className="min-w-0"><span className="text-[13px] text-neutral-950/70 truncate block">{repo.full_name}</span><span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.2)' }}>{repo.language || 'Unknown'}</span></div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {repo.private && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }}>Private</span>}
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M5.5 3.5L9 7l-3.5 3.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.2" strokeLinecap="round" /></svg>
+                      {repo.private && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,0,0,0.06)', color: 'rgba(0,0,0,0.3)' }}>Private</span>}
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M5.5 3.5L9 7l-3.5 3.5" stroke="rgba(0,0,0,0.2)" strokeWidth="1.2" strokeLinecap="round" /></svg>
                     </div>
                   </div>
                 ))}
-                {session && !loadingRepos && filteredRepos.length === 0 && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.25)' }}>No repositories found</p></div>}
-                {!session && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Sign in with GitHub to see your repositories</p></div>}
+                {session && !loadingRepos && filteredRepos.length === 0 && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(0,0,0,0.25)' }}>No repositories found</p></div>}
+                {!session && <div className="px-5 py-8 text-center"><p className="text-[13px]" style={{ color: 'rgba(0,0,0,0.35)' }}>Sign in with GitHub to see your repositories</p></div>}
               </div>
             </div>
             {(gateError || pipelineError) && (
@@ -1950,15 +1967,15 @@ function TransformPage() {
         {/* ── RE-RENDER PROGRESS BAR ── */}
         {reRendering && (
           <div className="max-w-xl mx-auto mb-6">
-            <div className="rounded-xl p-5" style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.12)' }}>
+            <div className="rounded-xl p-5" style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.12)' }}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
-                <span className="text-[13px] font-medium text-white">Reapplying your changes</span>
+                <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.2)', borderTopColor: '#0a0a0a' }} />
+                <span className="text-[13px] font-medium text-neutral-950">Reapplying your changes</span>
               </div>
-              <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <div className="h-full rounded-full animate-pulse" style={{ width: '60%', background: 'linear-gradient(90deg, #7c3aed, #a855f7)', boxShadow: '0 0 12px rgba(168,85,247,0.3)' }} />
+              <div className="w-full h-1.5 rounded-full mb-2" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                <div className="h-full rounded-full animate-pulse" style={{ width: '60%', background: 'linear-gradient(90deg, #0a0a0a, #0a0a0a)', boxShadow: '0 0 12px rgba(0,0,0,0.3)' }} />
               </div>
-              <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{reRenderStatus}</p>
+              <p className="text-[11px]" style={{ color: 'rgba(0,0,0,0.35)' }}>{reRenderStatus}</p>
             </div>
           </div>
         )}
@@ -1976,14 +1993,14 @@ function TransformPage() {
           </div>
         )}
         {/* ── TOOLBAR — only show when pipeline is complete ── */}
-        {pipelineStep === 'complete' && <div className="rounded-xl max-w-5xl mx-auto overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+        {pipelineStep === 'complete' && <div className="rounded-xl max-w-5xl mx-auto overflow-hidden" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
           {changeStatus === 'pending' ? (
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.12)' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.12)' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 </div>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Review Changes</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.25)' }}>Review Changes</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {!canAutofix ? (
@@ -1991,20 +2008,20 @@ function TransformPage() {
               ) : (
                 <>
                   <div className="flex items-center gap-1.5 pr-1">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>
                     <select
                       value={publishTarget}
                       onChange={e => setPublishTarget(e.target.value)}
                       disabled={publishLoading || branchesLoading}
                       title="Where to publish the approved changes"
                       className="bg-transparent text-[11px] font-medium rounded-md px-2 py-1.5 outline-none cursor-pointer transition-colors hover:bg-white/[0.03] focus:bg-white/[0.04]"
-                      style={{ color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.08)', maxWidth: 220 }}
+                      style={{ color: 'rgba(0,0,0,0.7)', border: '1px solid rgba(0,0,0,0.08)', maxWidth: 220 }}
                     >
-                      <option value="__new__" style={{ background: '#0d0c16', color: 'rgba(255,255,255,0.9)' }}>
+                      <option value="__new__" style={{ background: '#fafafa', color: 'rgba(0,0,0,0.9)' }}>
                         ✨ New branch {repoBranch ? `(from ${repoBranch})` : ''}
                       </option>
                       {repoBranches.length > 0 && (
-                        <option disabled style={{ background: '#0d0c16', color: 'rgba(255,255,255,0.3)' }}>
+                        <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
                           ──── Commit directly to ────
                         </option>
                       )}
@@ -2014,15 +2031,15 @@ function TransformPage() {
                           value={b.name}
                           disabled={b.protected}
                           style={{
-                            background: '#0d0c16',
-                            color: b.protected ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.9)',
+                            background: '#fafafa',
+                            color: b.protected ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.9)',
                           }}
                         >
                           {b.name}{b.protected ? ' 🔒 (protected — direct commits blocked)' : ''}
                         </option>
                       ))}
                       {branchesLoading && (
-                        <option disabled style={{ background: '#0d0c16', color: 'rgba(255,255,255,0.3)' }}>
+                        <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
                           Loading branches…
                         </option>
                       )}
@@ -2053,11 +2070,11 @@ function TransformPage() {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   Keep Original
                 </button>
-                <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <div className="w-px h-5 mx-1" style={{ background: 'rgba(0,0,0,0.06)' }} />
                 <button
                   onClick={openSuggestModal}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold transition-all hover:bg-purple-500/[0.06] active:scale-[0.97]"
-                  style={{ color: 'rgba(168,85,247,0.7)', border: '1px solid rgba(168,85,247,0.12)' }}
+                  style={{ color: 'rgba(0,0,0,0.7)', border: '1px solid rgba(0,0,0,0.12)' }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                   Refine Further
@@ -2074,7 +2091,7 @@ function TransformPage() {
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   )}
                 </div>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.2)' }}>Review Changes</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.2)' }}>Review Changes</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
@@ -2090,26 +2107,26 @@ function TransformPage() {
 
         {/* ── Generated Code ── */}
         {transform?.code && (
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.2)', background: 'rgba(13,12,22,0.6)', backdropFilter: 'blur(12px)' }}>
             {/* Header row */}
-            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: codeOpen ? '1px solid rgba(124,58,237,0.15)' : 'none' }}>
+            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: codeOpen ? '1px solid rgba(0,0,0,0.15)' : 'none' }}>
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.5)' }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: '#0a0a0a', boxShadow: '0 0 8px rgba(0,0,0,0.5)' }} />
                 <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'rgba(204,195,216,0.6)' }}>Generated Component Code</span>
-                <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.15)', color: 'rgba(168,85,247,0.8)' }}>React + Tailwind</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(0,0,0,0.15)', color: 'rgba(0,0,0,0.8)' }}>React + Tailwind</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopyCode}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-medium transition-all"
-                  style={{ background: codeCopied ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)', border: codeCopied ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,255,255,0.07)', color: codeCopied ? '#86efac' : 'rgba(204,195,216,0.5)' }}
+                  style={{ background: codeCopied ? 'rgba(34,197,94,0.15)' : 'rgba(0,0,0,0.04)', border: codeCopied ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(0,0,0,0.07)', color: codeCopied ? '#86efac' : 'rgba(204,195,216,0.5)' }}
                 >
                   {codeCopied ? '✓ Copied' : 'Copy'}
                 </button>
                 <button
                   onClick={() => setCodeOpen(!codeOpen)}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-medium transition-all"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(204,195,216,0.5)' }}
+                  style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.07)', color: 'rgba(204,195,216,0.5)' }}
                 >
                   {codeOpen ? 'Collapse' : 'View Code'}
                 </button>
@@ -2130,16 +2147,16 @@ function TransformPage() {
         {pipelineStep === 'complete' && <div className="flex justify-center">
           <button
             onClick={() => router.push('/dashboard/edit-lab')}
-            className="flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm text-white transition-all active:scale-[0.98]"
-            style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)', boxShadow: '0 0 30px rgba(124,58,237,0.08)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.2)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.12)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.25)' }}
+            className="flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm text-neutral-950 transition-all active:scale-[0.98]"
+            style={{ background: 'rgba(0,0,0,0.12)', border: '1px solid rgba(0,0,0,0.25)', boxShadow: '0 0 30px rgba(0,0,0,0.08)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = 'rgba(0,0,0,0.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.12)'; e.currentTarget.style.borderColor = 'rgba(0,0,0,0.25)' }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
             </svg>
             <span>Open The Lab</span>
-            <span style={{ color: 'rgba(168,85,247,0.5)', fontSize: '12px' }}>→</span>
+            <span style={{ color: 'rgba(0,0,0,0.5)', fontSize: '12px' }}>→</span>
           </button>
         </div>}
       </div>
@@ -2156,25 +2173,25 @@ function TransformPage() {
             background: 'rgba(19,17,28,0.6)',
             backdropFilter: 'blur(24px) saturate(1.5)',
             WebkitBackdropFilter: 'blur(24px) saturate(1.5)',
-            border: scOpen ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
-            boxShadow: scOpen ? '0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.08)' : 'none',
+            border: scOpen ? '1px solid rgba(0,0,0,0.08)' : '1px solid transparent',
+            boxShadow: scOpen ? '0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.08)' : 'none',
           }}
         >
           <div className="p-4 overflow-y-auto" style={{ maxHeight: '360px' }}>
-            <div className="flex items-center justify-between mb-3 pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div className="flex items-center justify-between mb-3 pb-2.5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
               <div className="flex items-center gap-2">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><line x1="1.05" y1="12" x2="7" y2="12" /><line x1="17.01" y1="12" x2="22.96" y2="12" /></svg>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>Source Control</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><line x1="1.05" y1="12" x2="7" y2="12" /><line x1="17.01" y1="12" x2="22.96" y2="12" /></svg>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.35)' }}>Source Control</span>
               </div>
-              <span className="text-[9px] font-mono px-2 py-0.5 rounded-full" style={{ color: 'rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>{commits.length}</span>
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded-full" style={{ color: 'rgba(0,0,0,0.2)', background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}>{commits.length}</span>
             </div>
             {commits.length === 0 ? (
               <div className="text-center py-6">
-                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.15)' }}>No commits yet</span>
+                <span className="text-[11px]" style={{ color: 'rgba(0,0,0,0.15)' }}>No commits yet</span>
               </div>
             ) : (
             <div className="relative">
-              <div className="absolute left-[4px] top-1 bottom-1 w-[1.5px]" style={{ background: 'linear-gradient(to bottom, rgba(168,85,247,0.4), rgba(59,130,246,0.3), rgba(239,68,68,0.3), rgba(245,158,11,0.3), rgba(168,85,247,0.1))' }} />
+              <div className="absolute left-[4px] top-1 bottom-1 w-[1.5px]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(59,130,246,0.3), rgba(239,68,68,0.3), rgba(245,158,11,0.3), rgba(0,0,0,0.1))' }} />
               {commits.map((c, i) => (
                 <div
                   key={i}
@@ -2182,8 +2199,8 @@ function TransformPage() {
                   className="flex items-center gap-2.5 py-[6px] relative cursor-pointer rounded-lg px-1.5 -mx-1 transition-all hover:bg-white/[0.03]"
                 >
                   <div className="w-[9px] h-[9px] rounded-full flex-shrink-0 z-10" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}40` }} />
-                  <span className="text-[9px] font-mono w-11 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>{c.hash}</span>
-                  <span className="text-[10px] text-white/60 font-medium flex-1 truncate">{c.msg}</span>
+                  <span className="text-[9px] font-mono w-11 flex-shrink-0" style={{ color: 'rgba(0,0,0,0.2)' }}>{c.hash}</span>
+                  <span className="text-[10px] text-neutral-950/60 font-medium flex-1 truncate">{c.msg}</span>
                   {c.status === 'rejected' && (
                     <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: 'rgba(239,68,68,0.1)', color: 'rgba(239,68,68,0.7)', border: '1px solid rgba(239,68,68,0.15)' }}>
                       REJECTED
@@ -2209,42 +2226,42 @@ function TransformPage() {
             background: 'rgba(19,17,28,0.6)',
             backdropFilter: 'blur(20px) saturate(1.4)',
             WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(124,58,237,0.06)',
+            border: '1px solid rgba(0,0,0,0.08)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(0,0,0,0.06)',
           }}
         >
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: scOpen ? '#22c55e' : '#a855f7', boxShadow: scOpen ? '0 0 6px rgba(34,197,94,0.4)' : '0 0 6px rgba(168,85,247,0.3)' }} />
-          <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>Source Control</span>
-          <span className="text-[8px] transition-transform duration-300" style={{ color: 'rgba(255,255,255,0.2)', transform: scOpen ? 'rotate(180deg)' : '' }}>&#9650;</span>
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: scOpen ? '#22c55e' : '#0a0a0a', boxShadow: scOpen ? '0 0 6px rgba(34,197,94,0.4)' : '0 0 6px rgba(0,0,0,0.3)' }} />
+          <span className="text-[10px] font-medium" style={{ color: 'rgba(0,0,0,0.45)' }}>Source Control</span>
+          <span className="text-[8px] transition-transform duration-300" style={{ color: 'rgba(0,0,0,0.2)', transform: scOpen ? 'rotate(180deg)' : '' }}>&#9650;</span>
         </button>
       </div>}
 
       {/* ── SUGGEST EDIT MODAL ── */}
       {showSuggestModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)' }}>
-          <div className="rounded-2xl w-full max-w-3xl mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.1)' }}>
+          <div className="rounded-2xl w-full max-w-3xl mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.1)' }}>
             {/* Accent top bar */}
-            <div className="h-[2px]" style={{ background: 'linear-gradient(90deg, #7c3aed, #a855f7, rgba(168,85,247,0.2), transparent)' }} />
+            <div className="h-[2px]" style={{ background: 'linear-gradient(90deg, #0a0a0a, #0a0a0a, rgba(0,0,0,0.2), transparent)' }} />
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.15)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                 </div>
                 <div>
-                  <h2 className="text-white font-semibold text-[15px]">Suggest an Edit</h2>
-                  <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Describe the change you&apos;d like Reform to apply</p>
+                  <h2 className="text-neutral-950 font-semibold text-[15px]">Suggest an Edit</h2>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'rgba(0,0,0,0.3)' }}>Describe the change you&apos;d like Reform to apply</p>
                 </div>
               </div>
-              <button onClick={() => setShowSuggestModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <button onClick={() => setShowSuggestModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(0,0,0,0.3)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
 
             {/* Text Prompt (voice prompt removed) */}
             <div className="px-6 pt-5 pb-6">
-              <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}>
                 <div className="p-5">
                   <textarea
                     autoFocus
@@ -2252,14 +2269,14 @@ function TransformPage() {
                     onChange={e => setSuggestion(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleSuggestSubmit() }}
                     placeholder="Describe what you'd like to change... (e.g., 'Make the sidebar collapsible', 'Change the accent color to blue')"
-                    className="w-full bg-transparent text-[13px] text-white outline-none resize-none placeholder:text-white/20"
+                    className="w-full bg-transparent text-[13px] text-neutral-950 outline-none resize-none placeholder:text-neutral-950/20"
                     style={{ minHeight: '140px', lineHeight: '1.7' }}
                   />
-                  <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span className="text-[10px] flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.15)' }}>
-                      <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>&#8984;</kbd>
+                  <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+                    <span className="text-[10px] flex items-center gap-1.5" style={{ color: 'rgba(0,0,0,0.15)' }}>
+                      <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)' }}>&#8984;</kbd>
                       <span>+</span>
-                      <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>Enter</kbd>
+                      <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono" style={{ background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)' }}>Enter</kbd>
                       <span className="ml-1">to submit</span>
                     </span>
                     <button
@@ -2267,9 +2284,9 @@ function TransformPage() {
                       disabled={!suggestion.trim()}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-semibold transition-all active:scale-[0.97]"
                       style={{
-                        background: suggestion.trim() ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.04)',
-                        color: suggestion.trim() ? 'white' : 'rgba(255,255,255,0.2)',
-                        boxShadow: suggestion.trim() ? '0 0 25px rgba(124,58,237,0.25)' : 'none',
+                        background: suggestion.trim() ? 'linear-gradient(135deg, #0a0a0a, #0a0a0a)' : 'rgba(0,0,0,0.04)',
+                        color: suggestion.trim() ? 'white' : 'rgba(0,0,0,0.2)',
+                        boxShadow: suggestion.trim() ? '0 0 25px rgba(0,0,0,0.25)' : 'none',
                       }}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
@@ -2286,18 +2303,18 @@ function TransformPage() {
       {/* ── COMMIT DETAIL MODAL ── */}
       {selectedCommit && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)' }}>
-          <div className="rounded-2xl max-w-lg w-full mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: `0 24px 80px rgba(0,0,0,0.6), 0 0 40px ${selectedCommit.color}12` }}>
+          <div className="rounded-2xl max-w-lg w-full mx-4 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ background: 'linear-gradient(180deg, rgba(30,27,46,1) 0%, rgba(19,17,28,1) 100%)', border: '1px solid rgba(0,0,0,0.08)', boxShadow: `0 24px 80px rgba(0,0,0,0.6), 0 0 40px ${selectedCommit.color}12` }}>
             {/* Accent top bar */}
             <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${selectedCommit.color}80, ${selectedCommit.color}20, transparent)` }} />
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${selectedCommit.color}15`, border: `1px solid ${selectedCommit.color}25` }}>
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: selectedCommit.color, boxShadow: `0 0 10px ${selectedCommit.color}50` }} />
                 </div>
                 <div>
-                  <span className="text-[11px] font-mono block" style={{ color: 'rgba(255,255,255,0.3)' }}>{selectedCommit.hash}</span>
+                  <span className="text-[11px] font-mono block" style={{ color: 'rgba(0,0,0,0.3)' }}>{selectedCommit.hash}</span>
                   {selectedCommit.status === 'rejected' && (
                     <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#ef4444' }}>Rejected</span>
                   )}
@@ -2309,7 +2326,7 @@ function TransformPage() {
                   )}
                 </div>
               </div>
-              <button onClick={() => setSelectedCommit(null)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <button onClick={() => setSelectedCommit(null)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/[0.05]" style={{ color: 'rgba(0,0,0,0.3)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
@@ -2317,31 +2334,31 @@ function TransformPage() {
             <div className="px-6 py-5 space-y-4">
               {/* Commit message */}
               <div>
-                <span className="text-[9px] font-medium uppercase tracking-wider block mb-1.5" style={{ color: 'rgba(255,255,255,0.2)' }}>Commit Message</span>
-                <h3 className="text-white font-semibold text-[15px] leading-snug">{selectedCommit.msg}</h3>
+                <span className="text-[9px] font-medium uppercase tracking-wider block mb-1.5" style={{ color: 'rgba(0,0,0,0.2)' }}>Commit Message</span>
+                <h3 className="text-neutral-950 font-semibold text-[15px] leading-snug">{selectedCommit.msg}</h3>
               </div>
 
               {/* Suggestion text if available */}
               {selectedCommit.suggestion && (
-                <div className="rounded-xl p-4" style={{ background: 'rgba(168,85,247,0.03)', border: '1px solid rgba(168,85,247,0.08)' }}>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.08)' }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(168,85,247,0.5)' }}>Suggested Edit</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.5)' }}>Suggested Edit</span>
                   </div>
-                  <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{selectedCommit.suggestion}</p>
+                  <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(0,0,0,0.55)' }}>{selectedCommit.suggestion}</p>
                 </div>
               )}
 
               {/* Code preview if available */}
               {selectedCommit.code && (
-                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.2)' }}>Code Preview</span>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.08)', color: 'rgba(168,85,247,0.5)' }}>
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div className="px-4 py-2 flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                    <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.2)' }}>Code Preview</span>
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.5)' }}>
                       {selectedCommit.code.split('\n').length} lines
                     </span>
                   </div>
-                  <pre className="p-4 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.45)', maxHeight: '200px' }}>
+                  <pre className="p-4 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(0,0,0,0.45)', maxHeight: '200px' }}>
                     {selectedCommit.code.slice(0, 500)}{selectedCommit.code.length > 500 ? '\n...' : ''}
                   </pre>
                 </div>
@@ -2349,7 +2366,7 @@ function TransformPage() {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+            <div className="flex items-center gap-2 px-6 py-4" style={{ borderTop: '1px solid rgba(0,0,0,0.06)', background: 'rgba(0,0,0,0.01)' }}>
               {(selectedCommit.status === 'rejected' || selectedCommit.status === 'pending') && (
                 <button
                   onClick={() => handleAcceptRejected(selectedCommit)}
@@ -2363,7 +2380,7 @@ function TransformPage() {
               <button
                 onClick={() => setSelectedCommit(null)}
                 className="px-5 py-2.5 rounded-xl text-[11px] font-medium transition-colors hover:bg-white/[0.03]"
-                style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
+                style={{ color: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,0,0,0.08)' }}
               >
                 Close
               </button>
@@ -2385,9 +2402,9 @@ function TransformPage() {
               border: `1px solid ${
                 refineStatus.status === 'success' ? 'rgba(34,197,94,0.2)'
                 : refineStatus.status === 'error' ? 'rgba(239,68,68,0.2)'
-                : 'rgba(168,85,247,0.2)'
+                : 'rgba(0,0,0,0.2)'
               }`,
-              boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.1)',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.1)',
               backdropFilter: 'blur(20px)',
             }}
           >
@@ -2397,19 +2414,19 @@ function TransformPage() {
                 ? 'linear-gradient(90deg, #22c55e, rgba(34,197,94,0.2), transparent)'
                 : refineStatus.status === 'error'
                 ? 'linear-gradient(90deg, #ef4444, rgba(239,68,68,0.2), transparent)'
-                : 'linear-gradient(90deg, #a855f7, rgba(168,85,247,0.2), transparent)',
+                : 'linear-gradient(90deg, #0a0a0a, rgba(0,0,0,0.2), transparent)',
             }} />
 
             <div className="flex items-start gap-3 px-4 py-3.5">
               {/* Status icon */}
               <div className="flex-shrink-0 mt-0.5">
                 {refineStatus.status === 'pending' && (
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(168,85,247,0.1)' }}>
-                    <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', boxShadow: '0 0 6px rgba(168,85,247,0.5)' }} />
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.1)' }}>
+                    <div className="w-2 h-2 rounded-full" style={{ background: '#0a0a0a', boxShadow: '0 0 6px rgba(0,0,0,0.5)' }} />
                   </div>
                 )}
                 {refineStatus.status === 'processing' && (
-                  <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.15)', borderTopColor: '#a855f7' }} />
+                  <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.15)', borderTopColor: '#0a0a0a' }} />
                 )}
                 {refineStatus.status === 'success' && (
                   <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.1)' }}>
@@ -2425,7 +2442,7 @@ function TransformPage() {
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-white leading-tight">
+                <p className="text-[12px] font-semibold text-neutral-950 leading-tight">
                   {refineStatus.status === 'pending' && 'Change pending'}
                   {refineStatus.status === 'processing' && 'Applying changes'}
                   {refineStatus.status === 'success' && 'Changes applied'}
@@ -2436,7 +2453,7 @@ function TransformPage() {
                     ? 'rgba(252,165,165,0.7)'
                     : refineStatus.status === 'success'
                     ? 'rgba(134,239,172,0.7)'
-                    : 'rgba(255,255,255,0.4)',
+                    : 'rgba(0,0,0,0.4)',
                 }}>
                   {refineStatus.status === 'error'
                     ? (refineStatus.error || 'Something went wrong')
@@ -2453,7 +2470,7 @@ function TransformPage() {
               <button
                 onClick={() => setRefineStatus(null)}
                 className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-white/[0.05]"
-                style={{ color: 'rgba(255,255,255,0.25)' }}
+                style={{ color: 'rgba(0,0,0,0.25)' }}
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>

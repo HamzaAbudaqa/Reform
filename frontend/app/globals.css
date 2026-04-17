@@ -89,12 +89,8 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(circle at top, rgba(124, 140, 255, 0.12), transparent 36%),
-    radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.04), transparent 24%),
-    linear-gradient(180deg, #06080d 0%, #05070c 48%, #04060a 100%);
-  background-color: var(--color-bg);
-  color: var(--color-text-primary);
+  background: #ffffff;
+  color: #0a0a0a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: 'rlig' 1, 'calt' 1;
@@ -130,31 +126,8 @@ a {
     isolation: isolate;
   }
 
-  .app-shell::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-      linear-gradient(to right, transparent 0, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px)),
-      linear-gradient(to bottom, transparent 0, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px));
-    background-size: 72px 72px;
-    mask-image: radial-gradient(circle at center, black 45%, transparent 100%);
-    opacity: 0.45;
-    z-index: -2;
-  }
-
-  .app-shell::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at top, rgba(124, 140, 255, 0.14), transparent 32%),
-      radial-gradient(circle at 80% 18%, rgba(100, 116, 255, 0.06), transparent 22%),
-      radial-gradient(circle at 50% 100%, rgba(14, 165, 233, 0.05), transparent 28%);
-    z-index: -3;
-  }
+  .app-shell::before { content: none; }
+  .app-shell::after { content: none; }
 
   /* ── Surface panel — primary card surface ── */
   .surface-panel {

@@ -15,15 +15,15 @@ function ScoreChip({ page }: { page: TransformedPageData }) {
   const b = page.breakdown
   return (
     <div className="group relative">
-      <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        Score: <span className="font-semibold text-white/70">{page.score}</span>/100
+      <span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.35)' }}>
+        Score: <span className="font-semibold text-neutral-950/70">{page.score}</span>/100
       </span>
       {b && (
         <div
           className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block w-64 rounded-lg p-3 pointer-events-none"
-          style={{ background: 'rgba(15,13,22,0.98)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' }}
+          style={{ background: 'rgba(15,13,22,0.98)', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' }}
         >
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'rgba(168,85,247,0.7)' }}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'rgba(0,0,0,0.7)' }}>
             Score Breakdown
           </div>
           <div className="space-y-1.5">
@@ -31,17 +31,17 @@ function ScoreChip({ page }: { page: TransformedPageData }) {
               const v = (b as unknown as Record<string, number>)[key] ?? 0
               return (
                 <div key={key} className="flex items-center gap-2 text-[10px]">
-                  <span className="w-20 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <span className="w-20 flex-shrink-0" style={{ color: 'rgba(0,0,0,0.5)' }}>{label}</span>
+                  <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
                     <div className="h-full rounded-full" style={{ width: `${v}%`, background: v >= 80 ? '#22c55e' : v >= 60 ? '#f59e0b' : '#ef4444' }} />
                   </div>
-                  <span className="w-6 text-right font-mono" style={{ color: 'rgba(255,255,255,0.6)' }}>{v}</span>
+                  <span className="w-6 text-right font-mono" style={{ color: 'rgba(0,0,0,0.6)' }}>{v}</span>
                 </div>
               )
             })}
           </div>
           {page.reasoning && (
-            <p className="text-[10px] mt-2.5 pt-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}>
+            <p className="text-[10px] mt-2.5 pt-2.5" style={{ borderTop: '1px solid rgba(0,0,0,0.06)', color: 'rgba(0,0,0,0.45)' }}>
               {page.reasoning}
             </p>
           )}
@@ -70,20 +70,20 @@ export default function RepoWideImprovementsPanel({
       {hasGlobalSummary && (
         <div
           className="rounded-xl p-5"
-          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}
         >
           <div className="flex items-center gap-2 mb-4">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
-            <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.3)' }}>
               Repo-wide Transformation Summary
             </h3>
           </div>
           <ul className="space-y-2">
             {result.global_summary.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                <svg className="mt-0.5 flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <li key={i} className="flex items-start gap-2.5 text-[12px]" style={{ color: 'rgba(0,0,0,0.5)' }}>
+                <svg className="mt-0.5 flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 {item}
@@ -97,13 +97,13 @@ export default function RepoWideImprovementsPanel({
       {hasHighQuality && (
         <div
           className="rounded-xl p-5"
-          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}
         >
           <div className="flex items-center gap-2 mb-4">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-            <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.3)' }}>
               Pages Already High Quality — Preserved As-Is
             </h3>
           </div>
@@ -123,7 +123,7 @@ export default function RepoWideImprovementsPanel({
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-medium text-white/60 truncate">{page.page_name}</p>
+                  <p className="text-[12px] font-medium text-neutral-950/60 truncate">{page.page_name}</p>
                   <ScoreChip page={page} />
                 </div>
               </div>
@@ -146,7 +146,7 @@ export default function RepoWideImprovementsPanel({
               Deferred — Need Work But Skipped This Run
             </h3>
           </div>
-          <p className="text-[11px] mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-[11px] mb-3" style={{ color: 'rgba(0,0,0,0.4)' }}>
             These pages are below the quality threshold but were not processed because the per-run page limit was reached. Re-run the pipeline to transform them.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -165,7 +165,7 @@ export default function RepoWideImprovementsPanel({
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-medium text-white/60 truncate">{page.page_name}</p>
+                  <p className="text-[12px] font-medium text-neutral-950/60 truncate">{page.page_name}</p>
                   <ScoreChip page={page} />
                 </div>
               </div>
@@ -177,12 +177,12 @@ export default function RepoWideImprovementsPanel({
       {/* Preservation notice */}
       <div
         className="rounded-lg px-4 py-3 flex items-center gap-2.5"
-        style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.04)' }}
+        style={{ background: 'rgba(0,0,0,0.015)', border: '1px solid rgba(0,0,0,0.04)' }}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        <p className="text-[10px]" style={{ color: 'rgba(0,0,0,0.25)' }}>
           All business logic, state management, API calls, and user interactions were preserved across every page. Only the presentation layer was upgraded.
         </p>
       </div>

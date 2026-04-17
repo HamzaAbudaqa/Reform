@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import FindingsShelf from '@/components/uxlab/FindingsShelf'
+import FindingsSidebar from '@/components/uxlab/FindingsSidebar'
 import { apiUrl } from '@/lib/api'
 import { getSelectedRepo, setSelectedRepo } from '@/lib/selectedRepo'
 import { safeSetTransformCache } from '@/lib/transformCache'
@@ -161,8 +161,8 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (next: bool
         width: '36px',
         height: '20px',
         borderRadius: '10px',
-        background: checked ? 'rgba(124,58,237,0.8)' : 'rgba(54,51,63,0.8)',
-        border: checked ? '1px solid rgba(124,58,237,0.9)' : '1px solid rgba(74,68,85,0.4)',
+        background: checked ? '#0a0a0a' : 'rgba(0,0,0,0.12)',
+        border: checked ? '1px solid #0a0a0a' : '1px solid rgba(0,0,0,0.18)',
       }}
     >
       <span
@@ -188,15 +188,12 @@ function PreviewPlaceholder({
   message: string
 }) {
   return (
-    <div
-      className="flex h-full min-h-[280px] items-center justify-center px-6 text-center"
-      style={{ color: 'rgba(204,195,216,0.42)' }}
-    >
+    <div className="flex h-full min-h-[280px] items-center justify-center px-6 text-center">
       <div className="space-y-2">
-        <div className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(204,195,216,0.32)' }}>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
           {title}
         </div>
-        <div className="text-sm">{message}</div>
+        <div className="text-[14px] text-neutral-500">{message}</div>
       </div>
     </div>
   )
@@ -339,6 +336,7 @@ function AnnotatedPreview({
   return (
     <div
       ref={outerRef}
+      id="preview-scroll-container"
       style={{
         position: 'relative',
         width: '100%',
@@ -889,7 +887,7 @@ export default function SimulationPage() {
         access_token: (session as { accessToken?: string } | null)?.accessToken ?? null,
         design_intelligence: designIntelligence,
         user_intent: '',
-        max_pages: 5,
+        max_pages: 50,
         github_user_id: (session?.user as { id?: string } | null | undefined)?.id ?? '',
         ux_lab_findings: queuedFindings.length > 0 ? queuedFindings : null,
       }),
@@ -912,10 +910,12 @@ export default function SimulationPage() {
   const handleScrollToAnnotation = useCallback((findingId: string) => {
     const finding = findings.find((entry) => entry.id === findingId)
     if (!finding) return
-    const panel = document.getElementById('before-panel')
-    if (!panel) return
-    panel.scrollTo({
-      top: (finding.annotation.yPercent / 100) * panel.scrollHeight,
+    const container = document.getElementById('preview-scroll-container')
+    if (!container) return
+    const targetY = (finding.annotation.yPercent / 100) * container.scrollHeight
+    const centered = targetY - container.clientHeight / 2
+    container.scrollTo({
+      top: Math.max(0, centered),
       behavior: 'smooth',
     })
   }, [findings])
@@ -933,62 +933,36 @@ export default function SimulationPage() {
             : undefined
 
   return (
-    <div
-      className="flex h-[calc(100vh-124px)] flex-col gap-1.5 px-4 py-2 sm:h-[calc(100vh-88px)] sm:px-8"
-      style={
-        {
-          '--topbar-height': '88px',
-          '--toolbar-height': '56px',
-        } as React.CSSProperties
-      }
-    >
-      <section className="flex min-h-[42px] items-start justify-start px-1 pt-0 pb-0.5 -mb-1">
-        <div className="flex flex-col items-start justify-center text-left -translate-y-[8px]">
-          <div className="text-[28px] font-mono font-medium uppercase tracking-[-0.08em] leading-none text-white scale-x-[1.24] scale-y-[0.9] origin-left">UX Lab</div>
-          <p
-            className="mt-1 max-w-2xl text-[14px] font-mono leading-[1.05] font-medium tracking-[-0.01em]"
-            style={{ color: 'rgba(204,195,216,0.46)' }}
-          >
-            Instant teardown against best-in-class UX.
-          </p>
+    <div className="flex h-[calc(100vh-124px)] flex-col gap-4 bg-white px-4 pb-6 pt-1 sm:h-[calc(100vh-88px)] sm:px-8">
+      {/* Page header */}
+      <header className="flex-shrink-0 flex items-end justify-between gap-4 pt-1">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-400">UX Lab</div>
+          <h1 className="mt-1 text-[24px] font-semibold leading-none tracking-[-0.03em] text-neutral-950">
+            Teardown against best-in-class UX
+          </h1>
         </div>
-      </section>
+      </header>
 
-      <section
-        className="flex flex-1 flex-col overflow-hidden rounded-[28px] border"
-        style={{
-          background: 'rgba(16,14,24,0.92)',
-          borderColor: 'rgba(255,255,255,0.07)',
-          boxShadow: '0 16px 60px rgba(8,6,18,0.34)',
-        }}
-      >
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-5"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(204,195,216,0.4)' }}>
-                Branch
-              </span>
+      {/* Outer card — white, subtle shadow */}
+      <section className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-[20px] border border-black/[0.07] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02),0_12px_40px_rgba(0,0,0,0.04)]">
+
+        {/* Toolbar */}
+        <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] bg-white px-5 py-3">
+          <div className="flex flex-wrap items-center gap-5">
+            <label className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">Branch</span>
               <select
                 value={currentBranch}
                 onChange={(event) => handleBranchChange(event.target.value)}
                 disabled={branchesLoading || repoBranches.length === 0}
                 title="Which branch Reform should analyze and transform"
-                className="rounded-xl py-1.5 text-xs font-medium outline-none"
+                className="rounded-full border border-black/[0.08] bg-neutral-50 py-1.5 pl-3 pr-7 text-[12px] font-medium text-neutral-950 outline-none transition focus:border-black/[0.25] focus:bg-white disabled:cursor-not-allowed disabled:text-neutral-400"
                 style={{
-                  background: '#1c1a25',
-                  border: '1px solid rgba(74,68,85,0.3)',
-                  color: branchesLoading || repoBranches.length === 0
-                    ? 'rgba(230,224,240,0.35)'
-                    : 'rgba(230,224,240,0.85)',
                   appearance: 'none',
                   WebkitAppearance: 'none',
-                  paddingLeft: '0.75rem',
-                  paddingRight: '2rem',
                   maxWidth: 220,
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(204%2C195%2C216%2C0.45)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`,
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23737373' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
                   backgroundPosition: 'right 10px center',
                 }}
@@ -1005,27 +979,22 @@ export default function SimulationPage() {
                   ))
                 )}
               </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(204,195,216,0.4)' }}>
-                Screen
-              </span>
+            </label>
+
+            <label className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">Screen</span>
               <select
                 value={selectedScreen?.label ?? ''}
                 onChange={(event) => setSelectedScreen(screens.find((screen) => screen.label === event.target.value) ?? null)}
                 disabled={loadingScreens || !!screensError || !screens.length}
-                className="rounded-xl py-1.5 text-xs font-medium outline-none"
+                className="rounded-full border py-1.5 pl-3 pr-7 text-[12px] font-medium outline-none transition focus:bg-white disabled:cursor-not-allowed"
                 style={{
-                  background: '#1c1a25',
-                  border: `1px solid ${screensError ? 'rgba(239,68,68,0.4)' : 'rgba(74,68,85,0.3)'}`,
-                  color: loadingScreens || screensError
-                    ? 'rgba(230,224,240,0.35)'
-                    : 'rgba(230,224,240,0.85)',
                   appearance: 'none',
                   WebkitAppearance: 'none',
-                  paddingLeft: '0.75rem',
-                  paddingRight: '2rem',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(204%2C195%2C216%2C0.45)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`,
+                  background: screensError ? 'rgba(239,68,68,0.04)' : '#fafafa',
+                  borderColor: screensError ? 'rgba(239,68,68,0.35)' : 'rgba(0,0,0,0.08)',
+                  color: loadingScreens || screensError ? '#a3a3a3' : '#0a0a0a',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23737373' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
                   backgroundPosition: 'right 10px center',
                 }}
@@ -1039,66 +1008,68 @@ export default function SimulationPage() {
                       ))
                 }
               </select>
-            </div>
+            </label>
           </div>
+
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(204,195,216,0.4)' }}>
-                Annotations
-              </span>
+            <label className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">Annotations</span>
               <Toggle checked={showAnnotations} onChange={setShowAnnotations} />
-            </div>
+            </label>
             <button
               onClick={handleApplyTransformation}
-              className="btn-primary px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-medium text-white transition hover:bg-neutral-800"
             >
-              Apply Transformation →
+              Apply transformation
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                <path d="M3.5 7h7M8 4.5 10.5 7 8 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
-          <div
-            className="canvas-panel"
-            style={{
-              flex: 1,
-              borderColor: 'rgba(255,255,255,0.06)',
-            }}
-          >
-            <div className="panel-header">
+        {/* 2-column body */}
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+
+          {/* Main canvas — preview */}
+          <div className="flex min-h-0 flex-1 flex-col bg-white">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-black/[0.06] px-5 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(204,195,216,0.5)' }}>
-                  Preview
-                </span>
+                <span className="h-1.5 w-1.5 rounded-full bg-neutral-950" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">Preview</span>
               </div>
               <div className="flex items-center gap-2">
                 {analysis && (
-                  <div className="flex items-center" style={{ background: 'rgba(15,13,24,0.7)', border: '1px solid rgba(74,68,85,0.28)', borderRadius: 6, overflow: 'hidden' }}>
+                  <div className="flex items-center overflow-hidden rounded-full border border-black/[0.08] bg-neutral-50">
                     <button
                       onClick={() => handleZoomChange(previewZoom - 0.15)}
-                      style={{ padding: '2px 7px', fontSize: 13, lineHeight: 1, color: 'rgba(204,195,216,0.5)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      className="px-2.5 py-1 text-[14px] leading-none text-neutral-500 transition-colors hover:bg-white hover:text-neutral-950"
                       title="Zoom out"
                     >−</button>
                     <button
                       onClick={() => setPreviewZoom(1)}
-                      style={{ padding: '2px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: previewZoom !== 1 ? 'rgba(168,85,247,0.8)' : 'rgba(204,195,216,0.4)', background: 'none', border: 'none', cursor: 'pointer', minWidth: 32, textAlign: 'center' }}
+                      className="px-2 py-1 font-mono text-[10px] font-semibold tracking-wider transition-colors hover:bg-white"
+                      style={{ color: previewZoom !== 1 ? '#0a0a0a' : '#a3a3a3', minWidth: 34 }}
                       title="Reset zoom"
                     >{Math.round(previewZoom * 100)}%</button>
                     <button
                       onClick={() => handleZoomChange(previewZoom + 0.15)}
-                      style={{ padding: '2px 7px', fontSize: 13, lineHeight: 1, color: 'rgba(204,195,216,0.5)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      className="px-2.5 py-1 text-[14px] leading-none text-neutral-500 transition-colors hover:bg-white hover:text-neutral-950"
                       title="Zoom in"
                     >+</button>
                   </div>
                 )}
-                <span className="rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: 'rgba(15,13,24,0.7)', color: 'rgba(204,195,216,0.42)', border: '1px solid rgba(74,68,85,0.28)' }}>
+                <span className="rounded-full border border-black/[0.08] bg-neutral-50 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   {selectedScreen?.label ?? 'Screen'}
                 </span>
               </div>
             </div>
 
-            <div id="before-panel" className="panel-screenshot">
+            <div
+              id="before-panel"
+              className="flex min-h-0 flex-1 items-stretch justify-center overflow-hidden"
+              style={{ background: '#fafafa' }}
+            >
               {loadingAnalysis || loadingProgress > 0 ? (
                 <PreviewLoadingState title="Preview" stage={loadingStage} progress={loadingProgress} />
               ) : analysis ? (
@@ -1116,26 +1087,26 @@ export default function SimulationPage() {
               )}
             </div>
           </div>
-        </div>
 
-        <FindingsShelf
-          findings={findings}
-          activeFindingId={activeFindingId}
-          setActiveFindingId={setActiveFindingId}
-          expanded={shelfExpanded}
-          setExpanded={setShelfExpanded}
-          pillOrder={pillOrder}
-          setPillOrder={setPillOrder}
-          onScrollToAnnotation={handleScrollToAnnotation}
-          selectedFindingIds={selectedFindingIds}
-          onToggleSelection={handleToggleSelection}
-          onSelectAll={handleSelectAll}
-          onDeselectAll={handleDeselectAll}
-          onApplySelected={handleApplySelected}
-          onRevertFinding={handleRevertFinding}
-          status={shelfStatus}
-          statusMessage={shelfStatusMessage}
-        />
+          {/* Sidebar — findings */}
+          <div className="flex h-[44vh] min-h-0 flex-shrink-0 flex-col border-t border-black/[0.06] lg:h-auto lg:w-[340px] lg:border-l lg:border-t-0">
+            <FindingsSidebar
+              findings={findings}
+              activeFindingId={activeFindingId}
+              setActiveFindingId={setActiveFindingId}
+              selectedFindingIds={selectedFindingIds}
+              onToggleSelection={handleToggleSelection}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
+              onApplySelected={handleApplySelected}
+              onRevertFinding={handleRevertFinding}
+              onScrollToAnnotation={handleScrollToAnnotation}
+              status={shelfStatus}
+              statusMessage={shelfStatusMessage}
+            />
+          </div>
+
+        </div>
       </section>
     </div>
   )

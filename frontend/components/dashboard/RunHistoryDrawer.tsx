@@ -27,11 +27,11 @@ function statusStyles(status: ReturnType<typeof normalizeStatus>): {
   switch (status) {
     case 'in_progress':
       return {
-        background: 'rgba(168,85,247,0.08)',
-        border: '1px solid rgba(168,85,247,0.18)',
-        color: 'rgba(168,85,247,0.8)',
+        background: 'rgba(0,0,0,0.08)',
+        border: '1px solid rgba(0,0,0,0.18)',
+        color: 'rgba(0,0,0,0.8)',
         label: 'In Progress',
-        dot: '#a855f7',
+        dot: '#0a0a0a',
         pulse: true,
       }
     case 'completed':
@@ -63,11 +63,11 @@ function statusStyles(status: ReturnType<typeof normalizeStatus>): {
       }
     default:
       return {
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        color: 'rgba(255,255,255,0.5)',
+        background: 'rgba(0,0,0,0.04)',
+        border: '1px solid rgba(0,0,0,0.08)',
+        color: 'rgba(0,0,0,0.5)',
         label: 'Unknown',
-        dot: 'rgba(255,255,255,0.3)',
+        dot: 'rgba(0,0,0,0.3)',
         pulse: false,
       }
   }
@@ -137,29 +137,29 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
         className="fixed top-0 right-0 bottom-0 z-[160] w-[440px] max-w-[92vw] flex flex-col"
         style={{
           background: 'linear-gradient(180deg, rgba(14,16,24,0.98) 0%, rgba(8,10,16,0.98) 100%)',
-          borderLeft: '1px solid rgba(255,255,255,0.08)',
+          borderLeft: '1px solid rgba(0,0,0,0.08)',
           boxShadow: '-24px 0 80px rgba(0,0,0,0.6)',
         }}
       >
         <div
           className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}
         >
           <div className="min-w-0">
             <p
               className="text-[10px] font-semibold uppercase tracking-[0.15em]"
-              style={{ color: 'rgba(255,255,255,0.35)' }}
+              style={{ color: 'rgba(0,0,0,0.35)' }}
             >
               Run History
             </p>
-            <p className="text-[13px] font-semibold text-white truncate">{repoName}</p>
+            <p className="text-[13px] font-semibold text-neutral-950 truncate">{repoName}</p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close run history"
             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/[0.05]"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -168,7 +168,7 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {runs === null && !error && (
             <div className="flex items-center justify-center py-16">
-              <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+              <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.2)', borderTopColor: '#0a0a0a' }} />
             </div>
           )}
           {error && (
@@ -180,7 +180,7 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
             </div>
           )}
           {runs && runs.length === 0 && !error && (
-            <div className="py-16 text-center text-[12px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <div className="py-16 text-center text-[12px]" style={{ color: 'rgba(0,0,0,0.35)' }}>
               No runs yet for this project.
             </div>
           )}
@@ -199,8 +199,8 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
                       onClick={() => openRun(run)}
                       className="w-full text-left rounded-xl px-4 py-3 transition-all hover:bg-white/[0.04]"
                       style={{
-                        background: 'rgba(255,255,255,0.015)',
-                        border: '1px solid rgba(255,255,255,0.05)',
+                        background: 'rgba(0,0,0,0.015)',
+                        border: '1px solid rgba(0,0,0,0.05)',
                       }}
                     >
                       <div className="flex items-center gap-2 mb-1.5">
@@ -220,20 +220,20 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
                           <span
                             className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
                             style={{
-                              background: run.mode === 'explore' ? 'rgba(124,58,237,0.08)' : 'rgba(255,255,255,0.04)',
-                              color: run.mode === 'explore' ? 'rgba(168,85,247,0.7)' : 'rgba(255,255,255,0.4)',
-                              border: run.mode === 'explore' ? '1px solid rgba(124,58,237,0.18)' : '1px solid rgba(255,255,255,0.06)',
+                              background: run.mode === 'explore' ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.04)',
+                              color: run.mode === 'explore' ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)',
+                              border: run.mode === 'explore' ? '1px solid rgba(0,0,0,0.18)' : '1px solid rgba(0,0,0,0.06)',
                             }}
                           >
                             {run.mode}
                           </span>
                         )}
-                        <span className="ml-auto text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <span className="ml-auto text-[10px]" style={{ color: 'rgba(0,0,0,0.3)' }}>
                           {formatRelativeTime(run.started_at || run.updated_at)}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      <div className="flex items-center gap-3 text-[11px]" style={{ color: 'rgba(0,0,0,0.45)' }}>
                         {pagesCount !== null && (
                           <span>{pagesCount} page{pagesCount === 1 ? '' : 's'}</span>
                         )}
@@ -242,7 +242,7 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
                         {run.commit_sha && (
                           <>
                             <span>•</span>
-                            <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            <span className="font-mono text-[10px]" style={{ color: 'rgba(0,0,0,0.3)' }}>
                               {run.commit_sha.slice(0, 7)}
                             </span>
                           </>
@@ -250,7 +250,7 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
                       </div>
 
                       {isActive && stage && (
-                        <p className="mt-2 text-[11px]" style={{ color: 'rgba(168,85,247,0.8)' }}>
+                        <p className="mt-2 text-[11px]" style={{ color: 'rgba(0,0,0,0.8)' }}>
                           {stage}
                           {typeof run.progress_percent === 'number' && ` — ${Math.round(run.progress_percent)}%`}
                         </p>
@@ -262,17 +262,17 @@ export default function RunHistoryDrawer({ projectId, repoName, onClose }: RunHi
                             <li
                               key={i}
                               className="text-[11px] leading-snug flex items-start gap-1.5"
-                              style={{ color: 'rgba(255,255,255,0.5)' }}
+                              style={{ color: 'rgba(0,0,0,0.5)' }}
                             >
                               <span
                                 className="mt-[6px] w-1 h-1 rounded-full flex-shrink-0"
-                                style={{ background: 'rgba(168,85,247,0.5)' }}
+                                style={{ background: 'rgba(0,0,0,0.5)' }}
                               />
                               <span className="truncate">{note}</span>
                             </li>
                           ))}
                           {notes.length > 2 && (
-                            <li className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            <li className="text-[10px]" style={{ color: 'rgba(0,0,0,0.3)' }}>
                               +{notes.length - 2} more
                             </li>
                           )}

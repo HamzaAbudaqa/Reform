@@ -74,15 +74,15 @@ export default function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all duration-150"
         style={{
-          background: open ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+          background: open ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.04)',
           border: '1px solid',
-          borderColor: open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
+          borderColor: open ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.08)',
         }}
         onMouseEnter={(e) => {
-          if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+          if (!open) e.currentTarget.style.background = 'rgba(0,0,0,0.08)'
         }}
         onMouseLeave={(e) => {
-          if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+          if (!open) e.currentTarget.style.background = 'rgba(0,0,0,0.04)'
         }}
       >
         {session.user.image ? (
@@ -90,7 +90,7 @@ export default function AccountMenu() {
             src={session.user.image}
             alt=""
             className="w-6 h-6 rounded-full"
-            style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+            style={{ border: '1px solid rgba(0,0,0,0.12)' }}
           />
         ) : (
           <div
@@ -100,7 +100,7 @@ export default function AccountMenu() {
             {session.user.name?.[0]?.toUpperCase() || '?'}
           </div>
         )}
-        <span className="hidden sm:inline text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <span className="hidden sm:inline text-[13px]" style={{ color: 'rgba(0,0,0,0.6)' }}>
           {session.user.name || 'Account'}
         </span>
         <svg
@@ -114,7 +114,7 @@ export default function AccountMenu() {
           strokeLinejoin="round"
           className="hidden sm:block transition-transform duration-150"
           style={{
-            color: 'rgba(255,255,255,0.3)',
+            color: 'rgba(0,0,0,0.3)',
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
           }}
         >
@@ -128,21 +128,21 @@ export default function AccountMenu() {
           className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden"
           style={{
             background: 'linear-gradient(180deg, rgba(13,17,26,0.97) 0%, rgba(9,12,19,0.97) 100%)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.1)',
+            border: '1px solid rgba(0,0,0,0.1)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.1)',
             backdropFilter: 'blur(24px)',
             animation: 'menuFadeIn 0.15s ease-out',
           }}
         >
           {/* User header */}
-          <div className="px-4 py-3.5 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+          <div className="px-4 py-3.5 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }}>
             <div className="flex items-center gap-3">
               {session.user.image ? (
                 <img
                   src={session.user.image}
                   alt=""
                   className="w-9 h-9 rounded-full flex-shrink-0"
-                  style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+                  style={{ border: '1px solid rgba(0,0,0,0.12)' }}
                 />
               ) : (
                 <div
@@ -153,11 +153,11 @@ export default function AccountMenu() {
                 </div>
               )}
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-white truncate">
+                <div className="text-[13px] font-medium text-neutral-950 truncate">
                   {session.user.name || 'User'}
                 </div>
                 {session.githubUsername && (
-                  <div className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  <div className="text-[11px] truncate" style={{ color: 'rgba(0,0,0,0.35)' }}>
                     @{session.githubUsername}
                   </div>
                 )}
@@ -166,13 +166,13 @@ export default function AccountMenu() {
                 className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0"
                 style={{
                   background: subscription.plan === 'free'
-                    ? 'rgba(255,255,255,0.06)'
+                    ? 'rgba(0,0,0,0.06)'
                     : 'rgba(124,140,255,0.15)',
                   color: subscription.plan === 'free'
-                    ? 'rgba(255,255,255,0.45)'
+                    ? 'rgba(0,0,0,0.45)'
                     : '#aab4ff',
                   border: subscription.plan === 'free'
-                    ? '1px solid rgba(255,255,255,0.08)'
+                    ? '1px solid rgba(0,0,0,0.08)'
                     : '1px solid rgba(170,180,255,0.2)',
                 }}
               >
@@ -189,7 +189,7 @@ export default function AccountMenu() {
 
           {BILLING_ENABLED && (
             <>
-              <div className="mx-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }} />
+              <div className="mx-3 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }} />
 
               <div className="py-1.5">
                 <MenuLink href="/subscription" icon={<PlansIcon />} label="Plans & Usage" onClick={() => setOpen(false)} />
@@ -203,7 +203,7 @@ export default function AccountMenu() {
             </>
           )}
 
-          <div className="mx-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }} />
+          <div className="mx-3 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }} />
 
           <div className="py-1.5">
             <MenuButton
@@ -232,17 +232,17 @@ function MenuLink({ href, icon, label, onClick }: { href: string; icon: React.Re
       href={href}
       onClick={onClick}
       className="flex items-center gap-3 px-4 py-2 text-[13px] transition-colors duration-100"
-      style={{ color: 'rgba(255,255,255,0.6)' }}
+      style={{ color: 'rgba(0,0,0,0.6)' }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-        e.currentTarget.style.color = 'rgba(255,255,255,0.85)'
+        e.currentTarget.style.background = 'rgba(0,0,0,0.05)'
+        e.currentTarget.style.color = 'rgba(0,0,0,0.85)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
+        e.currentTarget.style.color = 'rgba(0,0,0,0.6)'
       }}
     >
-      <span style={{ color: 'rgba(255,255,255,0.3)' }}>{icon}</span>
+      <span style={{ color: 'rgba(0,0,0,0.3)' }}>{icon}</span>
       {label}
     </Link>
   )
@@ -254,17 +254,17 @@ function MenuButton({ icon, label, onClick, danger, disabled }: { icon: React.Re
       onClick={onClick}
       disabled={disabled}
       className="flex items-center gap-3 px-4 py-2 text-[13px] w-full text-left transition-colors duration-100 disabled:opacity-50"
-      style={{ color: danger ? 'rgba(255,100,100,0.7)' : 'rgba(255,255,255,0.6)' }}
+      style={{ color: danger ? 'rgba(255,100,100,0.7)' : 'rgba(0,0,0,0.6)' }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = danger ? 'rgba(255,80,80,0.08)' : 'rgba(255,255,255,0.05)'
-        e.currentTarget.style.color = danger ? 'rgba(255,100,100,0.9)' : 'rgba(255,255,255,0.85)'
+        e.currentTarget.style.background = danger ? 'rgba(255,80,80,0.08)' : 'rgba(0,0,0,0.05)'
+        e.currentTarget.style.color = danger ? 'rgba(255,100,100,0.9)' : 'rgba(0,0,0,0.85)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.color = danger ? 'rgba(255,100,100,0.7)' : 'rgba(255,255,255,0.6)'
+        e.currentTarget.style.color = danger ? 'rgba(255,100,100,0.7)' : 'rgba(0,0,0,0.6)'
       }}
     >
-      <span style={{ color: danger ? 'rgba(255,100,100,0.45)' : 'rgba(255,255,255,0.3)' }}>{icon}</span>
+      <span style={{ color: danger ? 'rgba(255,100,100,0.45)' : 'rgba(0,0,0,0.3)' }}>{icon}</span>
       {label}
     </button>
   )

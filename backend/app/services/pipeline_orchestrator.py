@@ -471,7 +471,7 @@ async def run_pipeline_v2(
     design_intelligence: dict | None = None,
     user_intent: str = "",
     quality_threshold: int = 95,
-    max_pages: int = 5,
+    max_pages: int = 50,
     ux_lab_findings: list[dict] | None = None,
     mode: str = STABLE,
     project_id: str | None = None,

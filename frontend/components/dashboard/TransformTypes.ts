@@ -62,48 +62,6 @@ export interface MultiPageTransformResult {
   pipeline_errors?: string[]
 }
 
-// ── Preview availability helpers ───────────────────────────────────
-
-/** Check if a single page has usable preview screenshots. */
-export function isPagePreviewAvailable(page: TransformedPageData): boolean {
-  return !!(page.before_screenshot || page.after_screenshot)
-}
-
-/**
- * Check if any page in the result has preview data.
- * Returns false when the repo was never deployed / screenshots failed globally.
- */
-export function isPreviewAvailable(result: MultiPageTransformResult): boolean {
-  return result.pages.some(p => isPagePreviewAvailable(p))
-}
-
-/**
- * Derive a human-friendly reason why preview is unavailable.
- * Checks pipeline errors, page errors, and screenshot emptiness.
- */
-export function getPreviewUnavailableReason(
-  result: MultiPageTransformResult,
-  page?: TransformedPageData,
-): string {
-  // Check page-specific error first
-  if (page?.error) {
-    const lower = page.error.toLowerCase()
-    if (lower.includes('deploy') || lower.includes('preview') || lower.includes('server'))
-      return 'This repository does not appear to have a running deployment, so a live screenshot could not be captured.'
-    return `Preview could not be generated: ${page.error}`
-  }
-
-  // Check pipeline-level errors
-  const previewError = result.pipeline_errors?.find(e =>
-    e.toLowerCase().includes('screenshot') || e.toLowerCase().includes('preview') || e.toLowerCase().includes('deploy'),
-  )
-  if (previewError) {
-    return 'Live preview could not be generated for this repository. The deployment may not be accessible or the dev server failed to start.'
-  }
-
-  // Fallback: screenshots simply missing
-  return 'This repository does not have a detected deployment, so before/after screenshots are not available. You can still review the code transformation and structural changes.'
-}
 
 /** Legacy single-file transform result (backward compat) */
 export interface LegacyTransformResult {

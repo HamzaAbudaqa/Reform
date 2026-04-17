@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def plan_transformations(
     evaluations: list[PageEvaluation],
     threshold: int = 95,
-    max_pages: int = 5,
+    max_pages: int = 50,
 ) -> tuple[list[PageEvaluation], list[PageEvaluation], list[PageEvaluation]]:
     """
     Decide which pages need transformation.

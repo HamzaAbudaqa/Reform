@@ -36,9 +36,9 @@ export default function CheckoutResult() {
       <div
         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-sm font-medium transition-all duration-300"
         style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          color: 'rgba(255,255,255,0.6)',
+          background: 'rgba(0,0,0,0.06)',
+          border: '1px solid rgba(0,0,0,0.1)',
+          color: 'rgba(0,0,0,0.6)',
           backdropFilter: 'blur(20px)',
           opacity: visible ? 1 : 0,
           transform: visible ? 'translate(-50%, 0)' : 'translate(-50%, 12px)',
@@ -89,7 +89,7 @@ export default function CheckoutResult() {
         </div>
 
         <h2
-          className="text-2xl font-bold text-white mb-2"
+          className="text-2xl font-bold text-neutral-950 mb-2"
           style={{ letterSpacing: '-0.03em' }}
         >
           You&apos;re all set
@@ -97,7 +97,7 @@ export default function CheckoutResult() {
 
         <p
           className="text-sm mb-8 leading-relaxed"
-          style={{ color: 'rgba(255,255,255,0.45)' }}
+          style={{ color: 'rgba(0,0,0,0.45)' }}
         >
           Your plan is now active. You can start improving your frontend immediately.
         </p>
@@ -105,7 +105,7 @@ export default function CheckoutResult() {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={dismiss}
-            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 active:scale-[0.97]"
+            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-neutral-950 transition-all duration-200 active:scale-[0.97]"
             style={{
               background: 'linear-gradient(135deg, #7c8cff, #5666f5)',
               boxShadow: '0 0 30px rgba(86,102,245,0.25)',
@@ -118,12 +118,12 @@ export default function CheckoutResult() {
             onClick={() => { dismiss(); router.push('/dashboard/discovery') }}
             className="px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 active:scale-[0.97]"
             style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.6)',
+              background: 'rgba(0,0,0,0.04)',
+              border: '1px solid rgba(0,0,0,0.08)',
+              color: 'rgba(0,0,0,0.6)',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.08)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
           >
             Start your first scan
           </button>

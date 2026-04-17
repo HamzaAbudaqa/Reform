@@ -7,7 +7,7 @@ const TYPE_COLORS: Record<string, { bg: string; text: string; accent: string }> 
   layout: { bg: 'rgba(59,130,246,0.1)', text: 'rgba(59,130,246,0.7)', accent: 'rgba(59,130,246,0.15)' },
   spacing: { bg: 'rgba(34,197,94,0.1)', text: 'rgba(34,197,94,0.7)', accent: 'rgba(34,197,94,0.15)' },
   component: { bg: 'rgba(245,158,11,0.1)', text: 'rgba(245,158,11,0.7)', accent: 'rgba(245,158,11,0.15)' },
-  visual: { bg: 'rgba(168,85,247,0.1)', text: 'rgba(168,85,247,0.7)', accent: 'rgba(168,85,247,0.15)' },
+  visual: { bg: 'rgba(0,0,0,0.1)', text: 'rgba(0,0,0,0.7)', accent: 'rgba(0,0,0,0.15)' },
 }
 const TYPE_ORDER = ['flow', 'layout', 'spacing', 'component', 'visual']
 
@@ -55,7 +55,7 @@ export default function StructuralChangesPanel({
       {changeSummary.length > 0 && (
         <ul className="space-y-2">
           {changeSummary.slice(0, 5).map((item, i) => (
-            <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: 'rgba(0,0,0,0.55)' }}>
               <svg className="mt-0.5 flex-shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
@@ -69,9 +69,9 @@ export default function StructuralChangesPanel({
       {grouped.length > 0 && (
         <div
           className="rounded-lg p-4 space-y-4"
-          style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.04)' }}
+          style={{ background: 'rgba(0,0,0,0.015)', border: '1px solid rgba(0,0,0,0.04)' }}
         >
-          <h4 className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          <h4 className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.25)' }}>
             Detailed Changes
           </h4>
           {grouped.map(group => {
@@ -87,8 +87,8 @@ export default function StructuralChangesPanel({
                 <div className="space-y-1.5">
                   {group.items.map((ann, i) => (
                     <div key={i} className="pl-3" style={{ borderLeft: `2px solid ${colors.accent}` }}>
-                      <p className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>{ann.region}</p>
-                      <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{ann.description}</p>
+                      <p className="text-[11px] font-medium" style={{ color: 'rgba(0,0,0,0.5)' }}>{ann.region}</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(0,0,0,0.35)' }}>{ann.description}</p>
                     </div>
                   ))}
                 </div>

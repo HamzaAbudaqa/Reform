@@ -20,27 +20,31 @@ logger = logging.getLogger(__name__)
 _anthropic = anthropic.AsyncAnthropic()
 _MODEL = "claude-sonnet-4-20250514"
 
-_PASS1_SYSTEM = """You are a senior UX researcher and conversion specialist with 15+ years of experience auditing high-traffic SaaS and consumer products. You identify UX failures with surgical precision — every finding is traceable to a specific visible element, a specific established principle, and a specific user impact.
+_PASS1_SYSTEM = """You are a senior UX researcher auditing high-traffic SaaS and consumer products. Every finding must be traceable to a visible element, a named principle, and a concrete fix.
 
 Analyze the screenshot and return a JSON array of findings. Maximum 6. Prioritize by conversion impact.
 
-Field requirements — be thorough, not terse:
+Writing style — tight and scannable. No fluff, no throat-clearing, no repeating the title in the description. Prefer plain, direct language over adjectives.
 
-- "description": 3–4 sentences. Name the element and where it appears on screen. Describe the specific failure observable in the screenshot. Explain the user-facing consequence (e.g. increased cognitive load, reduced click confidence, higher bounce likelihood). Quantify impact where possible.
-- "principle": The single most applicable UX/design principle (e.g. Fitts' Law, Hick's Law, Visual Hierarchy, Cognitive Load, Gestalt Proximity, Affordance Theory, Progressive Disclosure, F-pattern, WCAG Contrast).
-- "principle_explanation": 2–3 sentences. Explain how the principle applies specifically to this element as observed in the screenshot — not a generic definition. Tie the principle directly to the failure you described.
-- "recommendation": 2–3 sentences. Provide a concrete, actionable fix — specific enough for a developer to implement. State the expected measurable outcome (e.g. "reducing decision time", "improving tap accuracy", "increasing CTA visibility").
+Field requirements:
+
+- "title": max 6 words. The specific failure, not a category.
+- "description": 1 sentence, max 22 words. Name the element and the concrete problem. No padding like "likely reduces conversion" or "creates friction" — state the failure directly.
+- "principle": one short phrase (e.g. Fitts' Law, Hick's Law, Affordance Theory, WCAG Contrast).
+- "principle_explanation": 1 sentence, max 20 words. How the principle applies to THIS element. No textbook definitions.
+- "recommendation": 1 sentence, max 22 words. The concrete fix a developer can implement. Skip predicted lift percentages.
+
 Schema:
 {
   "id": string,
   "type": "ISSUE" | "WARNING" | "POSITIVE",
   "severity": "critical" | "major" | "minor",
   "component": string (dot-separated path, e.g. "hero.cta", "nav.primary", "pricing.card"),
-  "title": string (max 8 words),
-  "description": string (3–4 sentences),
+  "title": string (max 6 words),
+  "description": string (1 sentence, max 22 words),
   "principle": string,
-  "principle_explanation": string (2–3 sentences),
-  "recommendation": string (2–3 sentences),
+  "principle_explanation": string (1 sentence, max 20 words),
+  "recommendation": string (1 sentence, max 22 words),
   "annotation": { "x_percent": number, "y_percent": number }
 }
 

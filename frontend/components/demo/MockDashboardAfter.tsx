@@ -21,9 +21,9 @@ export default function MockDashboardAfter() {
           {/* Railway logo dot */}
           <div
             className="w-5 h-5 rounded-full flex items-center justify-center"
-            style={{ background: '#7c3aed' }}
+            style={{ background: '#0a0a0a' }}
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="#0a0a0a">
               <circle cx="5" cy="5" r="3" />
             </svg>
           </div>
@@ -65,7 +65,7 @@ export default function MockDashboardAfter() {
         <div className="flex items-center gap-2">
           <div
             className="w-5 h-5 rounded-full"
-            style={{ background: '#7c3aed', border: '2px solid #5b21b6' }}
+            style={{ background: '#0a0a0a', border: '2px solid #5b21b6' }}
           />
         </div>
       </div>
@@ -110,9 +110,9 @@ export default function MockDashboardAfter() {
               fontSize: '10px',
               padding: '3px 10px',
               borderRadius: '6px',
-              background: '#7c3aed',
-              border: '1px solid #6d28d9',
-              color: 'white',
+              background: '#0a0a0a',
+              border: '1px solid #0a0a0a',
+              color: '#ffffff',
               cursor: 'pointer',
               fontWeight: 500,
             }}
@@ -132,7 +132,7 @@ export default function MockDashboardAfter() {
       <div
         className="flex-1 relative overflow-hidden"
         style={{
-          background: '#0d0c16',
+          background: '#fafafa',
           backgroundImage: `radial-gradient(circle, #1e1c2e 1px, transparent 1px)`,
           backgroundSize: '28px 28px',
         }}
@@ -184,7 +184,7 @@ export default function MockDashboardAfter() {
                 </svg>
               </div>
               <div>
-                <div className="text-white font-semibold" style={{ fontSize: '14px' }}>backend</div>
+                <div className="text-neutral-950 font-semibold" style={{ fontSize: '14px' }}>backend</div>
               </div>
             </div>
 
@@ -234,7 +234,7 @@ export default function MockDashboardAfter() {
                 </svg>
               </div>
               <div>
-                <div className="text-white font-semibold" style={{ fontSize: '14px' }}>postgres</div>
+                <div className="text-neutral-950 font-semibold" style={{ fontSize: '14px' }}>postgres</div>
               </div>
               {/* New badge */}
               <div
@@ -271,7 +271,7 @@ export default function MockDashboardAfter() {
                 </svg>
               </div>
               <div>
-                <div className="text-white font-semibold" style={{ fontSize: '14px' }}>redis</div>
+                <div className="text-neutral-950 font-semibold" style={{ fontSize: '14px' }}>redis</div>
                 <div style={{ fontSize: '10px', color: '#6b7280' }}>In service</div>
               </div>
             </div>

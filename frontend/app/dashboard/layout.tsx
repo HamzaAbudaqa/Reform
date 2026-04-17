@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ProgressProvider, useProgress } from '@/components/dashboard/ProgressContext'
-import InteractiveBackground from '@/components/landing/InteractiveBackground'
 import AccountMenu from '@/components/layout/AccountMenu'
 import { clearSelectedRepo } from '@/lib/selectedRepo'
 
@@ -37,26 +35,11 @@ function GlobalProgressBar() {
   if (!state.active || pathname === '/dashboard/discovery') return null
   return (
     <div className="fixed top-0 left-0 right-0 z-[100]">
-      <div className="h-[2px] w-full" style={{ background: 'rgba(255,255,255,0.03)' }}>
-        <div
-          className="h-full transition-all duration-700 ease-out"
-          style={{
-            width: `${state.progress}%`,
-            background: 'linear-gradient(90deg, #7c8cff, #aab4ff)',
-            boxShadow: '0 0 16px rgba(124,140,255,0.35)',
-          }}
-        />
+      <div className="h-[2px] w-full" style={{ background: 'rgba(0,0,0,0.05)' }}>
+        <div className="h-full bg-neutral-950 transition-all duration-700 ease-out" style={{ width: `${state.progress}%` }} />
       </div>
       {state.label && (
-        <div
-          className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-[10px] font-medium"
-          style={{
-            background: 'rgba(6,8,13,0.9)',
-            color: 'rgba(255,255,255,0.45)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-[10px] font-medium" style={{ background: '#ffffff', color: '#525252', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           {state.label}
         </div>
       )}
@@ -77,8 +60,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (status !== 'authenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#05070c' }}>
-        <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(0,0,0,0.12)', borderTopColor: '#0a0a0a' }} />
       </div>
     )
   }
@@ -95,41 +78,29 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const { state: progressState } = useProgress()
 
   return (
-    <div className="app-shell min-h-screen">
-      <InteractiveBackground />
+    <div className="min-h-screen bg-white">
       <GlobalProgressBar />
 
       <header
         className="fixed top-0 left-0 right-0 z-50 border-b"
         style={{
-          background: 'rgba(5,7,12,0.78)',
+          background: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(20px)',
-          borderColor: 'rgba(255,255,255,0.08)',
+          borderColor: 'rgba(0,0,0,0.07)',
         }}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex justify-between items-center gap-4">
           <div className="flex items-center gap-3 sm:gap-8 min-w-0">
-            <Link href="/" className="flex items-center gap-3 flex-shrink-0">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden"
-                style={{
-                  background: 'linear-gradient(180deg, rgba(124,140,255,0.2) 0%, rgba(124,140,255,0.08) 100%)',
-                  border: '1px solid rgba(170,180,255,0.16)',
-                }}
-              >
-                <Image src="/reform_justlogo.png" alt="Reform" width={36} height={36} className="object-contain" />
-              </div>
-              <div className="hidden sm:block">
-                <div className="text-[14px] font-semibold text-white" style={{ letterSpacing: '-0.03em' }}>Reform</div>
-                <div className="mono text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>analysis workspace</div>
-              </div>
+            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-[20px] font-bold text-neutral-950" style={{ letterSpacing: '-0.04em' }}>Reform</span>
+              <span className="hidden sm:inline-block text-[11px] text-neutral-400 ml-1">analysis workspace</span>
             </Link>
 
             <DashboardNav
               pathname={pathname}
               progressActive={progressState.active}
-              className="relative hidden sm:flex items-center gap-1 rounded-[20px] p-1.5 overflow-hidden"
-              itemClassName="block px-4 py-2.5 rounded-2xl text-[12px] font-medium transition-colors duration-200 whitespace-nowrap"
+              className="relative hidden sm:flex items-center gap-1 rounded-full p-1 overflow-hidden"
+              itemClassName="block px-4 py-2 rounded-full text-[12px] font-medium transition-colors duration-200 whitespace-nowrap"
             />
           </div>
 
@@ -145,7 +116,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 clearSelectedRepo()
                 window.location.href = '/dashboard/discovery'
               }}
-              className="btn-ghost px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-[11px] font-medium"
+              className="rounded-full border border-black/[0.12] bg-white px-3 sm:px-4 py-1.5 text-[11px] font-medium text-neutral-950 transition hover:bg-neutral-50"
             >
               New Analysis
             </button>
@@ -157,8 +128,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       <div
         className="fixed top-[73px] left-0 right-0 z-40 sm:hidden overflow-x-auto"
         style={{
-          background: 'rgba(5,7,12,0.96)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(255,255,255,0.96)',
+          borderBottom: '1px solid rgba(0,0,0,0.06)',
         }}
       >
         <div className="px-3 py-2.5">
@@ -403,11 +374,8 @@ function DashboardNav({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       style={{
-        background: compact
-          ? 'rgba(13,17,25,0.98)'
-          : 'rgba(13,17,25,0.96)',
-        border: compact ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: compact ? 'inset 0 1px 0 rgba(255,255,255,0.03)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+        background: '#fafafa',
+        border: '1px solid rgba(0,0,0,0.06)',
         touchAction: 'none',
         userSelect: 'none',
       }}
@@ -425,13 +393,9 @@ function DashboardNav({
           transition: dragBounds
             ? 'none'
             : 'transform 300ms cubic-bezier(0.22, 1, 0.36, 1), width 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease',
-          background: compact
-            ? 'rgba(124,140,255,0.16)'
-            : 'rgba(124,140,255,0.18)',
-          border: '1px solid rgba(170,180,255,0.18)',
-          boxShadow: compact
-            ? '0 8px 18px rgba(86,102,245,0.12)'
-            : '0 10px 22px rgba(86,102,245,0.14)',
+          background: '#ffffff',
+          border: '1px solid rgba(0,0,0,0.08)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
         }}
       />
 
@@ -450,7 +414,7 @@ function DashboardNav({
               <div
                 data-locked="true"
                 className={itemClassName}
-                style={{ color: isActive ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.42)', opacity: 0.72 }}
+                style={{ color: isActive ? '#0a0a0a' : '#9ca3af', opacity: 0.72 }}
               >
                 {item.label}
               </div>
@@ -469,7 +433,8 @@ function DashboardNav({
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: isActive ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.56)',
+                  color: isActive ? '#0a0a0a' : '#6b7280',
+                  fontWeight: isActive ? 600 : 500,
                 }}
               >
                 {item.label}

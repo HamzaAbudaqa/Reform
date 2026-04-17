@@ -100,10 +100,10 @@ export default function GateErrorBanner({ error, fallbackMessage, onDismiss }: G
       className="rounded-xl p-4 flex items-center justify-between gap-4"
       style={{
         background: showUpgrade
-          ? 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.03))'
+          ? 'linear-gradient(135deg, rgba(0,0,0,0.08), rgba(0,0,0,0.03))'
           : 'rgba(239,68,68,0.06)',
         border: showUpgrade
-          ? '1px solid rgba(124,58,237,0.15)'
+          ? '1px solid rgba(0,0,0,0.15)'
           : '1px solid rgba(239,68,68,0.1)',
       }}
     >
@@ -111,14 +111,14 @@ export default function GateErrorBanner({ error, fallbackMessage, onDismiss }: G
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{
-            background: showUpgrade ? 'rgba(124,58,237,0.1)' : 'rgba(239,68,68,0.08)',
+            background: showUpgrade ? 'rgba(0,0,0,0.1)' : 'rgba(239,68,68,0.08)',
             border: showUpgrade
-              ? '1px solid rgba(124,58,237,0.15)'
+              ? '1px solid rgba(0,0,0,0.15)'
               : '1px solid rgba(239,68,68,0.1)',
           }}
         >
           {showUpgrade ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
             </svg>
           ) : (
@@ -128,11 +128,11 @@ export default function GateErrorBanner({ error, fallbackMessage, onDismiss }: G
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-[13px]" style={{ color: showUpgrade ? 'rgba(255,255,255,0.6)' : 'rgba(239,68,68,0.7)' }}>
+          <p className="text-[13px]" style={{ color: showUpgrade ? 'rgba(0,0,0,0.6)' : 'rgba(239,68,68,0.7)' }}>
             {message}
           </p>
           {error?.limit != null && error?.used != null && (
-            <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            <p className="text-[11px] mt-0.5" style={{ color: 'rgba(0,0,0,0.25)' }}>
               Used {error.used} of {error.limit}{error.currentPlan ? ` (${error.currentPlan} plan)` : ''}
             </p>
           )}
@@ -142,8 +142,8 @@ export default function GateErrorBanner({ error, fallbackMessage, onDismiss }: G
         {showUpgrade && (
           <Link
             href="/subscription"
-            className="px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110 active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
+            className="px-4 py-2 rounded-lg text-[12px] font-semibold text-neutral-950 transition-all hover:brightness-110 active:scale-[0.98]"
+            style={{ background: 'linear-gradient(135deg, #0a0a0a, #0a0a0a)' }}
           >
             Upgrade
           </Link>
@@ -152,7 +152,7 @@ export default function GateErrorBanner({ error, fallbackMessage, onDismiss }: G
           <button
             onClick={onDismiss}
             className="p-1.5 rounded-lg transition-colors hover:bg-white/[0.04]"
-            style={{ color: 'rgba(255,255,255,0.25)' }}
+            style={{ color: 'rgba(0,0,0,0.25)' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
