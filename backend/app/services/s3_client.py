@@ -267,6 +267,57 @@ def list_cached_tinyfish_urls(force_refresh: bool = False) -> list[str]:
         return _tinyfish_url_list  # fall through to the last-known list
 
 
+# ─── Google Stitch ingestion cache ──────────────────────────────────────
+# Mirrors the TinyFish cache helpers but keyed under stitch-cache/ so the
+# two feature namespaces don't collide. Stitch designs are static AI mockups,
+# so a longer TTL is safe; callers can override via max_age_days.
+
+def _stitch_key(url: str) -> str:
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()
+    return f"stitch-cache/{digest}.json"
+
+
+def upload_stitch_cache(url: str, data: dict) -> None:
+    """Persist a Stitch extraction result for this URL."""
+    key = _stitch_key(url)
+    try:
+        _get_client().put_object(
+            Bucket=_bucket(),
+            Key=key,
+            Body=json.dumps(data).encode("utf-8"),
+            ContentType="application/json",
+            Metadata={"source_url": url},
+        )
+    except Exception as e:
+        logger.warning("Stitch cache upload failed for %s: %s", url, e)
+
+
+def download_stitch_cache(url: str, max_age_days: int = 30) -> dict | None:
+    """Return cached Stitch data if it exists and isn't older than max_age_days."""
+    key = _stitch_key(url)
+    try:
+        response = _get_client().get_object(Bucket=_bucket(), Key=key)
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") not in ("NoSuchKey", "404"):
+            logger.warning("Stitch cache fetch failed for %s: %s", url, e)
+        return None
+    except Exception as e:
+        logger.warning("Stitch cache fetch failed for %s: %s", url, e)
+        return None
+
+    last_modified = response.get("LastModified")
+    if last_modified:
+        age = datetime.now(timezone.utc) - last_modified
+        if age > timedelta(days=max_age_days):
+            return None
+
+    try:
+        return json.loads(response["Body"].read().decode("utf-8"))
+    except Exception as e:
+        logger.warning("Stitch cache parse failed for %s: %s", url, e)
+        return None
+
+
 def download_snapshot(key: str) -> list[dict]:
     """Download and decompress a repo snapshot from S3."""
     if not key:
