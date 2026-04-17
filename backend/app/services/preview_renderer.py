@@ -295,29 +295,18 @@ def _generate_dummy_env(frontend_dir: str) -> None:
 
 
 def _detect_framework(frontend_dir: str) -> str:
-    """Detect the frontend framework from package.json."""
-    import json as _json
+    """Detect the frontend framework from package.json.
+
+    Delegates to the shared detection module so the renderer and the
+    discovery pipeline use the exact same heuristic. Returns the legacy
+    string vocabulary ('next' | 'vite' | 'cra' | 'unknown') expected by
+    _start_dev_server and _guess_route below.
+    """
+    from app.services.detection.framework import detect_build_tool_from_package_json
+
     pkg_path = os.path.join(frontend_dir, "package.json")
-    try:
-        with open(pkg_path) as f:
-            data = _json.load(f)
-        all_deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-        if "next" in all_deps:
-            return "next"
-        if "vite" in all_deps:
-            return "vite"
-        # Check scripts for clues
-        scripts = data.get("scripts", {})
-        dev_script = scripts.get("dev", "")
-        if "vite" in dev_script:
-            return "vite"
-        if "next" in dev_script:
-            return "next"
-        if "react-scripts" in all_deps:
-            return "cra"
-        return "unknown"
-    except Exception:
-        return "unknown"
+    build_tool = detect_build_tool_from_package_json(pkg_path)
+    return build_tool.value if build_tool.value in ("next", "vite", "cra") else "unknown"
 
 
 def _start_dev_server(frontend_dir: str, port: int) -> subprocess.Popen:

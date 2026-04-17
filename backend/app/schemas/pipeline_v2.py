@@ -32,6 +32,20 @@ class DiscoveredPage(BaseModel):
     path: str        # e.g. "app/dashboard/settings/page.tsx"
     route: str       # e.g. "/dashboard/settings"
     framework: str   # "app_router" | "pages_router"
+    # Quality score 0..100 assigned by the detection scoring layer. Used
+    # downstream to rank pages and pick the top N for transformation when
+    # the pipeline caps work. Defaults to 0 so older callers that construct
+    # DiscoveredPage by hand (tests, mocks) don't have to supply it.
+    quality_score: int = 0
+    # Per-signal breakdown, kept for transparency — the UI surfaces why a
+    # page scored the way it did. Plain dict so schema stays loose.
+    score_signals: dict = {}
+    # Sorted unique PascalCase components rendered on the page. Enables
+    # context-aware transformation instead of blind rewriting.
+    components: list[str] = []
+    # Trimmed layout hierarchy (structural HTML + rendered components).
+    # Each node: {"tag": str, "is_component": bool, "children": [...]}
+    layout_tree: list[dict] = []
 
 
 # ── UI Evaluation ───────────────────────────────────────────────────
