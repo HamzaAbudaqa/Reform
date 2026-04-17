@@ -16,10 +16,13 @@ export default function TransformCarousel({
   onSelectedPathChange?: (path: string) => void
   afterPulse?: boolean
 }) {
-  // Include transformed, weak, AND errored pages so users can see everything.
-  // High-quality and overflow pages aren't shown here — they live in their own panel.
-  const visible = pages.filter(p => p.status === 'transformed' || p.status === 'weak' || p.status === 'error')
-  const transformed = visible
+  // Only tab through pages that actually produced transformation output.
+  // `error` pages have no updated_code, no after_screenshot, nothing meaningful
+  // to preview — surfacing them as tabs would open onto an empty fake UI.
+  // The errors stat in the header already reports them.
+  const transformed = pages.filter(
+    p => (p.status === 'transformed' || p.status === 'weak') && !!p.updated_code,
+  )
   const [currentIndex, setCurrentIndex] = useState(0)
 
   // Notify parent of the initially-selected page on mount and whenever the
@@ -47,6 +50,21 @@ export default function TransformCarousel({
   }, [goPrev, goNext])
 
   if (transformed.length === 0) {
+    const erroredPages = pages.filter(p => p.status === 'error')
+    const allErrored = pages.length > 0 && erroredPages.length === pages.length
+    if (allErrored) {
+      return (
+        <div className="max-w-4xl mx-auto text-center py-16">
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+          </div>
+          <h3 className="text-lg font-semibold text-neutral-950 mb-2">No Transformations Produced</h3>
+          <p className="text-[13px]" style={{ color: 'rgba(0,0,0,0.4)' }}>
+            Every candidate page errored during transformation. Re-run to try again.
+          </p>
+        </div>
+      )
+    }
     return (
       <div className="max-w-4xl mx-auto text-center py-16">
         <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)' }}>
@@ -171,7 +189,6 @@ export default function TransformCarousel({
             afterScreenshot={current.after_screenshot}
             pageName={current.page_name}
             route={current.route}
-            changeSummary={current.change_summary}
             afterPulse={afterPulse}
           />
         </div>

@@ -1,21 +1,18 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import PreviewFallbackSkeleton from './PreviewFallbackSkeleton'
 
 export default function BeforeAfterShowcase({
   beforeScreenshot,
   afterScreenshot,
   pageName,
   route,
-  changeSummary,
   afterPulse = false,
 }: {
   beforeScreenshot?: string
   afterScreenshot?: string
   pageName: string
   route?: string
-  changeSummary?: string[]
   afterPulse?: boolean
 }) {
   const [view, setView] = useState<'split' | 'before' | 'after'>('split')
@@ -55,10 +52,11 @@ export default function BeforeAfterShowcase({
     }
   }, [handleScroll, view])
 
-  // Preview fallback chain — preview area is never empty. Priority:
+  // Preview fallback chain:
   //   1. real screenshot for this pane
-  //   2. the other pane's screenshot (last known good)
-  //   3. visual skeleton
+  //   2. the other pane's screenshot (last known good, labeled honestly)
+  //   When both are missing we render a truthful empty state below instead
+  //   of a fake browser mock.
   const hasBefore = !!beforeScreenshot
   const hasAfter = !!afterScreenshot
   const effectiveBefore = beforeScreenshot || afterScreenshot || ''
@@ -73,14 +71,12 @@ export default function BeforeAfterShowcase({
     accent = false,
     scrollRef,
     isFallback = false,
-    skeletonVariant = 'after',
   }: {
     label: string
-    screenshot?: string
+    screenshot: string
     accent?: boolean
     scrollRef?: React.Ref<HTMLDivElement>
     isFallback?: boolean
-    skeletonVariant?: 'before' | 'after'
   }) {
     return (
       <div className="flex flex-col gap-3 flex-1 min-w-0">
@@ -112,19 +108,18 @@ export default function BeforeAfterShowcase({
               : '0 20px 60px rgba(0,0,0,0.5)',
           }}
         >
-          {/* Browser chrome */}
+          {/* Header — real route. No fake browser chrome or deployment URL. */}
           <div
-            className="border-b px-4 py-2.5 flex items-center gap-2"
+            className="border-b px-4 py-2.5"
             style={{ background: 'rgba(0,0,0,0.03)', borderColor: 'rgba(0,0,0,0.06)' }}
           >
-            <div className="w-3 h-3 rounded-full bg-red-500/70" />
-            <div className="w-3 h-3 rounded-full bg-amber-500/70" />
-            <div className="w-3 h-3 rounded-full bg-emerald-500/70" />
-            <div className="flex-1 mx-3">
-              <div className="rounded-md text-[10px] px-3 py-1 text-center" style={{ background: 'rgba(0,0,0,0.04)', color: 'rgba(0,0,0,0.3)' }}>
-                {pageName.toLowerCase().replace(/ /g, '-')}.vercel.app
-              </div>
-            </div>
+            <span
+              className="text-[10px] font-mono truncate block"
+              style={{ color: 'rgba(0,0,0,0.45)' }}
+              title={route || '/'}
+            >
+              {route || '/'}
+            </span>
           </div>
 
           {/* Screenshot — scrollable viewport so tall full-page captures stay readable */}
@@ -133,28 +128,17 @@ export default function BeforeAfterShowcase({
             className="overflow-y-auto reform-screenshot-scroll"
             style={{ background: '#fafafa', height: '560px' }}
           >
-            {screenshot ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={
-                  screenshot.startsWith('http://') || screenshot.startsWith('https://')
-                    ? screenshot
-                    : `data:image/png;base64,${screenshot}`
-                }
-                alt={`${label} — ${pageName}`}
-                className="block"
-                style={fitWidth ? { width: '100%', height: 'auto' } : { maxWidth: 'none', height: 'auto' }}
-              />
-            ) : (
-              <div className="flex h-full items-stretch p-4">
-                <PreviewFallbackSkeleton
-                  pageName={pageName}
-                  route={route}
-                  changeSummary={changeSummary}
-                  variant={skeletonVariant}
-                />
-              </div>
-            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                screenshot.startsWith('http://') || screenshot.startsWith('https://')
+                  ? screenshot
+                  : `data:image/png;base64,${screenshot}`
+              }
+              alt={`${label} — ${pageName}`}
+              className="block"
+              style={fitWidth ? { width: '100%', height: 'auto' } : { maxWidth: 'none', height: 'auto' }}
+            />
           </div>
         </div>
         {isFallback && (
@@ -162,6 +146,33 @@ export default function BeforeAfterShowcase({
             Showing last generated version
           </p>
         )}
+      </div>
+    )
+  }
+
+  if (bothMissing) {
+    return (
+      <div
+        className="rounded-2xl px-6 py-12 text-center"
+        style={{ background: 'rgba(0,0,0,0.02)', border: '1px dashed rgba(0,0,0,0.12)' }}
+      >
+        <div
+          className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full"
+          style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="9" cy="9" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.15em]" style={{ color: 'rgba(0,0,0,0.55)' }}>
+          No preview for this page
+        </p>
+        <p className="mt-2 text-[12px] leading-relaxed max-w-md mx-auto" style={{ color: 'rgba(0,0,0,0.45)' }}>
+          Screenshots weren&apos;t generated for <span className="font-mono">{route || pageName}</span>.
+          The transformed code and structural changes are listed below.
+        </p>
       </div>
     )
   }
@@ -213,7 +224,6 @@ export default function BeforeAfterShowcase({
             screenshot={effectiveBefore}
             scrollRef={beforeScrollRef}
             isFallback={beforeIsFallback}
-            skeletonVariant="before"
           />
           <div className="hidden lg:flex items-center justify-center px-1">
             <div
@@ -231,7 +241,6 @@ export default function BeforeAfterShowcase({
             accent
             scrollRef={afterScrollRef}
             isFallback={afterIsFallback}
-            skeletonVariant="after"
           />
         </div>
       ) : view === 'before' ? (
@@ -240,7 +249,6 @@ export default function BeforeAfterShowcase({
           screenshot={effectiveBefore}
           scrollRef={beforeScrollRef}
           isFallback={beforeIsFallback}
-          skeletonVariant="before"
         />
       ) : (
         <ScreenshotFrame
@@ -249,14 +257,11 @@ export default function BeforeAfterShowcase({
           accent
           scrollRef={afterScrollRef}
           isFallback={afterIsFallback}
-          skeletonVariant="after"
         />
       )}
 
       <p className="text-center text-[10px] mt-4" style={{ color: 'rgba(0,0,0,0.2)' }}>
-        {bothMissing
-          ? 'Preview may be slightly delayed — the transformed code is ready below.'
-          : 'Scroll a frame to see the rest of the page — both panels stay in sync.'}
+        Scroll a frame to see the rest of the page — both panels stay in sync.
       </p>
     </div>
   )

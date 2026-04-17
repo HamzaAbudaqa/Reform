@@ -278,30 +278,6 @@ function PipelineProgress({
   )
 }
 
-function BrowserFrame({ children, label, accent = false }: { children: React.ReactNode; label: string; accent?: boolean }) {
-  return (
-    <div className="flex flex-col gap-2 flex-1 min-w-0">
-      <div className="flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full" style={{ background: accent ? '#0a0a0a' : 'rgba(0,0,0,0.2)' }} />
-        <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.35)' }}>{label}</span>
-      </div>
-      <div className="rounded-xl overflow-hidden flex flex-col" style={{
-        border: accent ? '1px solid rgba(0,0,0,0.3)' : '1px solid rgba(0,0,0,0.06)',
-        boxShadow: accent ? '0 0 40px rgba(0,0,0,0.15)' : '0 20px 60px rgba(0,0,0,0.5)',
-      }}>
-        <div className="border-b px-3 py-1.5 flex items-center gap-1.5" style={{ background: 'rgba(0,0,0,0.03)', borderColor: 'rgba(0,0,0,0.06)' }}>
-          <div className="w-2 h-2 rounded-full bg-red-500/60" />
-          <div className="w-2 h-2 rounded-full bg-amber-500/60" />
-          <div className="w-2 h-2 rounded-full bg-emerald-500/60" />
-        </div>
-        <div style={{ background: '#fafafa', minHeight: '280px' }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 type Phase = 'idle' | 'listening' | 'thinking' | 'responding' | 'ready'
 
 function VoiceOrb({ onFinalPrompt }: { onFinalPrompt: (prompt: string) => void }) {
