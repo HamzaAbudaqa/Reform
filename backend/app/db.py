@@ -104,3 +104,11 @@ async def create_tables():
             "CREATE INDEX IF NOT EXISTS ix_transform_runs_status_updated "
             "ON transform_runs (status, updated_at DESC)"
         ))
+
+        # Heatmap — the unique composite index backing the upsert is created
+        # by create_all via the UniqueConstraint on HeatmapAggregate. Add a
+        # non-unique index to speed up the common read path (by page+layer+date).
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_heatmap_agg_page_layer_date "
+            "ON heatmap_aggregates (page_id, layer, date_bucket DESC)"
+        ))

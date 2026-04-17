@@ -13,16 +13,16 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'lcov', 'html'],
       include: [
-        'components/**/*.tsx',
-        'lib/**/*.ts',
-        'types/**/*.ts',
+        'frontend/components/**/*.tsx',
+        'frontend/lib/**/*.ts',
+        'frontend/types/**/*.ts',
       ],
       exclude: [
         'node_modules',
         '__tests__',
         '**/*.d.ts',
-        'components/demo/MockDashboardBefore.tsx',
-        'components/demo/MockDashboardAfter.tsx',
+        'frontend/components/demo/MockDashboardBefore.tsx',
+        'frontend/components/demo/MockDashboardAfter.tsx',
       ],
       thresholds: {
         lines: 80,
@@ -33,7 +33,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': path.resolve(__dirname, './frontend'),
     },
   },
 })

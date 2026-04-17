@@ -10,7 +10,7 @@ Metadata, code, and results are stored in Postgres.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -164,3 +164,73 @@ class SiteVisit(Base):
     path = Column(String, nullable=False, default="/")
     duration_seconds = Column(Integer, nullable=False, default=0)
     visited_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+# ── Heatmap ────────────────────────────────────────────────────────────
+# One HeatmapSite per deployed URL per project. Events from the tracker
+# snippet ingest into aggregate buckets (never raw events); background
+# screenshots of the live URL live in S3.
+
+class HeatmapSite(Base):
+    __tablename__ = "heatmap_sites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
+    github_user_id = Column(String, nullable=False, index=True)
+    site_key = Column(String, nullable=False, unique=True, index=True)
+    domain = Column(String, nullable=False)                     # "https://example.com"
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    last_event_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class HeatmapPage(Base):
+    __tablename__ = "heatmap_pages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("heatmap_sites.id"), nullable=False, index=True)
+    path = Column(String, nullable=False)
+    viewport_class = Column(String, nullable=False, default="desktop")  # desktop|tablet|mobile
+    screenshot_key = Column(String, nullable=True)                       # S3 key for live-URL screenshot
+    page_height_px = Column(Integer, nullable=False, default=0)
+    first_seen_at = Column(DateTime(timezone=True), default=_utcnow)
+    last_seen_at = Column(DateTime(timezone=True), default=_utcnow)
+    session_count = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("site_id", "path", "viewport_class", name="uq_heatmap_pages_site_path_vp"),
+    )
+
+
+class HeatmapAggregate(Base):
+    __tablename__ = "heatmap_aggregates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    page_id = Column(UUID(as_uuid=True), ForeignKey("heatmap_pages.id"), nullable=False, index=True)
+    layer = Column(String, nullable=False)                # click|move|scroll|rage
+    bucket_x = Column(Integer, nullable=False)            # 0..49
+    bucket_y = Column(Integer, nullable=False)            # 0..49
+    viewport_class = Column(String, nullable=False)
+    date_bucket = Column(Date, nullable=False)            # UTC date rollup
+    count = Column(Integer, nullable=False, default=0)
+    session_count = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "page_id", "layer", "bucket_x", "bucket_y", "viewport_class", "date_bucket",
+            name="uq_heatmap_agg_bucket",
+        ),
+    )
+
+
+class HeatmapSession(Base):
+    __tablename__ = "heatmap_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("heatmap_sites.id"), nullable=False, index=True)
+    session_id = Column(String, nullable=False, unique=True, index=True)
+    user_agent = Column(String, nullable=True)
+    viewport_class = Column(String, nullable=False, default="desktop")
+    started_at = Column(DateTime(timezone=True), default=_utcnow)
+    ended_at = Column(DateTime(timezone=True), default=_utcnow)
+    rage_click_count = Column(Integer, nullable=False, default=0)
