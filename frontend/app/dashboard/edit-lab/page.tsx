@@ -1968,6 +1968,8 @@ function LabComingSoon({ onUnlock }: { onUnlock: () => void }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState(false)
   const [shake, setShake] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -1978,197 +1980,347 @@ function LabComingSoon({ onUnlock }: { onUnlock: () => void }) {
       setError(true)
       setShake(true)
       setTimeout(() => setShake(false), 400)
+      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
 
+  const inputBorder = error ? '#ef4444' : inputFocused ? '#7c3aed' : 'rgba(0,0,0,0.10)'
+  const inputShadow = error
+    ? '0 0 0 3px rgba(239,68,68,0.12)'
+    : inputFocused
+    ? '0 0 0 3px rgba(124,58,237,0.14)'
+    : 'inset 0 1px 0 rgba(0,0,0,0.02)'
+
+  const canSubmit = password.trim().length > 0
+
   return (
-    <div className="max-w-[960px] mx-auto px-4 sm:px-6 py-16">
+    <div className="relative">
       <style>{`
         @keyframes labGateShake {
           0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-6px); }
-          75% { transform: translateX(6px); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        @keyframes labHaloDrift {
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+          50%      { transform: translate3d(0, -6px, 0) scale(1.02); opacity: 0.92; }
         }
       `}</style>
 
-      {/* Header */}
-      <div className="text-center mb-10">
-        <div
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-5"
-          style={{
-            background: 'rgba(168,85,247,0.08)',
-            border: '1px solid rgba(168,85,247,0.2)',
-          }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ background: '#a855f7', boxShadow: '0 0 8px rgba(168,85,247,0.6)' }}
-          />
-          <span className="text-[10px] mono uppercase tracking-[0.14em]" style={{ color: 'rgba(196,181,253,0.9)' }}>
-            Coming Soon
-          </span>
-        </div>
-        <h1
-          className="text-[40px] sm:text-[48px] font-semibold text-white leading-[1.02] mb-4"
-          style={{ letterSpacing: '-0.03em' }}
-        >
-          The Lab
-        </h1>
-        <p
-          className="text-[15px] max-w-[560px] mx-auto leading-[1.65]"
-          style={{ color: 'rgba(255,255,255,0.5)' }}
-        >
-          Select any section of your live website, describe the change in plain English,
-          and Reform rewrites that slice of your source against a warm dev server so every
-          edit lands in seconds.
-        </p>
-      </div>
-
-      {/* Feature card */}
+      {/* Ambient violet halo at the top — subtle premium signal */}
       <div
-        className="rounded-2xl p-8 sm:p-10 mb-8"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0"
         style={{
-          background: 'linear-gradient(180deg, rgba(168,85,247,0.04) 0%, rgba(168,85,247,0.01) 100%)',
-          border: '1px solid rgba(168,85,247,0.15)',
-          boxShadow:
-            '0 1px 0 rgba(255,255,255,0.04) inset, 0 24px 80px rgba(0,0,0,0.5), 0 0 40px rgba(168,85,247,0.04)',
+          height: 460,
+          background:
+            'radial-gradient(ellipse 70% 60% at 50% 0%, rgba(124,58,237,0.10) 0%, rgba(124,58,237,0.04) 36%, transparent 72%)',
+          animation: 'labHaloDrift 12s ease-in-out infinite',
         }}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <LabFeatureCell
-            icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-              </svg>
-            }
-            title="Click or drag to select"
-            body="Pick any section — navbar, hero, pricing card, a single button — or drag a rectangle across multiple elements."
-          />
-          <LabFeatureCell
-            icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            }
-            title="Describe the change"
-            body="Plain English prompts — 'make this white background', 'reduce clutter', 'use a bigger font'. No CSS knowledge required."
-          />
-          <LabFeatureCell
-            icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="16 3 21 3 21 8" />
-                <line x1="4" y1="20" x2="21" y2="3" />
-                <polyline points="21 16 21 21 16 21" />
-                <line x1="15" y1="15" x2="21" y2="21" />
-                <line x1="4" y1="4" x2="9" y2="9" />
-              </svg>
-            }
-            title="Instant preview + publish"
-            body="Reform rewrites your source in a warm dev server, renders the result in under 10 seconds, and pushes the diff to a new GitHub branch on approval."
-          />
-        </div>
-      </div>
+      />
 
-      {/* Password entry */}
-      <form
-        onSubmit={handleSubmit}
-        className="max-w-[420px] mx-auto flex flex-col items-center gap-3"
-        style={{ animation: shake ? 'labGateShake 0.4s ease-in-out' : undefined }}
-      >
-        <label
-          className="text-[10px] mono uppercase tracking-[0.14em] mb-1"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
-        >
-          Have an access code?
-        </label>
-        <div className="flex items-center gap-2 w-full">
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value)
-              if (error) setError(false)
-            }}
-            placeholder="Enter access code"
-            className="flex-1 h-11 rounded-xl px-4 text-[13px] outline-none transition-all duration-200"
+      <div className="relative max-w-[760px] mx-auto px-5 sm:px-8 pt-12 sm:pt-16 pb-24">
+        {/* ── Hero ───────────────────────────────────────────────────── */}
+        <div className="text-center mb-14 sm:mb-16">
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6"
             style={{
-              color: 'white',
-              background: 'rgba(255,255,255,0.03)',
-              border: `1px solid ${error ? 'rgba(239,68,68,0.45)' : 'rgba(255,255,255,0.08)'}`,
-              letterSpacing: '-0.005em',
-            }}
-            onFocus={(e) => {
-              if (!error) {
-                e.currentTarget.style.borderColor = 'rgba(168,85,247,0.45)'
-                e.currentTarget.style.background = 'rgba(168,85,247,0.04)'
-              }
-            }}
-            onBlur={(e) => {
-              if (!error) {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
-                e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
-              }
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!password.trim()}
-            className="h-11 px-5 rounded-xl text-[12.5px] font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
-            style={{
-              background: password.trim()
-                ? 'linear-gradient(135deg, #7c3aed, #6d28d9)'
-                : 'rgba(255,255,255,0.04)',
-              color: password.trim() ? 'white' : 'rgba(255,255,255,0.2)',
-              border: '1px solid rgba(168,85,247,0.3)',
-              boxShadow: password.trim() ? '0 0 24px rgba(124,58,237,0.25)' : 'none',
-              letterSpacing: '-0.005em',
+              background: 'rgba(124,58,237,0.06)',
+              border: '1px solid rgba(124,58,237,0.18)',
             }}
           >
-            Unlock
-          </button>
-        </div>
-        {error && (
-          <div className="text-[11px]" style={{ color: 'rgba(248,113,113,0.9)' }}>
-            Incorrect code. Try again or contact the team for access.
+            <span
+              className="w-1.5 h-1.5 rounded-full status-dot-pulse"
+              style={{ background: '#7c3aed', boxShadow: '0 0 10px rgba(124,58,237,0.55)' }}
+            />
+            <span
+              className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: '#6d28d9' }}
+            >
+              The Lab · Private Preview
+            </span>
           </div>
-        )}
-        <div className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
-          The Lab is gated during the hackathon. General access ships after the event.
+
+          <h1
+            className="text-balance font-bold"
+            style={{
+              color: '#0a0a0a',
+              fontSize: 'clamp(38px, 6vw, 56px)',
+              lineHeight: 1.04,
+              letterSpacing: '-0.035em',
+            }}
+          >
+            Edit your live UI
+            <br />
+            <span style={{ color: 'rgba(10,10,10,0.34)' }}>by talking to it.</span>
+          </h1>
+
+          <p
+            className="mt-6 text-balance mx-auto"
+            style={{
+              color: 'rgba(10,10,10,0.55)',
+              fontSize: 16,
+              lineHeight: 1.7,
+              maxWidth: 520,
+            }}
+          >
+            Pick a section. Describe the change in plain English. Reform rewrites that
+            slice of your source against a warm dev server — every edit lands in seconds.
+          </p>
         </div>
-      </form>
+
+        {/* ── Flow card ──────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl mb-10 overflow-hidden"
+          style={{
+            background: '#ffffff',
+            border: '1px solid rgba(0,0,0,0.07)',
+            boxShadow:
+              '0 1px 0 rgba(255,255,255,0.6) inset, 0 24px 60px -28px rgba(124,58,237,0.18), 0 8px 24px -16px rgba(0,0,0,0.08)',
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-6 sm:px-7 py-4"
+            style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+          >
+            <div
+              className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: 'rgba(10,10,10,0.42)' }}
+            >
+              How The Lab works
+            </div>
+            <div
+              className="text-[10px] mono uppercase tracking-[0.14em]"
+              style={{ color: 'rgba(10,10,10,0.28)' }}
+            >
+              live preview · ~10s round-trip
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3">
+            <LabFlowStep
+              step="01"
+              title="Select"
+              body="Click any section — navbar, hero, pricing card, a single button — or drag a rectangle across multiple elements."
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h6v6H4z" />
+                  <path d="M14 14h6v6h-6z" />
+                  <path d="M10 10l4 4" />
+                </svg>
+              }
+            />
+            <LabFlowStep
+              step="02"
+              title="Describe"
+              body="Plain-English prompts — &ldquo;tighten the spacing&rdquo;, &ldquo;use a bigger heading&rdquo;, &ldquo;simplify this&rdquo;. No CSS required."
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              }
+            />
+            <LabFlowStep
+              step="03"
+              title="Ship"
+              body="Reform rewrites the source, renders the result, and pushes the diff to a new GitHub branch when you accept."
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="M13 5l7 7-7 7" />
+                </svg>
+              }
+              isLast
+            />
+          </div>
+        </div>
+
+        {/* ── Access code ────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl px-6 sm:px-8 py-7 sm:py-8"
+          style={{
+            background: 'linear-gradient(180deg, #fbfaff 0%, #ffffff 100%)',
+            border: '1px solid rgba(124,58,237,0.18)',
+            boxShadow:
+              '0 1px 0 rgba(255,255,255,0.65) inset, 0 16px 50px -22px rgba(124,58,237,0.22), 0 4px 16px -10px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+            <div>
+              <div
+                className="text-[10px] font-semibold uppercase tracking-[0.16em] mb-2"
+                style={{ color: '#7c3aed' }}
+              >
+                Early access
+              </div>
+              <h2
+                className="font-semibold"
+                style={{
+                  color: '#0a0a0a',
+                  fontSize: 22,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.2,
+                }}
+              >
+                Have an access code?
+              </h2>
+              <p
+                className="mt-1.5 text-[13px]"
+                style={{ color: 'rgba(10,10,10,0.5)', lineHeight: 1.6, maxWidth: 460 }}
+              >
+                The Lab is gated during the hackathon. Enter your code to unlock it on
+                this device — public access opens shortly after the event.
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            style={{ animation: shake ? 'labGateShake 0.4s ease-in-out' : undefined }}
+          >
+            <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
+              <input
+                ref={inputRef}
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  if (error) setError(false)
+                }}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                placeholder="Enter access code"
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Access code"
+                aria-invalid={error || undefined}
+                className="flex-1 h-12 rounded-xl px-4 text-[14px] outline-none transition-all duration-200"
+                style={{
+                  color: '#0a0a0a',
+                  background: '#ffffff',
+                  border: `1px solid ${inputBorder}`,
+                  boxShadow: inputShadow,
+                  letterSpacing: '0.04em',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="h-12 px-6 rounded-xl text-[13px] font-semibold transition-all duration-200 disabled:cursor-not-allowed active:scale-[0.97] inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                style={{
+                  background: canSubmit
+                    ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 55%, #6d28d9 100%)'
+                    : 'rgba(0,0,0,0.04)',
+                  color: canSubmit ? '#ffffff' : 'rgba(0,0,0,0.30)',
+                  border: `1px solid ${canSubmit ? 'rgba(124,58,237,0.55)' : 'rgba(0,0,0,0.06)'}`,
+                  boxShadow: canSubmit
+                    ? '0 10px 28px -10px rgba(124,58,237,0.55), inset 0 1px 0 rgba(255,255,255,0.18)'
+                    : 'none',
+                  letterSpacing: '-0.005em',
+                }}
+              >
+                Unlock The Lab
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path
+                    d="M3 7h8M8 4l3 3-3 3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              className="mt-3 flex items-center justify-between text-[11px] gap-3"
+              style={{ minHeight: 18 }}
+            >
+              <div role="status" aria-live="polite">
+                {error ? (
+                  <span style={{ color: '#dc2626' }}>
+                    That code doesn&rsquo;t match. Double-check or reach out for access.
+                  </span>
+                ) : (
+                  <span style={{ color: 'rgba(10,10,10,0.4)' }}>
+                    Unlock persists on this browser.
+                  </span>
+                )}
+              </div>
+              <a
+                href="mailto:hamza.daqa@gmail.com?subject=Reform%20Lab%20access"
+                className="font-medium"
+                style={{ color: '#7c3aed' }}
+              >
+                Request a code →
+              </a>
+            </div>
+          </form>
+        </div>
+
+        {/* Footnote */}
+        <div
+          className="mt-8 text-center text-[11px]"
+          style={{ color: 'rgba(10,10,10,0.35)' }}
+        >
+          Part of Reform · Free for hackathon attendees · Public launch follows the event
+        </div>
+      </div>
     </div>
   )
 }
 
-function LabFeatureCell({
-  icon,
+function LabFlowStep({
+  step,
   title,
   body,
+  icon,
+  isLast = false,
 }: {
-  icon: React.ReactNode
+  step: string
   title: string
   body: string
+  icon: React.ReactNode
+  isLast?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center mb-1"
-        style={{
-          color: '#a855f7',
-          background: 'rgba(168,85,247,0.08)',
-          border: '1px solid rgba(168,85,247,0.15)',
-        }}
-      >
-        {icon}
+    <div
+      className="px-6 sm:px-7 py-6 sm:py-7 flex flex-col gap-3 relative"
+      style={{
+        // Vertical separators between steps on desktop, horizontal on mobile.
+        // Use a single border so it never doubles up between adjacent cells.
+        borderRight: !isLast ? '1px solid rgba(0,0,0,0.05)' : undefined,
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{
+            color: '#7c3aed',
+            background: 'rgba(124,58,237,0.07)',
+            border: '1px solid rgba(124,58,237,0.16)',
+          }}
+        >
+          {icon}
+        </div>
+        <span
+          className="mono text-[10px] font-semibold tracking-[0.12em]"
+          style={{ color: 'rgba(10,10,10,0.28)' }}
+        >
+          {step}
+        </span>
       </div>
-      <div className="text-[13px] font-semibold text-white" style={{ letterSpacing: '-0.01em' }}>
+      <div
+        className="text-[14px] font-semibold"
+        style={{ color: '#0a0a0a', letterSpacing: '-0.012em' }}
+      >
         {title}
       </div>
-      <p className="text-[12px] leading-[1.6]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+      <p
+        className="text-[12.5px]"
+        style={{ color: 'rgba(10,10,10,0.55)', lineHeight: 1.6 }}
+      >
         {body}
       </p>
     </div>
