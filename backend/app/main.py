@@ -27,6 +27,7 @@ from app.routes.webhook import router as webhook_router
 from app.routes.edit_lab import router as edit_lab_router
 from app.routes.analytics import router as analytics_router
 from app.routes.stitch import router as stitch_router
+from app.routes.heatmap import router as heatmap_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -132,6 +133,7 @@ app.include_router(webhook_router)
 app.include_router(edit_lab_router)
 app.include_router(analytics_router)
 app.include_router(stitch_router)
+app.include_router(heatmap_router)
 
 
 @app.get("/health")

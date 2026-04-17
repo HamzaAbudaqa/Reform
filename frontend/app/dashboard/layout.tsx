@@ -11,6 +11,7 @@ import { clearSelectedRepo } from '@/lib/selectedRepo'
 const NAV_ITEMS = [
   { href: '/dashboard/discovery', label: 'Project Discovery' },
   { href: '/dashboard/simulation', label: 'UX Analysis' },
+  { href: '/dashboard/heatmap', label: 'Heatmap' },
   { href: '/dashboard/transform', label: 'UI Transformation' },
 ]
 
@@ -112,6 +113,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 sessionStorage.removeItem('refineui_analysis_cache')
                 sessionStorage.removeItem('refineui_transform')
                 sessionStorage.removeItem('refineui_site_url')
+                sessionStorage.removeItem('refineui_heatmap_site_id')
                 clearSelectedRepo()
                 window.location.href = '/dashboard/discovery'
               }}
