@@ -123,14 +123,6 @@ function rectsIntersect(a: Rect, b: Rect): boolean {
   )
 }
 
-function unionRects(rects: Rect[]): Rect {
-  const x1 = Math.min(...rects.map((r) => r.x))
-  const y1 = Math.min(...rects.map((r) => r.y))
-  const x2 = Math.max(...rects.map((r) => r.x + r.width))
-  const y2 = Math.max(...rects.map((r) => r.y + r.height))
-  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }
-}
-
 function hitTestSection(x: number, y: number, sections: Section[]): Section | null {
   const hits = sections.filter(
     (s) =>
@@ -183,67 +175,19 @@ function buildRectSelection(
       memberIds: [],
     }
   }
-  if (included.length === 1) {
-    const sel = sectionToSelection(included[0])
-    sel.kind = 'rect'
-    return sel
-  }
-  const label =
-    included.length <= 3
-      ? included.map((s) => s.label).join(' + ')
-      : `${included.slice(0, 2).map((s) => s.label).join(' + ')} +${included.length - 2}`
-  const heading = included
-    .map((s) => s.heading)
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(' · ')
-  const paragraph = included
-    .map((s) => s.paragraph)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(' · ')
-  const text = included
-    .map((s) => s.text)
-    .filter(Boolean)
-    .join(' ')
-    .slice(0, 400)
-
-  const classSet = new Set<string>()
-  for (const s of included) {
-    if (s.classes) {
-      for (const c of s.classes.split(/\s+/)) {
-        if (c) classSet.add(c)
-        if (classSet.size >= 12) break
-      }
-    }
-    if (classSet.size >= 12) break
-  }
-  const combinedClasses = Array.from(classSet).join(' ')
-  const firstRole = included.find((s) => s.role)?.role || ''
-  const firstAriaLabel = included.find((s) => s.aria_label)?.aria_label || ''
-  const primaryTag = included[0]?.tag || ''
-
-  const fileCounts: Record<string, number> = {}
-  for (const s of included) {
-    if (s.source_file) fileCounts[s.source_file] = (fileCounts[s.source_file] || 0) + 1
-  }
-  const sortedFiles = Object.entries(fileCounts).sort((a, b) => b[1] - a[1])
-  const source_file = sortedFiles[0]?.[0] || rootFile
-
-  return {
-    kind: 'rect',
-    label,
-    heading,
-    paragraph,
-    text,
-    tag: primaryTag,
-    classes: combinedClasses,
-    role: firstRole,
-    aria_label: firstAriaLabel,
-    rect: unionRects(included.map((s) => s.rect)),
-    source_file,
-    memberIds: included.map((s) => s.id),
-  }
+  // Always target a single section — even when the drag rect covers many.
+  // Editing multiple sections at once produced whole-file rewrites because
+  // the backend can only scope to one element. Pick the section with the
+  // largest area: usually the outer container the user meant, not a nested
+  // child. For multi-section drags this effectively snaps to the best fit.
+  const primary = included.reduce(
+    (best, s) =>
+      s.rect.width * s.rect.height > best.rect.width * best.rect.height ? s : best,
+    included[0],
+  )
+  const sel = sectionToSelection(primary)
+  sel.kind = 'rect'
+  return sel
 }
 
 const PROMPT_EXAMPLES = [
@@ -1268,9 +1212,6 @@ export default function EditLabPage() {
                       }}
                     >
                       {selection.label}
-                      {selection.memberIds.length > 1 && (
-                        <span style={{ opacity: 0.75 }}>· {selection.memberIds.length} sections</span>
-                      )}
                     </div>
                   </div>
                 )}
@@ -1402,14 +1343,6 @@ export default function EditLabPage() {
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] mono uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     <span>Editing</span>
-                    {selection.kind === 'rect' && selection.memberIds.length > 1 && (
-                      <span
-                        className="px-1.5 py-[1px] rounded"
-                        style={{ background: 'rgba(124,140,255,0.15)', color: 'rgba(170,180,255,0.9)' }}
-                      >
-                        {selection.memberIds.length} sections
-                      </span>
-                    )}
                   </div>
                   <button
                     onClick={() => {

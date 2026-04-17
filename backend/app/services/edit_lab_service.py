@@ -682,35 +682,50 @@ def _build_scoped_prompt(
         )
     identifier = "\n".join(identifier_lines)
 
-    return f"""You are a senior frontend engineer editing a single React/JSX file.
+    return f"""You are a senior frontend engineer making a SCOPED edit to one JSX element.
 
-## File to modify
+## File (for context only — do NOT return this whole file)
 {current_code}
 
-## The user has selected ONE region of the rendered page
-Identify the JSX that renders the element described below. Match by ANY available signal — tag, class names, aria-label, role, or visible text:
+## The user selected ONE element on the rendered page. Locate its JSX:
 {identifier}
 
-## User's requested change for that region
+## User's requested change
 "{user_prompt}"
 
 ---
 
-## HOW TO SCOPE THE EDIT
-- Your primary target is the JSX element identified above.
-- If the user's change is inherently container-level — background, padding, margin, border, corner radius, layout direction, gap, alignment, size (bigger/smaller), font-size, text color — you MAY modify the className or style of the identified element AND any descendants of the identified region that the user clearly means. "Make this button bigger" = find the button(s) in the region and add a bigger size class (`text-lg`, `px-6 py-3`, `h-12`, etc.).
-- If the user's change is content-level — copy, headings, button labels — modify only the matching text.
-- Never modify JSX that sits outside the identified element's direct wrapping container. Never modify imports or exports unless the change strictly requires it (e.g. a new Tailwind class is added — that needs no import).
+## OUTPUT FORMAT (strict — the response is parsed)
 
-## CRITICAL RULES
-1. **The change MUST be visibly different when the page re-renders.** If the user asks for "bigger", at least DOUBLE the padding or font-size. If they ask for "white background", use `bg-white` (not `bg-gray-50`). Subtle tweaks defeat the purpose — be obvious.
-2. Do not return an unchanged file. Do not make a tiny invisible change. If the prompt is ambiguous, pick the most impactful visible interpretation.
-3. If the element's JSX is imported from another file (i.e. this file only renders `<SomeComponent />`), replace that usage inline in THIS file with JSX that achieves the user's change rather than editing any other file. Inline JSX beats unreachable edits.
-4. When the user mentions color/background/border/spacing/size, apply it via Tailwind classes (e.g. `bg-white`, `border-gray-200`, `p-6`, `text-2xl`, `h-14`) if the surrounding code uses Tailwind. Otherwise match the styling convention already present in the file (inline style, CSS modules, etc.).
-5. Preserve all imports, exports, hooks, state, event handlers, and unrelated markup.
-6. Return the COMPLETE updated file — not a diff, not a snippet.
-7. Return ONLY code — no explanation, no markdown fences, no commentary.
-8. Start with the first line of the original file (import, 'use client', or similar)."""
+Return exactly two fenced code blocks, in this order, nothing else:
+
+[BEFORE]
+```jsx
+<the exact JSX of the single element you will modify, copied verbatim from the file>
+```
+
+[AFTER]
+```jsx
+<your modified version of that same JSX — same structure, only the attributes or text the user asked to change are different>
+```
+
+## HARD RULES
+
+1. `[BEFORE]` must be COPIED CHARACTER-FOR-CHARACTER from the file (whitespace, quotes, self-closing slashes, everything). It is used as the exact key for a string replace. Any deviation breaks the edit.
+
+2. `[BEFORE]` must appear EXACTLY ONCE in the file. If the element you want to modify is ambiguous (multiple matches), expand `[BEFORE]` to include just enough surrounding context — a parent's opening tag, a nearby sibling — to make it unique. Do NOT expand further than needed.
+
+3. `[AFTER]` may differ from `[BEFORE]` ONLY in the attributes or text the user's change requires. Do not refactor, rename props, reorder children, add/remove siblings, restructure JSX, or change imports, exports, hooks, handlers, or logic. If you could satisfy the change by only editing a `className` or `style` attribute, you MUST do that and nothing else.
+
+4. Styling changes (background, color, padding, margin, spacing, size, rounded, border, shadow, font-size, gap) must be applied via Tailwind `className` on the target element (or its direct wrapper if the target has no className). Do not introduce new CSS files or inline styles if Tailwind is already in use.
+
+5. Content changes (copy, headings, button labels) only modify the text node(s). Preserve all markup.
+
+6. The change MUST be visibly different. "Dark background" = `bg-neutral-900` or `bg-black`, not `bg-gray-100`. "Bigger button" = at least doubled padding or font-size.
+
+7. If the element is rendered by an imported component (this file just renders `<SomeComponent />` and the visual lives elsewhere), still apply the change via `className` / prop on that usage in THIS file. Do not touch other files.
+
+8. Output: only the two fenced code blocks after the `[BEFORE]` and `[AFTER]` markers. No commentary, no markdown headings, no explanation."""
 
 
 def _extract_code_response(raw: str) -> str:
@@ -721,6 +736,50 @@ def _extract_code_response(raw: str) -> str:
         if text.endswith("```"):
             text = text[: text.rfind("```")].strip()
     return text
+
+
+_BEFORE_AFTER_RE = re.compile(
+    r"\[BEFORE\]\s*```(?:jsx|tsx|javascript|js|typescript|ts|html)?\s*\n(.*?)\n\s*```"
+    r".*?"
+    r"\[AFTER\]\s*```(?:jsx|tsx|javascript|js|typescript|ts|html)?\s*\n(.*?)\n\s*```",
+    re.DOTALL,
+)
+
+
+def _parse_before_after(raw: str) -> Optional[tuple[str, str]]:
+    """Extract the two JSX fragments from a [BEFORE]/[AFTER] response.
+
+    Returns None if the response didn't follow the format."""
+    m = _BEFORE_AFTER_RE.search(raw)
+    if not m:
+        return None
+    before = m.group(1)
+    after = m.group(2)
+    if not before.strip() or not after.strip():
+        return None
+    return before, after
+
+
+_STYLING_KEYWORDS = frozenset({
+    "background", "bg", "backgrounds", "color", "colors", "dark", "light",
+    "darker", "lighter", "padding", "padded", "margin", "spacing", "space",
+    "size", "bigger", "smaller", "larger", "taller", "shorter", "wider",
+    "narrower", "font", "fontsize", "rounded", "round", "corner", "corners",
+    "border", "borders", "shadow", "shadows", "gap", "tight", "loose",
+    "text", "white", "black", "gray", "grey", "blue", "red", "green",
+    "purple", "yellow", "pink", "orange", "emerald", "rose", "indigo",
+})
+
+
+def _is_styling_prompt(user_prompt: str) -> bool:
+    """Rough classifier: does this prompt describe a pure visual tweak?
+
+    Used to tighten the diff guardrail — styling prompts should never
+    produce large file diffs."""
+    if not user_prompt:
+        return False
+    tokens = re.findall(r"[a-z]+", user_prompt.lower())
+    return any(tok in _STYLING_KEYWORDS for tok in tokens)
 
 
 def _match_updated_section(
@@ -1027,59 +1086,128 @@ async def apply_section_edit(
         message = await asyncio.to_thread(
             client.messages.create,
             model="claude-sonnet-4-6",
-            max_tokens=16384,
+            max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
-        revised_code = _extract_code_response(raw)
 
-        if revised_code.strip() == current_code.strip():
-            logger.warning("Edit Lab apply: identical code, retrying with stronger instruction")
+        # Parse the [BEFORE]/[AFTER] fragments. If the model didn't follow
+        # the format, retry once with an explicit reminder.
+        parsed = _parse_before_after(raw)
+        if parsed is None:
+            logger.warning("Edit Lab apply: response missing [BEFORE]/[AFTER] blocks; retrying")
             retry = await asyncio.to_thread(
                 client.messages.create,
                 model="claude-sonnet-4-6",
-                max_tokens=16384,
+                max_tokens=8000,
                 messages=[
                     {"role": "user", "content": prompt},
-                    {
-                        "role": "user",
-                        "content": (
-                            "Your previous response was IDENTICAL to the original file. You did NOT "
-                            f"apply the change. The user asked to modify the '{section_label}' section: "
-                            f'"{user_prompt}". Apply the change now. Return the complete updated file.'
-                        ),
-                    },
+                    {"role": "assistant", "content": raw[:1200]},
+                    {"role": "user", "content": (
+                        "Your response did not follow the required format. "
+                        "Respond again with EXACTLY two fenced code blocks: "
+                        "the first preceded by `[BEFORE]` and containing the "
+                        "verbatim original JSX, the second preceded by `[AFTER]` "
+                        "and containing your modified version. No other text."
+                    )},
                 ],
             )
-            revised_code = _extract_code_response(retry.content[0].text.strip())
+            raw = retry.content[0].text.strip()
+            parsed = _parse_before_after(raw)
 
-        if revised_code.strip() == current_code.strip():
+        if parsed is None:
             return {
                 "session_id": sess.id,
-                "error": "Claude could not apply the requested change to this section. Try rephrasing.",
+                "error": "Claude did not return a valid edit. Try rephrasing with a more specific change.",
             }
 
-        # Sanity check: if the revised code is effectively identical in
-        # length (<1% change), Claude probably made a cosmetic tweak that
-        # won't be visible. Surface it as an error so the user retries
-        # instead of squinting at an unchanged preview.
-        len_delta = abs(len(revised_code) - len(current_code)) / max(len(current_code), 1)
-        if len_delta < 0.001:
+        before, after = parsed
+
+        # Validate that the [BEFORE] fragment appears exactly once in the
+        # source file. Zero = hallucination; multiple = ambiguous target.
+        occurrences = current_code.count(before)
+        if occurrences == 0:
             logger.warning(
-                "Edit Lab apply: revised code is only %.2f%% different (likely no-op)",
-                len_delta * 100,
+                "Edit Lab apply: [BEFORE] block not found in %s (len=%d)",
+                target_file, len(before),
             )
             return {
                 "session_id": sess.id,
                 "error": (
-                    "Claude's edit was too subtle to make a visible difference. "
-                    "Try rephrasing with a more concrete change (e.g. 'make this "
-                    "button text-xl with bg-emerald-500')."
+                    "Claude's edit couldn't be matched to the selected element. "
+                    "Click directly on the element you want to change and try again."
                 ),
             }
+        if occurrences > 1:
+            logger.warning(
+                "Edit Lab apply: [BEFORE] block matches %d locations in %s",
+                occurrences, target_file,
+            )
+            return {
+                "session_id": sess.id,
+                "error": (
+                    f"The target appears {occurrences} times in the file, which is ambiguous. "
+                    "Pick a more specific element or use a more distinctive prompt."
+                ),
+            }
+
+        # Reject when AFTER ballooned far beyond BEFORE — usually a sign
+        # the model is rewriting rather than editing.
+        before_len = len(before)
+        after_len = len(after)
+        if before_len > 0 and after_len > before_len * 4 and after_len > 500:
+            logger.warning(
+                "Edit Lab apply: AFTER is %.1fx larger than BEFORE (%d -> %d chars)",
+                after_len / max(before_len, 1), before_len, after_len,
+            )
+            return {
+                "session_id": sess.id,
+                "error": (
+                    "The edit grew the element far beyond its original size. "
+                    "Try a more specific prompt or a smaller element."
+                ),
+            }
+
+        if before == after:
+            return {
+                "session_id": sess.id,
+                "error": "Claude returned an identical [AFTER] block — no change was made. Try rephrasing.",
+            }
+
+        # Apply the scoped replace. Exactly one occurrence guaranteed above.
+        revised_code = current_code.replace(before, after, 1)
+
+        if revised_code == current_code:
+            return {
+                "session_id": sess.id,
+                "error": "Replacement had no effect. Try rephrasing.",
+            }
+
+        # Diff guardrail: styling prompts ("make background dark", "bigger",
+        # "rounded corners") should never change a large fraction of the
+        # file. If they do, the model went off-script and we reject.
+        if _is_styling_prompt(user_prompt):
+            import difflib
+            ratio = difflib.SequenceMatcher(a=current_code, b=revised_code).ratio()
+            file_delta_pct = (1 - ratio) * 100
+            if file_delta_pct > 30.0:
+                logger.warning(
+                    "Edit Lab apply: styling prompt produced %.1f%% file change — rejecting",
+                    file_delta_pct,
+                )
+                return {
+                    "session_id": sess.id,
+                    "error": (
+                        "The edit would change too much of the file for a styling tweak. "
+                        "Click directly on the specific element you want to restyle."
+                    ),
+                }
+
+        len_delta_pct = abs(len(revised_code) - len(current_code)) / max(len(current_code), 1) * 100
         logger.info(
-            "Edit Lab apply: %s diff %+d chars (%.2f%%)",
-            target_file, len(revised_code) - len(current_code), len_delta * 100,
+            "Edit Lab apply: %s BEFORE=%d AFTER=%d file_delta=%+d chars (%.2f%%)",
+            target_file, before_len, after_len,
+            len(revised_code) - len(current_code), len_delta_pct,
         )
 
         with open(target_full, "w", encoding="utf-8") as f:
