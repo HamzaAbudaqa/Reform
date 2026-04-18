@@ -857,6 +857,13 @@ export default function TransformPageWrapper() {
 }
 
 function TransformPage() {
+  const [locked, setLocked] = useState(false)
+
+  useEffect(() => {
+    const cache = sessionStorage.getItem('refineui_analysis_cache')
+    setLocked(!cache || cache === '{}')
+  }, [])
+
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [transform, setTransform] = useState<TransformData | null>(null)
   const [scOpen, setScOpen] = useState(false)
@@ -1830,6 +1837,33 @@ function TransformPage() {
     setSelectedCommit({ ...commit, status: 'accepted', color: '#22c55e' })
   }
 
+  if (locked) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] px-6">
+        <div className="text-center max-w-sm">
+          <div
+            className="w-12 h-12 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M6 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Complete UX Analysis first</h2>
+          <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.35)', lineHeight: 1.7 }}>
+            The transform is guided by the findings you select in UX Analysis. Run at least one screen analysis and queue your findings before transforming.
+          </p>
+          <button
+            onClick={() => router.push('/dashboard/simulation')}
+            className="btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold"
+          >
+            Go to UX Analysis →
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex justify-center px-3 sm:px-6 py-6 sm:py-10 pb-20">

@@ -259,11 +259,15 @@ const LAB_UNLOCK_KEY = 'reform_lab_unlocked'
 
 export default function EditLabPage() {
   const { data: session } = useSession()
+  const [transformDone, setTransformDone] = useState(false)
+  const [transformChecked, setTransformChecked] = useState(false)
   const [labUnlocked, setLabUnlocked] = useState(false)
   const [labUnlockChecked, setLabUnlockChecked] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    setTransformDone(!!sessionStorage.getItem('refineui_transform'))
+    setTransformChecked(true)
     try {
       if (localStorage.getItem(LAB_UNLOCK_KEY) === 'true') {
         setLabUnlocked(true)
@@ -804,6 +808,35 @@ export default function EditLabPage() {
       height: height * scale,
     }
   }, [dragStart, dragCurrent, isDragging, scale])
+
+  if (!transformChecked) return null
+  if (!transformDone) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] px-6">
+        <div className="text-center max-w-sm">
+          <div
+            className="w-12 h-12 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M6 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Complete a UI Transformation first</h2>
+          <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.35)', lineHeight: 1.7 }}>
+            The Lab lets you live-edit the transformed output. Run a full transformation before entering the Lab.
+          </p>
+          <Link
+            href="/dashboard/transform"
+            className="btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold inline-block"
+          >
+            Go to UI Transformation →
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   // Gate the full Lab behind a password. Attendees who don't know it see a
   // "coming soon" teaser; the page still exists so they can read the feature

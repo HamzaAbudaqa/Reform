@@ -93,6 +93,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { state: progressState } = useProgress()
+  const [discoveryDone, setDiscoveryDone] = useState(false)
+  const [analysisDone, setAnalysisDone] = useState(false)
+  const [transformDone, setTransformDone] = useState(false)
+
+  useEffect(() => {
+    function readSession() {
+      setDiscoveryDone(!!sessionStorage.getItem('refineui_discovery'))
+      setAnalysisDone(!!sessionStorage.getItem('refineui_analysis_cache'))
+      setTransformDone(!!sessionStorage.getItem('refineui_transform'))
+    }
+    readSession()
+    window.addEventListener('focus', readSession)
+    window.addEventListener('reform:discovery-complete', readSession)
+    window.addEventListener('reform:ux-analysis-complete', readSession)
+    return () => {
+      window.removeEventListener('focus', readSession)
+      window.removeEventListener('reform:discovery-complete', readSession)
+      window.removeEventListener('reform:ux-analysis-complete', readSession)
+    }
+  }, [])
 
   return (
     <div className="app-shell min-h-screen">
@@ -128,6 +148,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <DashboardNav
               pathname={pathname}
               progressActive={progressState.active}
+              discoveryDone={discoveryDone}
+              analysisDone={analysisDone}
+              transformDone={transformDone}
               className="relative hidden sm:flex items-center gap-1 rounded-[20px] p-1.5 overflow-hidden"
               itemClassName="block px-4 py-2.5 rounded-2xl text-[12px] font-medium transition-colors duration-200 whitespace-nowrap"
             />
@@ -165,6 +188,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           <DashboardNav
             pathname={pathname}
             progressActive={progressState.active}
+            discoveryDone={discoveryDone}
+            analysisDone={analysisDone}
+            transformDone={transformDone}
             className="relative flex items-center gap-1 rounded-[18px] p-1 overflow-hidden min-w-max"
             itemClassName="block px-3 py-2 rounded-[14px] text-[11px] font-medium transition-colors duration-200 whitespace-nowrap"
             indicatorInset={3}
@@ -180,9 +206,26 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   )
 }
 
+function isNavLocked(
+  href: string,
+  progressActive: boolean,
+  discoveryDone: boolean,
+  analysisDone: boolean,
+  transformDone: boolean,
+): boolean {
+  if (href === '/dashboard/discovery') return progressActive
+  if (href === '/dashboard/simulation') return !discoveryDone
+  if (href === '/dashboard/transform') return !analysisDone
+  if (href === '/dashboard/edit-lab') return !transformDone
+  return false
+}
+
 function DashboardNav({
   pathname,
   progressActive,
+  discoveryDone,
+  analysisDone,
+  transformDone,
   className,
   itemClassName,
   indicatorInset = 4,
@@ -190,6 +233,9 @@ function DashboardNav({
 }: {
   pathname: string
   progressActive: boolean
+  discoveryDone: boolean
+  analysisDone: boolean
+  transformDone: boolean
   className: string
   itemClassName: string
   indicatorInset?: number
@@ -211,7 +257,7 @@ function DashboardNav({
   const measureMetrics = () => {
     const nextMetrics = NAV_ITEMS.map((item) => {
       const node = itemRefs.current[item.href]
-      const disabled = item.href === '/dashboard/discovery' && progressActive
+      const disabled = isNavLocked(item.href, progressActive, discoveryDone, analysisDone, transformDone)
       if (!node) return null
       return {
         href: item.href,
@@ -250,7 +296,7 @@ function DashboardNav({
       window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', updateMeasurements)
     }
-  }, [activeHref, indicatorInset, progressActive])
+  }, [activeHref, indicatorInset, progressActive, discoveryDone, analysisDone, transformDone])
 
   const clearDrag = () => {
     dragSessionRef.current = null
@@ -437,7 +483,7 @@ function DashboardNav({
 
       {NAV_ITEMS.map((item) => {
         const isActive = item.href === visibleHref
-        const isLocked = item.href === '/dashboard/discovery' && progressActive
+        const isLocked = isNavLocked(item.href, progressActive, discoveryDone, analysisDone, transformDone)
         return (
           <div
             key={item.href}
@@ -449,9 +495,13 @@ function DashboardNav({
             {isLocked ? (
               <div
                 data-locked="true"
-                className={itemClassName}
-                style={{ color: isActive ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.42)', opacity: 0.72 }}
+                className={`${itemClassName} flex items-center gap-1.5`}
+                style={{ color: 'rgba(255,255,255,0.22)', opacity: 0.6, cursor: 'not-allowed' }}
               >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+                  <rect x="2" y="5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M4 5V3.5a2 2 0 0 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
                 {item.label}
               </div>
             ) : (

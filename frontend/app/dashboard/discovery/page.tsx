@@ -51,8 +51,17 @@ const FLAVOR_LINES = [
   'Stealing ideas, politely and with attribution…',
 ]
 
+const PRODUCT_TYPES = [
+  'SaaS Web App',
+  'Marketing / Landing Page',
+  'E-commerce Store',
+  'Consumer Web App',
+  'Internal Tool / Dashboard',
+  'Mobile App',
+]
+
 const QUESTIONS = [
-  { key: 'product_type', label: 'What are you building?', placeholder: 'e.g., Dashboard, Mobile app, SaaS platform', optional: false },
+  { key: 'product_type', label: 'What are you building?', placeholder: 'Describe your product...', optional: false },
   { key: 'industry', label: 'What industry or field?', placeholder: 'e.g., Fintech, Healthcare, Education, DevTools', optional: false },
   { key: 'target_audience', label: 'Who is your target user?', placeholder: 'e.g., Developers, Small business owners, Students', optional: false },
   { key: 'core_feature', label: 'What is the core feature?', placeholder: 'e.g., AI code completion, Invoice management', optional: false },
@@ -71,6 +80,7 @@ export default function DiscoveryPage() {
 
 function DiscoveryPageInner() {
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [productTypeOther, setProductTypeOther] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [loading, setLoading] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('')
@@ -128,6 +138,20 @@ function DiscoveryPageInner() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') { e.preventDefault(); handleNext() }
   }
+
+  // Allow Enter to advance from the product_type step when a preset button is selected
+  // (the "Other" text input already handles Enter via onKeyDown above)
+  useEffect(() => {
+    if (currentQ?.key !== 'product_type') return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Enter' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault()
+        handleNext()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [currentQ?.key, handleNext])
 
   async function handleFullPipeline() {
     setLoading(true); setError('')
@@ -244,6 +268,7 @@ function DiscoveryPageInner() {
       sessionStorage.setItem('refineui_discovery', JSON.stringify(discoveryData))
       sessionStorage.setItem('refineui_analysis', JSON.stringify(analysis))
       sessionStorage.setItem('refineui_answers', JSON.stringify(answers))
+      window.dispatchEvent(new Event('reform:discovery-complete'))
       finishProgress(); setDiscovery(discoveryData); setCompleted(true); setLoading(false); setShowNotification(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Pipeline failed')
@@ -540,16 +565,72 @@ function DiscoveryPageInner() {
         {/* Question */}
         <div className="surface-interactive rounded-xl p-6">
           <label className="block text-white font-semibold text-lg mb-4" style={{ letterSpacing: '-0.01em' }}>{currentQ.label}</label>
-          <input
-            autoFocus
-            type="text"
-            placeholder={currentQ.placeholder}
-            value={answers[currentQ.key] || ''}
-            onChange={(e) => setAnswers({ ...answers, [currentQ.key]: e.target.value })}
-            onKeyDown={handleKeyDown}
-            className="w-full bg-transparent px-4 py-3 text-sm outline-none rounded-lg transition-colors focus:border-purple-500/30"
-            style={{ color: 'white', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
-          />
+
+          {currentQ.key === 'product_type' ? (
+            <div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {PRODUCT_TYPES.map((type) => {
+                  const isSelected = !productTypeOther && answers['product_type'] === type
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        setProductTypeOther(false)
+                        setAnswers({ ...answers, product_type: type })
+                      }}
+                      className="px-3 py-2.5 rounded-lg text-sm text-left transition-all"
+                      style={{
+                        border: isSelected ? '1px solid rgba(168,85,247,0.5)' : '1px solid rgba(255,255,255,0.07)',
+                        background: isSelected ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.02)',
+                        color: isSelected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)',
+                      }}
+                    >
+                      {type}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductTypeOther(true)
+                    setAnswers({ ...answers, product_type: '' })
+                  }}
+                  className="px-3 py-2.5 rounded-lg text-sm text-left transition-all"
+                  style={{
+                    border: productTypeOther ? '1px solid rgba(168,85,247,0.5)' : '1px solid rgba(255,255,255,0.07)',
+                    background: productTypeOther ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.02)',
+                    color: productTypeOther ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)',
+                  }}
+                >
+                  Other
+                </button>
+              </div>
+              {productTypeOther && (
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={currentQ.placeholder}
+                  value={answers['product_type'] || ''}
+                  onChange={(e) => setAnswers({ ...answers, product_type: e.target.value })}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-transparent px-4 py-3 text-sm outline-none rounded-lg transition-colors"
+                  style={{ color: 'white', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
+                />
+              )}
+            </div>
+          ) : (
+            <input
+              autoFocus
+              type="text"
+              placeholder={currentQ.placeholder}
+              value={answers[currentQ.key] || ''}
+              onChange={(e) => setAnswers({ ...answers, [currentQ.key]: e.target.value })}
+              onKeyDown={handleKeyDown}
+              className="w-full bg-transparent px-4 py-3 text-sm outline-none rounded-lg transition-colors focus:border-purple-500/30"
+              style={{ color: 'white', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}
+            />
+          )}
 
           <div className="flex items-center gap-3 mt-5">
             {currentStep > 0 && (

@@ -463,6 +463,12 @@ function AnnotatedPreview({
 export default function SimulationPage() {
   const router = useRouter()
   const { data: session } = useSession()
+  const [locked, setLocked] = useState(false)
+
+  useEffect(() => {
+    setLocked(!sessionStorage.getItem('refineui_discovery'))
+  }, [])
+
   const [screens, setScreens] = useState<{ label: string; route: string }[]>([])
   const [selectedScreen, setSelectedScreen] = useState<{ label: string; route: string } | null>(null)
   const [loadingScreens, setLoadingScreens] = useState(true)
@@ -686,6 +692,7 @@ export default function SimulationPage() {
         analysisCache.current[cacheKey] = result
         try {
           sessionStorage.setItem('refineui_analysis_cache', JSON.stringify(analysisCache.current))
+          window.dispatchEvent(new Event('reform:ux-analysis-complete'))
         } catch {
           // Ignore cache write failures.
         }
@@ -931,6 +938,34 @@ export default function SimulationPage() {
           : !analysis
             ? 'Choose a screen and run analysis to populate findings, principles, and recommendations in this shelf.'
             : undefined
+
+  if (locked) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] px-6">
+        <div className="text-center max-w-sm">
+          <div
+            className="w-12 h-12 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M6 8V5.5a3 3 0 0 1 6 0V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-2" style={{ letterSpacing: '-0.02em' }}>Complete Project Discovery first</h2>
+          <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.35)', lineHeight: 1.7 }}>
+            UX Analysis needs the competitor intelligence and design tokens that Discovery generates.
+          </p>
+          <button
+            onClick={() => router.push('/dashboard/discovery')}
+            className="btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold"
+          >
+            Go to Project Discovery →
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
