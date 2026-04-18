@@ -1971,9 +1971,12 @@ function TransformPage() {
               overlayFiles={
                 // Layer the unpublished proposal on top of the repo when the
                 // user hasn't rejected it — so wand edits stack on the proposal.
+                // Each TransformedPageData carries its own updated_code; the
+                // backend's _resolve_overlay_target suffix-matches page_path
+                // to a real file inside the cloned workspace.
                 changeStatus !== 'rejected'
-                  ? (multiPageResult.transformed_files || []).reduce<Record<string, string>>((acc, f) => {
-                      if (f.path && typeof f.updated_code === 'string') acc[f.path] = f.updated_code
+                  ? multiPageResult.pages.reduce<Record<string, string>>((acc, p) => {
+                      if (p.page_path && typeof p.updated_code === 'string') acc[p.page_path] = p.updated_code
                       return acc
                     }, {})
                   : null
