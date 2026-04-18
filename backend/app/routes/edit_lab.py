@@ -14,6 +14,7 @@ from app.services.edit_lab_service import (
     load_current_preview,
     navigate_to_page,
     publish_session_edits,
+    revert_edit_by_id,
     revert_last_edit,
 )
 
@@ -25,6 +26,10 @@ class LoadRequest(BaseModel):
     github_url: str
     branch: str = "main"
     access_token: str = ""
+    # Map of repo-relative path -> file content. Written into the workspace
+    # after clone/install but before the first render, so the Lab session
+    # reflects a proposed (but unpublished) transform layered on top of the repo.
+    overlay_files: dict[str, str] | None = None
 
 
 class SectionRect(BaseModel):
@@ -80,6 +85,7 @@ async def load_endpoint(req: LoadRequest):
             github_url=req.github_url,
             branch=req.branch,
             access_token=req.access_token,
+            overlay_files=req.overlay_files,
         )
         if result.get("error"):
             return LoadResponse(
@@ -180,6 +186,7 @@ class RevertResponse(BaseModel):
     sections: list[SectionPayload] = []
     document_size: DocumentSize = DocumentSize()
     target_file: str | None = None
+    reverted_count: int = 0
     session_expired: bool = False
     error: str | None = None
 
@@ -197,6 +204,27 @@ async def revert_endpoint(req: RevertRequest):
         return RevertResponse(**result)
     except Exception as e:
         logger.error("edit-lab/revert failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class RevertEditRequest(BaseModel):
+    session_id: str
+    edit_id: str
+
+
+@router.post("/revert-edit", response_model=RevertResponse)
+async def revert_edit_endpoint(req: RevertEditRequest):
+    try:
+        result = await revert_edit_by_id(req.session_id, req.edit_id)
+        if result.get("error"):
+            return RevertResponse(
+                session_id=result.get("session_id", ""),
+                error=result["error"],
+                session_expired=bool(result.get("session_expired")),
+            )
+        return RevertResponse(**result)
+    except Exception as e:
+        logger.error("edit-lab/revert-edit failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -239,6 +267,7 @@ class ApplyResponse(BaseModel):
     summary: str = ""
     target_file: str | None = None
     updated_section_id: str | None = None
+    edit_id: str | None = None
     session_expired: bool = False
     error: str | None = None
     error_kind: str | None = None

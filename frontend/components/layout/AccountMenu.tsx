@@ -127,9 +127,9 @@ export default function AccountMenu() {
         <div
           className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(180deg, rgba(13,17,26,0.97) 0%, rgba(9,12,19,0.97) 100%)',
-            border: '1px solid rgba(0,0,0,0.1)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.1)',
+            background: 'rgba(255,255,255,0.98)',
+            border: '1px solid rgba(0,0,0,0.07)',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)',
             backdropFilter: 'blur(24px)',
             animation: 'menuFadeIn 0.15s ease-out',
           }}

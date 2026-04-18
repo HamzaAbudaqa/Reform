@@ -56,8 +56,23 @@ class EditLabSession:
     # One-level undo: stores the pre-edit file content from the most recent
     # apply_section_edit call. `revert_last_edit` writes this back to disk
     # and re-renders. Cleared after every successful revert and overwritten
-    # on every subsequent apply.
+    # on every subsequent apply. Kept as a convenience pointer — the
+    # authoritative history lives in `edit_stack` below.
     pending_revert: Optional[dict] = None  # {'target_file': str, 'original_code': str}
+    # Full ordered history of wand edits in this session. Every successful
+    # apply appends one entry; /revert pops the top; /revert-edit can
+    # drop any entry by id (cascading — everything applied after it gets
+    # reverted too, since later edits may have built on earlier ones).
+    # Entry shape:
+    #   {
+    #     'id': str,                # uuid4
+    #     'summary': str,           # 3-6 word user-facing title
+    #     'prompt': str,            # the user's raw prompt
+    #     'target_file': str,       # repo-relative path
+    #     'target_full_path': str,  # absolute path inside frontend_dir
+    #     'pre_edit_code': str,     # content of target_file BEFORE this edit
+    #   }
+    edit_stack: list[dict] = field(default_factory=list)
     # Set of file paths (relative to frontend_dir) the user has explicitly
     # accepted edits on in this session. Used by /edit-lab/publish to know
     # which files to include in the GitHub publish payload.

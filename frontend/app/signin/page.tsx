@@ -5,13 +5,34 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn, useSession } from 'next-auth/react'
 import Image from 'next/image'
 
+const DEFAULT_POST_LOGIN = '/dashboard/discovery'
+
+function resolvePostLoginDestination(raw: string | null): string {
+  if (!raw) return DEFAULT_POST_LOGIN
+  let path = raw
+  try {
+    // Handle fully-qualified URLs (e.g. http://localhost:3000/new)
+    const u = new URL(raw, 'http://localhost')
+    path = u.pathname + u.search
+  } catch {
+    // raw is already a path
+  }
+  const bare = path.split('?')[0].replace(/\/$/, '')
+  // Routes that don't render a usable page — bounce to discovery
+  if (bare === '' || bare === '/signin' || bare === '/dashboard' || bare === '/new' || bare.startsWith('/new/')) {
+    return DEFAULT_POST_LOGIN
+  }
+  return path
+}
+
 function SignInContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const raw = searchParams.get('next') || searchParams.get('callbackUrl') || '/dashboard'
-  const next = raw.startsWith('/signin') ? '/dashboard' : raw
+  const next = resolvePostLoginDestination(
+    searchParams.get('next') || searchParams.get('callbackUrl')
+  )
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -60,10 +81,7 @@ function SignInContent() {
         {/* Back */}
         <div className="flex justify-center mt-6">
           <button
-            onClick={() => {
-              if (window.history.length > 1) router.back()
-              else router.push('/')
-            }}
+            onClick={() => router.push('/')}
             className="text-[13px] text-neutral-500 hover:text-neutral-900 transition flex items-center gap-1.5"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

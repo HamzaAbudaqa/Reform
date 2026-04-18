@@ -10,11 +10,27 @@ export default function TransformCarousel({
   result,
   onSelectedPathChange,
   afterPulse = false,
+  headerAction,
+  canEdit = false,
+  editDisabledReason,
+  repoUrl = null,
+  repoBranch = null,
+  onAfterScreenshotChange,
+  lockedToBefore = false,
+  overlayFiles,
 }: {
   pages: TransformedPageData[]
   result: MultiPageTransformResult
   onSelectedPathChange?: (path: string) => void
   afterPulse?: boolean
+  headerAction?: React.ReactNode
+  canEdit?: boolean
+  editDisabledReason?: string
+  repoUrl?: string | null
+  repoBranch?: string | null
+  onAfterScreenshotChange?: (pagePath: string, next: string) => void
+  lockedToBefore?: boolean
+  overlayFiles?: Record<string, string> | null
 }) {
   // Only tab through pages that actually produced transformation output.
   // `error` pages have no updated_code, no after_screenshot, nothing meaningful
@@ -82,7 +98,7 @@ export default function TransformCarousel({
   if (!current) return null
 
   return (
-    <div className="max-w-[1760px] mx-auto px-4">
+    <div className="max-w-6xl mx-auto px-4">
       {/* Carousel navigation header — large, prominent tabs */}
       <div className="flex items-start justify-between gap-4 mb-6">
         {/* Page selector tabs */}
@@ -178,7 +194,9 @@ export default function TransformCarousel({
               <span className="text-[11px] font-mono" style={{ color: 'rgba(0,0,0,0.25)' }}>{current.route}</span>
             </div>
           </div>
-          {/* Clean header — no badges */}
+          {headerAction && (
+            <div className="flex-shrink-0">{headerAction}</div>
+          )}
         </div>
 
         {/* HERO: Before/After — always renders. Falls back to visual skeleton
@@ -190,19 +208,45 @@ export default function TransformCarousel({
             pageName={current.page_name}
             route={current.route}
             afterPulse={afterPulse}
+            canEdit={canEdit}
+            editDisabledReason={editDisabledReason}
+            repoUrl={repoUrl}
+            repoBranch={repoBranch}
+            onAfterScreenshotChange={next => onAfterScreenshotChange?.(current.page_path, next)}
+            lockedToBefore={lockedToBefore}
+            overlayFiles={overlayFiles}
           />
         </div>
 
-        {/* Diff summary callout — under the hero */}
+        {/* Diff summary callout — a short human-readable headline describing
+            the transform. Subtle violet tint ties it to the wand/AI brand
+            color without competing with the hero. */}
         {current.diff_summary && (
           <div
-            className="mx-8 mb-6 rounded-xl px-5 py-4 flex items-start gap-3"
-            style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.1)' }}
+            className="mx-8 mb-6 rounded-2xl px-5 py-4 flex items-start gap-3"
+            style={{
+              background: 'linear-gradient(135deg, rgba(124,58,237,0.05), rgba(124,58,237,0.01))',
+              border: '1px solid rgba(124,58,237,0.18)',
+              boxShadow: '0 2px 12px rgba(124,58,237,0.06)',
+            }}
           >
-            <svg className="mt-0.5 flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l1.912 5.813a2 2 0 001.272 1.272L21 12l-5.816 1.916a2 2 0 00-1.272 1.272L12 21l-1.912-5.812a2 2 0 00-1.272-1.272L3 12l5.816-1.915a2 2 0 001.272-1.272L12 3z" />
-            </svg>
-            <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(0,0,0,0.65)' }}>{current.diff_summary}</p>
+            <div
+              className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center mt-0.5"
+              style={{
+                background: 'rgba(124,58,237,0.12)',
+                border: '1px solid rgba(124,58,237,0.22)',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.912 5.813a2 2 0 001.272 1.272L21 12l-5.816 1.916a2 2 0 00-1.272 1.272L12 21l-1.912-5.812a2 2 0 00-1.272-1.272L3 12l5.816-1.915a2 2 0 001.272-1.272L12 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] mb-0.5" style={{ color: 'rgba(124,58,237,0.75)' }}>
+                Summary
+              </div>
+              <p className="text-[13px] leading-relaxed" style={{ color: 'rgba(0,0,0,0.72)' }}>{current.diff_summary}</p>
+            </div>
           </div>
         )}
 

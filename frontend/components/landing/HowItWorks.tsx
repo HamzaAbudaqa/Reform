@@ -6,112 +6,22 @@ import { useEffect, useRef, useState } from 'react'
 
 const SECTIONS = [
   {
-    tag: 'Analyze',
-    headline: 'Connect your repo, we handle the rest',
-    body: 'Paste any public GitHub URL. Reform scans the frontend components, detects spacing inconsistencies, poor hierarchy, and mixed design patterns — automatically, without any config.',
-    detail: 'No Figma. No design system. Just a URL.',
-    visual: <AnalyzeVisual />,
-  },
-  {
-    tag: 'Compare',
-    headline: 'Same task, better path.',
-    body: 'Not just a visual diff — Reform shows how user flows improve. See the old journey vs the new one side-by-side. Stakeholders immediately understand the impact.',
-    detail: 'Fewer clicks · Clearer paths · Better conversions',
-    visual: <CompareVisual />,
-  },
-  {
     tag: 'Export',
     headline: 'Production-ready code, not mockups.',
     body: 'Get React + Tailwind CSS components that drop straight into your codebase. The logic stays untouched — only the presentation layer is upgraded. Ship the fix, not the redesign spec.',
     detail: 'React · Tailwind CSS · TypeScript',
     visual: <ExportVisual />,
   },
+  {
+    tag: 'Ship',
+    headline: 'One click to push, straight to your repo.',
+    body: 'No copy-paste. No context switching. Reform commits the redesign to a new branch and opens a pull request in your GitHub repo — ready for review, ready to merge.',
+    detail: 'New branch · Opened PR · Ready to merge',
+    visual: <PushVisual />,
+  },
 ]
 
 // ─── Visuals ──────────────────────────────────────────────────────────────────
-
-function AnalyzeVisual() {
-  return (
-    <div style={{
-      borderRadius: 16, overflow: 'hidden',
-      border: '0.5px solid rgba(0,0,0,0.08)',
-      background: '#fafafa',
-    }}>
-      <div style={{
-        padding: '10px 16px',
-        borderBottom: '0.5px solid rgba(0,0,0,0.07)',
-        background: '#f5f5f5',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff5f57' }} />
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#febc2e' }} />
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#28c840' }} />
-        </div>
-        <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#bbb' }}>reform — scanner</span>
-        <div style={{ width: 40 }} />
-      </div>
-      <div style={{ padding: 20, fontFamily: 'monospace', fontSize: 11, lineHeight: 2 }}>
-        <div><span style={{ color: '#888' }}>$</span> <span style={{ color: '#0a0a0a' }}>reform scan github.com/acme/dashboard</span></div>
-        <div style={{ color: '#aaa' }}>↳ Cloning repository...</div>
-        <div style={{ color: '#aaa' }}>↳ Scanning 47 components...</div>
-        <div style={{ color: '#d97706' }}>⚠ 12 spacing violations</div>
-        <div style={{ color: '#d97706' }}>⚠ 5 inconsistent border-radius values</div>
-        <div style={{ color: '#d97706' }}>⚠ Mixed color system detected</div>
-        <div style={{ color: '#16a34a', paddingTop: 4 }}>✓ Analysis complete — 19 issues found</div>
-      </div>
-    </div>
-  )
-}
-
-function CompareVisual() {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      {[
-        {
-          label: 'Before', accent: false,
-          steps: ['Open menu', 'Find settings', 'Scroll to option', 'Confirm'],
-        },
-        {
-          label: 'After', accent: true,
-          steps: ['One click'],
-        },
-      ].map(({ label, accent, steps }) => (
-        <div key={label}>
-          <div style={{
-            fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
-            letterSpacing: '0.1em', color: accent ? '#0a0a0a' : '#aaa',
-            marginBottom: 8,
-          }}>
-            {label}
-          </div>
-          <div style={{
-            borderRadius: 12, overflow: 'hidden',
-            border: accent ? '0.5px solid rgba(0,0,0,0.16)' : '0.5px solid rgba(0,0,0,0.07)',
-            background: '#fff', padding: 12,
-          }}>
-            {steps.map((step, i) => (
-              <div key={step} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 9px', borderRadius: 7, marginBottom: 5,
-                background: i === steps.length - 1 ? '#f5f5f5' : '#fff',
-                border: '0.5px solid rgba(0,0,0,0.07)',
-                fontSize: 11, color: '#555',
-              }}>
-                <div style={{
-                  width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                  background: accent ? '#34c759' : '#ddd',
-                }} />
-                {step}
-                <span style={{ fontSize: 9, color: '#ccc', marginLeft: 'auto' }}>{i + 1}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 function ExportVisual() {
   return (
@@ -144,6 +54,93 @@ function ExportVisual() {
         <div style={{ paddingLeft: 32 }}>{'</'}<span style={{ color: '#15803d' }}>div</span>{'>'}</div>
         <div style={{ paddingLeft: 16 }}>{')'}</div>
         <div>{'}'}</div>
+      </div>
+    </div>
+  )
+}
+
+function PushVisual() {
+  return (
+    <div style={{
+      borderRadius: 16, overflow: 'hidden',
+      border: '0.5px solid rgba(0,0,0,0.08)',
+      background: '#ffffff',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '10px 16px',
+        borderBottom: '0.5px solid rgba(0,0,0,0.07)',
+        background: '#fafafa',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="#6e7781">
+            <path d="M1.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM0 3.25a1.75 1.75 0 1 1 2.5 1.573v6.354a1.75 1.75 0 1 1-1.5 0V4.823A1.75 1.75 0 0 1 0 3.25zm1.75 10a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm12.5-6.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM12.5 7.5a1.75 1.75 0 1 1 2.5 1.573V11A3.75 3.75 0 0 1 11.25 14.75H9.81a1.75 1.75 0 1 1 0-1.5h1.44a2.25 2.25 0 0 0 2.25-2.25V9.073a1.75 1.75 0 0 1-1-1.573z" />
+          </svg>
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#0a0a0a', fontWeight: 500 }}>
+            acme/dashboard
+          </span>
+        </div>
+        <span style={{
+          fontSize: 9, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+          background: 'rgba(22,163,74,0.08)', color: '#16a34a',
+          border: '0.5px solid rgba(22,163,74,0.22)',
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+        }}>
+          Open
+        </span>
+      </div>
+
+      {/* PR body */}
+      <div style={{ padding: '16px 18px 18px', fontFamily: '-apple-system, BlinkMacSystemFont, "Geist", sans-serif' }}>
+        <div style={{
+          fontSize: 13, fontWeight: 600, color: '#0a0a0a',
+          letterSpacing: '-0.01em', marginBottom: 8,
+        }}>
+          Reform: UI polish pass on /dashboard
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 10.5, fontFamily: 'monospace',
+            padding: '2px 7px', borderRadius: 5,
+            background: '#f5f5f5', color: '#6b7280',
+            border: '0.5px solid rgba(0,0,0,0.06)',
+          }}>
+            reform/ui-refresh
+          </span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
+          <span style={{
+            fontSize: 10.5, fontFamily: 'monospace',
+            padding: '2px 7px', borderRadius: 5,
+            background: '#f5f5f5', color: '#6b7280',
+            border: '0.5px solid rgba(0,0,0,0.06)',
+          }}>
+            main
+          </span>
+        </div>
+
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 6,
+          fontSize: 11, fontFamily: 'monospace', color: '#6b7280',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>7 files changed</span>
+            <span style={{ color: '#16a34a' }}>+1,247</span>
+            <span style={{ color: '#ef4444' }}>−423</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Checks passed · Ready to merge</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -253,7 +250,7 @@ export default function HowItWorks() {
           }}>
             From broken UI to polished product
             <br />
-            <span style={{ color: 'rgba(10,10,10,0.28)' }}>in three steps.</span>
+            <span style={{ color: 'rgba(10,10,10,0.28)' }}>in two steps.</span>
           </h2>
           <p style={{
             fontSize: 15, color: '#888', maxWidth: 400,

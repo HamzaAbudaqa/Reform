@@ -2,6 +2,7 @@ import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
 import MacBookHero from '@/components/landing/MacBookHero'
 import HowItWorks from '@/components/landing/HowItWorks'
+import StitchShowcase from '@/components/landing/StitchShowcase'
 import FeatureHighlights from '@/components/landing/FeatureHighlights'
 import InteractiveBackground from '@/components/landing/InteractiveBackground'
 
@@ -12,6 +13,7 @@ export default function Home() {
       <div className="relative" style={{ zIndex: 1 }}>
         <Navbar />
         <MacBookHero />
+        <StitchShowcase />
         <HowItWorks />
         <FeatureHighlights />
         <Footer />

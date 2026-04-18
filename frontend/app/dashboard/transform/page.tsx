@@ -11,7 +11,6 @@ import UpgradeBanner from '@/components/dashboard/UpgradeBanner'
 import GateErrorBanner, { parseResponseError, type GateErrorData } from '@/components/dashboard/GateError'
 import TransformSummaryHeader from '@/components/dashboard/TransformSummaryHeader'
 import TransformCarousel from '@/components/dashboard/TransformCarousel'
-import RepoWideImprovementsPanel from '@/components/dashboard/RepoWideImprovementsPanel'
 import { adaptLegacyResult } from '@/components/dashboard/TransformTypes'
 import type { MultiPageTransformResult } from '@/components/dashboard/TransformTypes'
 import { safeSetTransformCache } from '@/lib/transformCache'
@@ -1958,128 +1957,137 @@ function TransformPage() {
 
         {/* ── MULTI-PAGE TRANSFORMATION SHOWCASE ── */}
         {pipelineStep === 'complete' && multiPageResult && (
-          <div>
-            <RepoWideImprovementsPanel result={multiPageResult} />
+          <>
             <TransformCarousel
               pages={multiPageResult.pages}
               result={multiPageResult}
               onSelectedPathChange={setSelectedTarget}
               afterPulse={afterPulse}
-            />
-          </div>
-        )}
-        {/* ── TOOLBAR — only show when pipeline is complete ── */}
-        {pipelineStep === 'complete' && <div className="rounded-xl max-w-5xl mx-auto overflow-hidden" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
-          {changeStatus === 'pending' ? (
-            <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.12)' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                </div>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.25)' }}>Review Changes</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {!canAutofix ? (
-                <UpgradeBanner message="Upgrade to Pro to publish fixes to GitHub" compact />
-              ) : (
-                <>
-                  <div className="flex items-center gap-1.5 pr-1">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>
-                    <select
-                      value={publishTarget}
-                      onChange={e => setPublishTarget(e.target.value)}
-                      disabled={publishLoading || branchesLoading}
-                      title="Where to publish the approved changes"
-                      className="bg-transparent text-[11px] font-medium rounded-md px-2 py-1.5 outline-none cursor-pointer transition-colors hover:bg-white/[0.03] focus:bg-white/[0.04]"
-                      style={{ color: 'rgba(0,0,0,0.7)', border: '1px solid rgba(0,0,0,0.08)', maxWidth: 220 }}
-                    >
-                      <option value="__new__" style={{ background: '#fafafa', color: 'rgba(0,0,0,0.9)' }}>
-                        ✨ New branch {repoBranch ? `(from ${repoBranch})` : ''}
-                      </option>
-                      {repoBranches.length > 0 && (
-                        <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
-                          ──── Commit directly to ────
-                        </option>
-                      )}
-                      {repoBranches.map(b => (
-                        <option
-                          key={b.name}
-                          value={b.name}
-                          disabled={b.protected}
-                          style={{
-                            background: '#fafafa',
-                            color: b.protected ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.9)',
-                          }}
-                        >
-                          {b.name}{b.protected ? ' 🔒 (protected — direct commits blocked)' : ''}
-                        </option>
-                      ))}
-                      {branchesLoading && (
-                        <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
-                          Loading branches…
-                        </option>
-                      )}
-                    </select>
-                  </div>
-                  <button
-                    onClick={handleAccept}
-                    disabled={publishLoading}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-medium transition-all hover:bg-green-500/[0.06] active:scale-[0.97]"
-                    style={{ color: 'rgba(34,197,94,0.7)', border: '1px solid transparent', opacity: publishLoading ? 0.5 : 1 }}
-                  >
-                    {publishLoading ? (
-                      <><div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(34,197,94,0.2)', borderTopColor: 'rgba(34,197,94,0.7)' }} />Publishing approved changes...</>
-                    ) : (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                        {publishTarget === '__new__' ? 'Publish to new branch' : `Publish to ${publishTarget}`}
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-                <button
-                  onClick={handleReject}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-medium transition-all hover:bg-red-500/[0.06] active:scale-[0.97]"
-                  style={{ color: 'rgba(239,68,68,0.5)', border: '1px solid transparent' }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  Keep Original
-                </button>
-                <div className="w-px h-5 mx-1" style={{ background: 'rgba(0,0,0,0.06)' }} />
-                <button
-                  onClick={openSuggestModal}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold transition-all hover:bg-purple-500/[0.06] active:scale-[0.97]"
-                  style={{ color: 'rgba(0,0,0,0.7)', border: '1px solid rgba(0,0,0,0.12)' }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                  Refine Further
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between px-5 py-4 cursor-pointer transition-colors hover:bg-white/[0.01]" onClick={() => setChangeStatus('pending')}>
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
-                  {changeStatus === 'accepted' ? (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.6)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              canEdit={changeStatus !== 'pending'}
+              editDisabledReason="Accept or keep the proposed changes before editing."
+              repoUrl={repoName ? `https://github.com/${repoName}` : null}
+              repoBranch={repoBranch || 'main'}
+              lockedToBefore={changeStatus === 'rejected'}
+              overlayFiles={
+                // Layer the unpublished proposal on top of the repo when the
+                // user hasn't rejected it — so wand edits stack on the proposal.
+                changeStatus !== 'rejected'
+                  ? (multiPageResult.transformed_files || []).reduce<Record<string, string>>((acc, f) => {
+                      if (f.path && typeof f.updated_code === 'string') acc[f.path] = f.updated_code
+                      return acc
+                    }, {})
+                  : null
+              }
+              onAfterScreenshotChange={(pagePath, next) => {
+                setMultiPageResult(prev => {
+                  if (!prev) return prev
+                  return {
+                    ...prev,
+                    pages: prev.pages.map(p =>
+                      p.page_path === pagePath ? { ...p, after_screenshot: next } : p,
+                    ),
+                  }
+                })
+              }}
+              headerAction={
+                changeStatus === 'pending' ? (
+                  !canAutofix ? (
+                    <UpgradeBanner message="Upgrade to Pro to publish fixes to GitHub" compact />
                   ) : (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  )}
-                </div>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.2)' }}>Review Changes</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: changeStatus === 'accepted' ? '#22c55e' : '#ef4444', boxShadow: `0 0 6px ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }} />
-                  <span className="text-[11px] font-medium" style={{ color: changeStatus === 'accepted' ? '#86efac' : 'rgba(239,68,68,0.7)' }}>
-                    {changeStatus === 'accepted' ? 'Changes applied' : 'Original kept'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <div className="flex items-center gap-1.5">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></svg>
+                        <select
+                          value={publishTarget}
+                          onChange={e => setPublishTarget(e.target.value)}
+                          disabled={publishLoading || branchesLoading}
+                          title="Where to publish the approved changes"
+                          className="bg-white text-[11px] font-medium rounded-lg px-2.5 py-2 outline-none cursor-pointer transition-colors hover:bg-neutral-50 focus:bg-white"
+                          style={{ color: 'rgba(0,0,0,0.8)', border: '1px solid rgba(0,0,0,0.1)', maxWidth: 220, colorScheme: 'light' }}
+                        >
+                          <option value="__new__" style={{ background: '#fafafa', color: 'rgba(0,0,0,0.9)' }}>
+                            ✨ New branch {repoBranch ? `(from ${repoBranch})` : ''}
+                          </option>
+                          {repoBranches.length > 0 && (
+                            <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
+                              ──── Commit directly to ────
+                            </option>
+                          )}
+                          {repoBranches.map(b => (
+                            <option
+                              key={b.name}
+                              value={b.name}
+                              disabled={b.protected}
+                              style={{
+                                background: '#fafafa',
+                                color: b.protected ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.9)',
+                              }}
+                            >
+                              {b.name}{b.protected ? ' 🔒 (protected)' : ''}
+                            </option>
+                          ))}
+                          {branchesLoading && (
+                            <option disabled style={{ background: '#fafafa', color: 'rgba(0,0,0,0.3)' }}>
+                              Loading branches…
+                            </option>
+                          )}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={handleAccept}
+                        disabled={publishLoading}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98]"
+                        style={{
+                          background: 'rgba(34,197,94,0.08)',
+                          color: 'rgba(22,163,74,0.9)',
+                          border: '1px solid rgba(34,197,94,0.25)',
+                          opacity: publishLoading ? 0.5 : 1,
+                        }}
+                      >
+                        {publishLoading ? (
+                          <><div className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid rgba(34,197,94,0.2)', borderTopColor: 'rgba(34,197,94,0.7)' }} />Publishing…</>
+                        ) : (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            {publishTarget === '__new__' ? 'Publish to new branch' : `Publish to ${publishTarget}`}
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleReject}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[11px] font-medium transition-all active:scale-[0.98]"
+                        style={{
+                          color: 'rgba(239,68,68,0.8)',
+                          background: 'rgba(239,68,68,0.05)',
+                          border: '1px solid rgba(239,68,68,0.18)',
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        Keep Original
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <button
+                    onClick={() => setChangeStatus('pending')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors hover:bg-white/[0.02]"
+                    style={{
+                      background: changeStatus === 'accepted' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                      border: `1px solid ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                    }}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: changeStatus === 'accepted' ? '#22c55e' : '#ef4444', boxShadow: `0 0 6px ${changeStatus === 'accepted' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }} />
+                    <span className="text-[11px] font-medium" style={{ color: changeStatus === 'accepted' ? 'rgba(22,163,74,0.85)' : 'rgba(239,68,68,0.75)' }}>
+                      {changeStatus === 'accepted' ? 'Changes applied' : 'Original kept'}
+                    </span>
+                  </button>
+                )
+              }
+            />
+          </>
+        )}
 
         {/* ── Generated Code ── */}
         {transform?.code && (
@@ -2119,22 +2127,6 @@ function TransformPage() {
           </div>
         )}
 
-        {/* ── The Lab CTA — only when complete ── */}
-        {pipelineStep === 'complete' && <div className="flex justify-center">
-          <button
-            onClick={() => router.push('/dashboard/edit-lab')}
-            className="flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm text-neutral-950 transition-all active:scale-[0.98]"
-            style={{ background: 'rgba(0,0,0,0.12)', border: '1px solid rgba(0,0,0,0.25)', boxShadow: '0 0 30px rgba(0,0,0,0.08)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = 'rgba(0,0,0,0.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.12)'; e.currentTarget.style.borderColor = 'rgba(0,0,0,0.25)' }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-            </svg>
-            <span>Open The Lab</span>
-            <span style={{ color: 'rgba(0,0,0,0.5)', fontSize: '12px' }}>→</span>
-          </button>
-        </div>}
       </div>
 
       {/* ── SOURCE CONTROL — only when complete ── */}
@@ -2146,11 +2138,11 @@ function TransformPage() {
             maxHeight: scOpen ? '380px' : '0px',
             width: '340px',
             opacity: scOpen ? 1 : 0,
-            background: 'rgba(19,17,28,0.6)',
+            background: 'rgba(255,255,255,0.96)',
             backdropFilter: 'blur(24px) saturate(1.5)',
             WebkitBackdropFilter: 'blur(24px) saturate(1.5)',
             border: scOpen ? '1px solid rgba(0,0,0,0.08)' : '1px solid transparent',
-            boxShadow: scOpen ? '0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.08)' : 'none',
+            boxShadow: scOpen ? '0 12px 40px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.04)' : 'none',
           }}
         >
           <div className="p-4 overflow-y-auto" style={{ maxHeight: '360px' }}>
@@ -2199,11 +2191,11 @@ function TransformPage() {
           onClick={() => setScOpen(!scOpen)}
           className="flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95"
           style={{
-            background: 'rgba(19,17,28,0.6)',
+            background: 'rgba(255,255,255,0.96)',
             backdropFilter: 'blur(20px) saturate(1.4)',
             WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
             border: '1px solid rgba(0,0,0,0.08)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(0,0,0,0.06)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)',
           }}
         >
           <div className="w-1.5 h-1.5 rounded-full" style={{ background: scOpen ? '#22c55e' : '#0a0a0a', boxShadow: scOpen ? '0 0 6px rgba(34,197,94,0.4)' : '0 0 6px rgba(0,0,0,0.3)' }} />

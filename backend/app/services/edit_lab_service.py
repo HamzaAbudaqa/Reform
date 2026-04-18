@@ -13,6 +13,7 @@ import base64
 import logging
 import os
 import re
+import uuid
 from typing import Any, Optional
 
 import anthropic
@@ -524,6 +525,82 @@ def _discover_available_pages(sess: EditLabSession) -> list[dict]:
     return available
 
 
+def _resolve_overlay_target(frontend_dir: str, rel_path: str) -> str | None:
+    """Pick the real on-disk location for `rel_path` inside `frontend_dir`.
+
+    Upstream callers (e.g. the transform pipeline) emit file paths relative to
+    whatever root they consider the repo — sometimes the git root, sometimes a
+    sub-directory like `frontend/` or `apps/web/`. The Lab's workspace is
+    rooted at `frontend_dir`, which may or may not include those outer
+    segments. Rather than hard-coding a layout, we try the given path and then
+    progressively shorter path-suffixes, returning the first one that matches
+    an existing file. If nothing matches, we fall back to the path as-is
+    (creating a new file at the literal location).
+
+    Always returns a realpath inside `frontend_dir`, or None if the path
+    resolves outside the workspace (path-traversal guard).
+    """
+    base = os.path.realpath(frontend_dir)
+    normalized = rel_path.replace("\\", "/").lstrip("/")
+    if not normalized or ".." in normalized.split("/"):
+        return None
+
+    parts = normalized.split("/")
+
+    def safe_join(segments: list[str]) -> str | None:
+        joined = "/".join(segments)
+        resolved = os.path.realpath(os.path.join(base, joined))
+        if resolved == base or resolved.startswith(base + os.sep):
+            return resolved
+        return None
+
+    # 1. Exact match — preferred.
+    direct = safe_join(parts)
+    if direct and os.path.isfile(direct):
+        return direct
+
+    # 2. Suffix search — drop leading segments one at a time.
+    for i in range(1, len(parts)):
+        candidate = safe_join(parts[i:])
+        if candidate and os.path.isfile(candidate):
+            return candidate
+
+    # 3. New file — no existing target. Also try stripping a leading segment
+    # that matches the workspace's own basename (catches the common case where
+    # both the caller and the session think they're "the frontend").
+    base_name = os.path.basename(base.rstrip(os.sep))
+    if base_name and parts and parts[0] == base_name:
+        stripped = safe_join(parts[1:])
+        if stripped:
+            return stripped
+
+    return direct
+
+
+def _apply_overlay_files(frontend_dir: str, overlay_files: dict[str, str]) -> None:
+    """Write each (path -> content) pair into the workspace.
+
+    Paths are resolved via `_resolve_overlay_target` so the caller can emit
+    paths relative to either the repo root or a sub-directory — whichever
+    matches gets overwritten. Anything that escapes `frontend_dir` via `..`
+    is rejected. Parent directories are created as needed.
+    """
+    for rel_path, content in overlay_files.items():
+        if not rel_path or not isinstance(content, str):
+            continue
+        target = _resolve_overlay_target(frontend_dir, rel_path)
+        if not target:
+            logger.warning("Edit Lab overlay: rejecting path outside workspace: %s", rel_path)
+            continue
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            logger.info("Edit Lab overlay: wrote %s -> %s", rel_path, os.path.relpath(target, os.path.realpath(frontend_dir)))
+        except Exception as e:
+            logger.warning("Edit Lab overlay: failed to write %s: %s", rel_path, e)
+
+
 async def _playwright_collect(url: str) -> tuple[str, dict]:
     """Navigate to URL, return (full_page_screenshot_b64, detection_payload)."""
     from playwright.async_api import async_playwright
@@ -544,8 +621,15 @@ async def load_current_preview(
     github_url: str,
     branch: str = "main",
     access_token: str = "",
+    overlay_files: dict[str, str] | None = None,
 ) -> dict:
-    """Create a persistent workspace, render the root page, return payload + session_id."""
+    """Create a persistent workspace, render the root page, return payload + session_id.
+
+    If overlay_files is provided (repo-relative path -> content), those files are
+    written into the workspace after clone/install but before the first render.
+    Used to layer a proposed-but-unpublished transform on top of the real repo
+    so Lab edits stack on the proposal.
+    """
     if not github_url:
         return {"error": "No repository URL provided."}
 
@@ -559,6 +643,9 @@ async def load_current_preview(
         return {"error": f"Workspace setup failed: {e}"}
 
     try:
+        if overlay_files:
+            _apply_overlay_files(sess.frontend_dir, overlay_files)
+
         root_code = ""
         if sess.root_file:
             try:
@@ -570,6 +657,10 @@ async def load_current_preview(
         available_pages = _discover_available_pages(sess)
 
         logger.info("Edit Lab: rendering session %s at %s", sess.id, sess.base_url)
+        if overlay_files:
+            # Give the dev server a beat to pick up the overlay via its watcher
+            # before we screenshot. Empirical: Next.js takes ~1-2s to recompile.
+            await asyncio.sleep(2.0)
         screenshot_b64, detection = await _playwright_collect(sess.base_url)
         sections = detection.get("sections", []) or []
         document_size = detection.get("document_size", {"width": 1440, "height": 900})
@@ -943,10 +1034,85 @@ async def publish_session_edits(
     }
 
 
+async def _rewind_edits(sess: EditLabSession, drop_from_index: int) -> dict:
+    """Restore files by popping entries from `edit_stack[drop_from_index:]`.
+
+    Each popped entry's `pre_edit_code` is written back to its `target_full_path`
+    in reverse order (latest-first) so that earlier edits see their correct
+    pre-state when the later ones roll back on top of them.
+
+    Shared helper behind both `revert_last_edit` and `revert_edit_by_id`.
+    Caller is responsible for validating `drop_from_index`.
+    """
+    if drop_from_index < 0 or drop_from_index >= len(sess.edit_stack):
+        return {"session_id": sess.id, "error": "Edit not found — it may already be reverted."}
+
+    to_drop = sess.edit_stack[drop_from_index:]
+    # Apply pre-edit snapshots latest-first.
+    for entry in reversed(to_drop):
+        target_full = entry.get("target_full_path") or os.path.join(
+            sess.frontend_dir, entry.get("target_file", ""),
+        )
+        if not target_full or not os.path.isfile(target_full):
+            logger.warning(
+                "Edit Lab revert: target file missing for entry %s (%s) — skipping",
+                entry.get("id"), entry.get("target_file"),
+            )
+            continue
+        try:
+            with open(target_full, "w", encoding="utf-8") as f:
+                f.write(entry.get("pre_edit_code", ""))
+        except OSError as e:
+            logger.error("Edit Lab revert: failed to write %s: %s", target_full, e)
+            return {"session_id": sess.id, "error": f"Revert failed writing {entry.get('target_file')}: {e}"}
+
+    # History is the source of truth — trim it only after writes succeed.
+    sess.edit_stack = sess.edit_stack[:drop_from_index]
+    # Keep `pending_revert` pointing at the new top-of-stack (if any) so
+    # the legacy single-level undo flow keeps working.
+    if sess.edit_stack:
+        top = sess.edit_stack[-1]
+        sess.pending_revert = {
+            "target_file": top["target_file"],
+            "target_full_path": top["target_full_path"],
+            "original_code": top["pre_edit_code"],
+        }
+    else:
+        sess.pending_revert = None
+
+    # Let HMR pick up the writes before we screenshot.
+    await asyncio.sleep(3.0)
+    try:
+        import urllib.request, urllib.error
+        req = urllib.request.Request(sess.base_url)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            _ = r.read(2048)
+    except (urllib.error.URLError, ConnectionRefusedError, OSError):
+        pass
+    await asyncio.sleep(2.0)
+
+    screenshot_b64, detection = await _playwright_collect(sess.base_url)
+    sections = detection.get("sections", []) or []
+    document_size = detection.get("document_size", {"width": 1440, "height": 900})
+
+    # Pass the first-dropped entry's target as a hint to section source-file
+    # resolution so at least one section gets pinned to the edited file.
+    hint_file = to_drop[0].get("target_file") if to_drop else None
+    _assign_source_files(sections, sess.frontend_dir, hint_file)
+
+    sess.touch()
+    return {
+        "session_id": sess.id,
+        "screenshot": screenshot_b64,
+        "sections": sections,
+        "document_size": document_size,
+        "reverted_count": len(to_drop),
+    }
+
+
 async def revert_last_edit(session_id: str) -> dict:
-    """Restore the most recent pre-edit file snapshot and re-render the
-    warm dev server. Clears the pending revert on success so subsequent
-    reverts know there's nothing more to undo."""
+    """Pop the most recent edit from the stack, restore its pre-edit file
+    snapshot, and re-render the warm dev server."""
     if not session_id:
         return {"error": "Missing session_id. Please reload the preview.", "session_expired": True}
 
@@ -956,48 +1122,39 @@ async def revert_last_edit(session_id: str) -> dict:
     if not sess:
         return {"error": "Edit Lab session expired. Reloading preview…", "session_expired": True}
 
-    pending = sess.pending_revert
-    if not pending:
+    if not sess.edit_stack:
         return {"session_id": sess.id, "error": "Nothing to revert — no edit has been applied yet."}
 
-    target_full = pending.get("target_full_path") or os.path.join(sess.frontend_dir, pending.get("target_file", ""))
-    if not target_full or not os.path.isfile(target_full):
-        sess.pending_revert = None
-        return {"session_id": sess.id, "error": "Could not locate the file to revert (it may have been moved or renamed)."}
-
     try:
-        with open(target_full, "w", encoding="utf-8") as f:
-            f.write(pending["original_code"])
-
-        # Wait for HMR to recompile the reverted file before screenshotting.
-        await asyncio.sleep(3.0)
-        try:
-            import urllib.request, urllib.error
-            req = urllib.request.Request(sess.base_url)
-            with urllib.request.urlopen(req, timeout=10) as r:
-                _ = r.read(2048)
-        except (urllib.error.URLError, ConnectionRefusedError, OSError):
-            pass
-        await asyncio.sleep(2.0)
-
-        screenshot_b64, detection = await _playwright_collect(sess.base_url)
-        sections = detection.get("sections", []) or []
-        document_size = detection.get("document_size", {"width": 1440, "height": 900})
-
-        _assign_source_files(sections, sess.frontend_dir, pending.get("target_file"))
-
-        sess.pending_revert = None
-        sess.touch()
-
-        return {
-            "session_id": sess.id,
-            "screenshot": screenshot_b64,
-            "sections": sections,
-            "document_size": document_size,
-            "target_file": pending.get("target_file"),
-        }
+        return await _rewind_edits(sess, len(sess.edit_stack) - 1)
     except Exception as e:
         logger.error("Edit Lab revert failed: %s", e, exc_info=True)
+        return {"session_id": sess.id, "error": f"Revert failed: {e}"}
+
+
+async def revert_edit_by_id(session_id: str, edit_id: str) -> dict:
+    """Revert a specific edit by id. Cascades: every edit applied after it
+    is also reverted, since later edits may have depended on earlier ones.
+    The client surfaces this cascade in a confirmation prompt."""
+    if not session_id:
+        return {"error": "Missing session_id. Please reload the preview.", "session_expired": True}
+    if not edit_id:
+        return {"error": "Missing edit_id."}
+
+    registry = get_registry()
+    registry.sweep()
+    sess = registry.get(session_id)
+    if not sess:
+        return {"error": "Edit Lab session expired. Reloading preview…", "session_expired": True}
+
+    idx = next((i for i, e in enumerate(sess.edit_stack) if e.get("id") == edit_id), -1)
+    if idx < 0:
+        return {"session_id": sess.id, "error": "That edit is no longer in the history — it may already have been reverted."}
+
+    try:
+        return await _rewind_edits(sess, idx)
+    except Exception as e:
+        logger.error("Edit Lab revert-edit failed: %s", e, exc_info=True)
         return {"session_id": sess.id, "error": f"Revert failed: {e}"}
 
 
@@ -1060,13 +1217,9 @@ async def apply_section_edit(
             current_code = f.read()
 
         # Snapshot the pre-edit content so the user can reject the edit
-        # afterwards. Overwrites any previous pending revert — V1 supports
-        # one level of undo.
-        sess.pending_revert = {
-            "target_file": target_file,
-            "target_full_path": target_full,
-            "original_code": current_code,
-        }
+        # afterwards. We store this on `sess` only after the file write
+        # succeeds (further down), so a failed apply doesn't poison the
+        # undo state.
 
         prompt = _build_scoped_prompt(
             current_code,
@@ -1230,6 +1383,23 @@ async def apply_section_edit(
         except Exception:
             summary = f"Updated {section_label}"
 
+        # Write succeeded — record this edit in the session history and
+        # update the quick-undo pointer.
+        edit_id = uuid.uuid4().hex
+        sess.edit_stack.append({
+            "id": edit_id,
+            "summary": summary,
+            "prompt": user_prompt,
+            "target_file": target_file,
+            "target_full_path": target_full,
+            "pre_edit_code": current_code,
+        })
+        sess.pending_revert = {
+            "target_file": target_file,
+            "target_full_path": target_full,
+            "original_code": current_code,
+        }
+
         # Wait for Fast Refresh / HMR to recompile, then do a warmup GET
         # on the preview URL to force the dev server to actually serve the
         # new bundle before Playwright navigates. Otherwise the screenshot
@@ -1264,6 +1434,7 @@ async def apply_section_edit(
             "summary": summary,
             "target_file": target_file,
             "updated_section_id": updated_section_id,
+            "edit_id": edit_id,
         }
     except Exception as e:
         if is_anthropic_exception(e):

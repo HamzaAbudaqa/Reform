@@ -24,9 +24,6 @@ export default function TransformSummaryHeader({
   transformationNotes?: string[] | null
 }) {
   const [regenerating, setRegenerating] = useState<Mode | null>(null)
-  const improved = result.pages.filter(p => p.status === 'transformed')
-  const skipped = result.pages.filter(p => p.status === 'high_quality')
-  const errors = result.pages.filter(p => p.status === 'error')
   const hasPreviewErrors = result.pages.some(
     p => (p.status === 'transformed' || p.status === 'weak') && !!p.error,
   )
@@ -39,15 +36,6 @@ export default function TransformSummaryHeader({
     } finally {
       setRegenerating(null)
     }
-  }
-
-  const stats = [
-    { label: 'Pages Found', value: result.total_pages_found, color: '#ffffff' },
-    { label: 'Improved', value: improved.length, color: '#0a0a0a' },
-    { label: 'Already Great', value: skipped.length, color: '#22c55e' },
-  ]
-  if (errors.length > 0) {
-    stats.push({ label: 'Errors', value: errors.length, color: '#ef4444' })
   }
 
   return (
@@ -98,26 +86,23 @@ export default function TransformSummaryHeader({
               </svg>
               {regenerating === 'stable' ? 'Rerunning…' : 'Run Again (Stable)'}
             </button>
-            <div className="flex flex-col items-start">
-              <button
-                onClick={() => handleClick('explore')}
-                disabled={regenerating !== null}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: hasPreviewErrors ? 'rgba(245,158,11,0.08)' : 'rgba(0,0,0,0.06)',
-                  border: `1px solid ${hasPreviewErrors ? 'rgba(245,158,11,0.3)' : 'rgba(0,0,0,0.25)'}`,
-                  color: hasPreviewErrors ? '#fbbf24' : 'rgba(0,0,0,0.85)',
-                }}
-                title="Fresh competitor discovery — may produce a different output"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={regenerating === 'explore' ? { animation: 'spin 1s linear infinite' } : undefined}>
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M16 2l-2 4-4 2 4 2 2 4 2-4 4-2-4-2z" />
-                </svg>
-                {regenerating === 'explore' ? 'Exploring…' : 'Explore New Version'}
-              </button>
-              <span className="text-[9px] mt-1 self-center" style={{ color: 'rgba(0,0,0,0.3)' }}>Takes longer, may differ</span>
-            </div>
+            <button
+              onClick={() => handleClick('explore')}
+              disabled={regenerating !== null}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: hasPreviewErrors ? 'rgba(245,158,11,0.08)' : 'rgba(0,0,0,0.06)',
+                border: `1px solid ${hasPreviewErrors ? 'rgba(245,158,11,0.3)' : 'rgba(0,0,0,0.25)'}`,
+                color: hasPreviewErrors ? '#fbbf24' : 'rgba(0,0,0,0.85)',
+              }}
+              title="Fresh competitor discovery — may produce a different output; takes longer."
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={regenerating === 'explore' ? { animation: 'spin 1s linear infinite' } : undefined}>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M16 2l-2 4-4 2 4 2 2 4 2-4 4-2-4-2z" />
+              </svg>
+              {regenerating === 'explore' ? 'Exploring…' : 'Explore New Version'}
+            </button>
           </div>
         )}
       </div>
@@ -158,39 +143,6 @@ export default function TransformSummaryHeader({
           <a href={commitResult.url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium" style={{ color: 'rgba(0,0,0,0.7)' }}>View commit &rarr;</a>
         </div>
       )}
-
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        {stats.map(stat => (
-          <div
-            key={stat.label}
-            className="group relative rounded-xl px-5 py-5 text-center transition-all duration-200 cursor-default"
-            style={{
-              background: 'linear-gradient(135deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.03) 100%)',
-              border: '1px solid rgba(0,0,0,0.2)',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.25), 0 0 20px rgba(0,0,0,0.04)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-3px)'
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.35), 0 0 30px rgba(0,0,0,0.1)'
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.35)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.25), 0 0 20px rgba(0,0,0,0.04)'
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.2)'
-            }}
-          >
-            {/* Top accent line */}
-            <div
-              className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-10 rounded-full"
-              style={{ background: `linear-gradient(90deg, transparent, ${stat.color}, transparent)`, opacity: 0.6 }}
-            />
-            <p className="text-3xl font-extrabold mb-1.5 tracking-tight" style={{ color: stat.color }}>{stat.value}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(0,0,0,0.4)' }}>{stat.label}</p>
-          </div>
-        ))}
-      </div>
 
       {/* Transformation notes — competitor patterns applied during the run. */}
       {transformationNotes && transformationNotes.length > 0 && (
