@@ -33,7 +33,9 @@ from app.models import (
     HeatmapPage,
     HeatmapSession,
     HeatmapSite,
+    PageResult,
     Project,
+    TransformRun,
 )
 from app.schemas.heatmap import (
     AutoInstallRequest,
@@ -747,3 +749,136 @@ def _parse_browser_label(ua: str | None) -> str | None:
     if browser and os_label:
         return f"{browser} on {os_label}"
     return browser or os_label
+
+
+# ─── Version comparison ────────────────────────────────────────────────
+#
+# A "version" here is any completed TransformRun for the project. The user
+# never sees the word "transform run" — UI calls them "Current design" and
+# "Before this change". Reusing the existing TransformRun + PageResult model
+# means no new tables and the comparison stays accurate without a parallel
+# version-ledger to keep in sync.
+
+# Sessions threshold under which we tell the user "still collecting" rather
+# than pretending the heatmap on the new version is meaningful. Picked low
+# enough that any modest test traffic clears it.
+_VERSION_LOW_DATA_THRESHOLD = 20
+
+
+def _pick_version_screenshot(run: TransformRun) -> tuple[str, str]:
+    """Return (presigned_url, page_path) for a representative page of `run`.
+
+    Prefers the first PageResult with an after_screenshot_key. Falls back
+    to before_screenshot_key (so the very first run, where 'after' may not
+    have rendered, still surfaces *something*). Returns ("", "") if neither
+    is available.
+    """
+    for p in run.page_results or []:
+        key = p.after_screenshot_key or p.before_screenshot_key
+        if key:
+            url = presign_screenshot_url(key) or ""
+            return url, p.page_path or p.route or "/"
+    return "", ""
+
+
+@router.get("/sites/{site_id}/version-comparison")
+async def version_comparison(
+    site_id: str,
+    github_user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current and previous accepted UI versions for a site.
+
+    Strategy: pull the two most recent completed TransformRuns for the
+    project this site belongs to. The first one is "current" (post-accept,
+    likely just deployed). The second is "previous" (the design users
+    were seeing before the change). For each, pick a representative
+    screenshot from its PageResult set.
+
+    The frontend uses this to show a side-by-side baseline so a freshly
+    accepted version doesn't feel empty while heatmap data accrues.
+    """
+    site = await _load_site(db, site_id, github_user_id)
+
+    runs = (
+        await db.execute(
+            select(TransformRun)
+            .where(
+                TransformRun.project_id == site.project_id,
+                TransformRun.status.in_(("complete", "completed")),
+            )
+            .order_by(TransformRun.created_at.desc())
+            .limit(2)
+        )
+    ).scalars().all()
+
+    if not runs:
+        return {
+            "has_versions": False,
+            "current": None,
+            "previous": None,
+            "low_data": False,
+            "current_session_count": 0,
+            "low_data_threshold": _VERSION_LOW_DATA_THRESHOLD,
+        }
+
+    # Eager-load page_results for the runs we picked. The relationship is
+    # lazy by default, so a naive access would trigger a sync I/O attempt
+    # under asyncpg (which raises). Re-query with a join on the children.
+    from sqlalchemy.orm import selectinload
+    run_ids = [r.id for r in runs]
+    runs_full = (
+        await db.execute(
+            select(TransformRun)
+            .options(selectinload(TransformRun.page_results))
+            .where(TransformRun.id.in_(run_ids))
+            .order_by(TransformRun.created_at.desc())
+        )
+    ).scalars().all()
+
+    current = runs_full[0]
+    previous = runs_full[1] if len(runs_full) > 1 else None
+
+    cur_screenshot, cur_path = _pick_version_screenshot(current)
+    prev_screenshot, prev_path = _pick_version_screenshot(previous) if previous else ("", "")
+
+    # Sessions observed since the current version went out. We use the
+    # run's created_at — completed_at is sometimes NULL on older rows.
+    cur_started = current.completed_at or current.created_at
+    sess_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapSession).where(
+                HeatmapSession.site_id == site.id,
+                HeatmapSession.started_at >= cur_started,
+            )
+        )
+    ).scalar() or 0
+
+    low_data = bool(sess_count < _VERSION_LOW_DATA_THRESHOLD)
+
+    return {
+        "has_versions": True,
+        "current": {
+            "run_id": str(current.id),
+            "label": "Current design",
+            "deployed_at": cur_started.isoformat() if cur_started else None,
+            "screenshot_url": cur_screenshot,
+            "page_path": cur_path,
+            "page_count": current.total_pages_found or 0,
+        },
+        "previous": (
+            {
+                "run_id": str(previous.id),
+                "label": "Before this change",
+                "deployed_at": (previous.completed_at or previous.created_at).isoformat()
+                    if (previous.completed_at or previous.created_at) else None,
+                "screenshot_url": prev_screenshot,
+                "page_path": prev_path,
+                "page_count": previous.total_pages_found or 0,
+            }
+            if previous else None
+        ),
+        "low_data": low_data,
+        "current_session_count": int(sess_count),
+        "low_data_threshold": _VERSION_LOW_DATA_THRESHOLD,
+    }

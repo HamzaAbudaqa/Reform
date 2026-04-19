@@ -9,6 +9,7 @@ import HeatmapSetup from '@/components/heatmap/HeatmapSetup'
 import PageList from '@/components/heatmap/PageList'
 import ScrollDepthRail from '@/components/heatmap/ScrollDepthRail'
 import StatsHeader from '@/components/heatmap/StatsHeader'
+import VersionComparison from '@/components/heatmap/VersionComparison'
 import { apiUrl } from '@/lib/api'
 import { getSelectedRepo } from '@/lib/selectedRepo'
 import type { HeatmapData, HeatmapDevice, HeatmapLayer, HeatmapPage, HeatmapSite } from '@/types/heatmap'
@@ -311,6 +312,8 @@ function HeatmapPageInner() {
           <ScrollDepthRail buckets={scrollBuckets} />
         </aside>
       </div>
+
+      <VersionComparison siteId={site.id} githubUserId={githubUserId} />
     </div>
   )
 }

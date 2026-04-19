@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { MultiPageTransformResult } from './TransformTypes'
 
 type Mode = 'stable' | 'explore'
@@ -23,6 +24,7 @@ export default function TransformSummaryHeader({
   /** Competitor-inspiration bullets to render under the stats. */
   transformationNotes?: string[] | null
 }) {
+  const router = useRouter()
   const [regenerating, setRegenerating] = useState<Mode | null>(null)
   const hasPreviewErrors = result.pages.some(
     p => (p.status === 'transformed' || p.status === 'weak') && !!p.error,
@@ -110,10 +112,10 @@ export default function TransformSummaryHeader({
       {/* Publish banner */}
       {publishResult && (
         <div
-          className="rounded-xl px-5 py-3 mb-5"
+          className="rounded-xl px-5 py-4 mb-5"
           style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
               <span className="text-[12px]" style={{ color: '#86efac' }}>Changes published to GitHub</span>
@@ -125,6 +127,26 @@ export default function TransformSummaryHeader({
             <span className="text-[10px] font-medium" style={{ color: 'rgba(0,0,0,0.3)' }}>
               {publishResult.files_changed.length} file{publishResult.files_changed.length !== 1 ? 's' : ''} changed
             </span>
+          </div>
+
+          {/* Heatmap CTA — natural next step once a version is live. The
+              Heatmap page resolves the same selectedRepo from sessionStorage
+              that this page is using, so no extra context plumbing is
+              needed; just navigate. */}
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t pt-3" style={{ borderColor: 'rgba(34,197,94,0.18)' }}>
+            <div className="text-[12px]" style={{ color: 'rgba(0,0,0,0.7)' }}>
+              See visitor behavior for this version on the Heatmap tab.
+            </div>
+            <button
+              onClick={() => router.push('/dashboard/heatmap')}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-neutral-800"
+            >
+              Track how this version performs
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
