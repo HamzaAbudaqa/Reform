@@ -23,6 +23,14 @@ const SUCCESS_HOLD_MS = 3_500   // celebrate for 3.5s before continuing
 
 type WaitState = 'idle' | 'waiting' | 'success'
 
+function relTime(ms: number): string {
+  if (ms < 1000) return 'just now'
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  return `${m}m ago`
+}
+
 export default function AlmostDoneCard({
   site,
   prUrl,
@@ -36,7 +44,21 @@ export default function AlmostDoneCard({
   const [openedGithub, setOpenedGithub] = useState(resumed)
   const [lastResult, setLastResult] = useState<VerifyResult | null>(null)
   const [eventSummary, setEventSummary] = useState<EventSummary | null>(null)
+  const [attempts, setAttempts] = useState(0)
+  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  // Manual "Check now" trigger — bumping this re-runs the polling effect
+  // immediately rather than waiting out the interval.
+  const [manualKick, setManualKick] = useState(0)
   const cancelledRef = useRef(false)
+
+  // Tick once a second so the "last checked Xs ago" / "waited Nm" labels
+  // stay fresh without burning a render per ms.
+  useEffect(() => {
+    if (waitState !== 'waiting') return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [waitState])
 
   useEffect(() => {
     cancelledRef.current = false
@@ -64,10 +86,10 @@ export default function AlmostDoneCard({
         const result = mapVerify(await res.json())
         if (cancelledRef.current) return
         setLastResult(result)
+        setLastCheckedAt(Date.now())
+        setAttempts(a => a + 1)
         if (result.snippetDetected) {
           setWaitState('success')
-          // Fetch the proof-of-life payload before we transition. If this
-          // fails (no events yet), the success card still renders without it.
           try {
             const sumRes = await fetch(apiUrl(
               `/api/heatmap/sites/${site.id}/event-summary?github_user_id=${encodeURIComponent(githubUserId)}`
@@ -76,12 +98,13 @@ export default function AlmostDoneCard({
               setEventSummary(mapEventSummary(await sumRes.json()))
             }
           } catch { /* non-fatal */ }
-          // Hold the success card briefly so the user actually reads it.
           window.setTimeout(() => onVerified(site), SUCCESS_HOLD_MS)
           return
         }
       } catch {
-        /* soft-fail — try again next tick */
+        // Soft-fail still counts as an attempt so the user sees activity.
+        setLastCheckedAt(Date.now())
+        setAttempts(a => a + 1)
       }
       timer = window.setTimeout(checkOnce, POLL_INTERVAL_MS)
     }
@@ -90,7 +113,7 @@ export default function AlmostDoneCard({
     return () => {
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [openedGithub, site, githubUserId, onVerified])
+  }, [openedGithub, site, githubUserId, onVerified, manualKick])
 
   function handleOpenGithub() {
     setOpenedGithub(true)
@@ -161,21 +184,14 @@ export default function AlmostDoneCard({
         </button>
 
         {openedGithub && waitState === 'waiting' && (
-          <div className="flex flex-col items-center gap-1 text-center">
-            <div className="flex items-center gap-2 text-[12.5px] font-medium text-neutral-700">
-              <span
-                className="h-3 w-3 rounded-full border-2 border-neutral-300 border-t-neutral-700"
-                style={{ animation: 'spin 0.9s linear infinite' }}
-              />
-              <span>Your site is updating…</span>
-            </div>
-            <p className="text-[11.5px] text-neutral-500">
-              We&apos;re checking for tracking automatically. You don&apos;t need to do anything else.
-            </p>
-            {lastResult && !lastResult.reachable && (
-              <p className="text-[11px] text-amber-600">Site not reachable yet — your deploy may still be in progress.</p>
-            )}
-          </div>
+          <WaitingState
+            site={site}
+            attempts={attempts}
+            lastCheckedAt={lastCheckedAt}
+            now={now}
+            lastResult={lastResult}
+            onCheckNow={() => setManualKick(k => k + 1)}
+          />
         )}
 
         {!openedGithub && (
@@ -207,6 +223,80 @@ export default function AlmostDoneCard({
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────
+
+function WaitingState({
+  site,
+  attempts,
+  lastCheckedAt,
+  now,
+  lastResult,
+  onCheckNow,
+}: {
+  site: HeatmapSite
+  attempts: number
+  lastCheckedAt: number | null
+  now: number
+  lastResult: VerifyResult | null
+  onCheckNow: () => void
+}) {
+  const elapsedSinceCheck = lastCheckedAt ? now - lastCheckedAt : null
+  // Tiered hint copy — calm at first, more actionable as attempts pile up.
+  let hint: string
+  if (attempts <= 1) {
+    hint = "We're checking for tracking automatically. You don't need to do anything else."
+  } else if (attempts < 6) {
+    hint = "Your host may still be redeploying — this usually takes 1-3 minutes."
+  } else {
+    hint = "Still no luck. Open your site below to check it loaded, or try Check now."
+  }
+
+  // Surface the actual verify error if the backend gave us a useful one
+  // (the 5s timeout one was useless, but with the new fallback we can now
+  // distinguish "tag not present" from "tag present but didn't run").
+  const verifyHint = lastResult && !lastResult.snippetDetected && lastResult.error
+    ? lastResult.error
+    : null
+
+  return (
+    <div className="flex w-full flex-col items-center gap-2.5">
+      <div className="flex items-center gap-2 text-[12.5px] font-medium text-neutral-700">
+        <span
+          className="h-3 w-3 rounded-full border-2 border-neutral-300 border-t-neutral-700"
+          style={{ animation: 'spin 0.9s linear infinite' }}
+        />
+        <span>Checking your site for tracking…</span>
+      </div>
+      <p className="max-w-md text-center text-[11.5px] text-neutral-500">{hint}</p>
+
+      {verifyHint && attempts >= 2 && (
+        <p className="max-w-md text-center text-[11px] text-amber-700">{verifyHint}</p>
+      )}
+
+      <div className="mt-1 flex items-center gap-2">
+        <button
+          onClick={onCheckNow}
+          className="rounded-full border border-black/[0.12] bg-white px-3.5 py-1.5 text-[11.5px] font-medium text-neutral-950 transition hover:bg-neutral-50"
+        >
+          Check now
+        </button>
+        <a
+          href={site.domain}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full border border-black/[0.08] bg-white px-3.5 py-1.5 text-[11.5px] font-medium text-neutral-600 transition hover:text-neutral-950"
+        >
+          Open my site ↗
+        </a>
+      </div>
+
+      <p className="text-[10.5px] text-neutral-400">
+        {attempts === 0
+          ? 'Starting check…'
+          : `Checked ${attempts}× · last check ${elapsedSinceCheck != null ? relTime(elapsedSinceCheck) : 'just now'}`}
+      </p>
+    </div>
+  )
+}
 
 function Step({ n, active, children }: { n: number; active: boolean; children: React.ReactNode }) {
   return (

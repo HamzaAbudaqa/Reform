@@ -300,7 +300,18 @@ async def verify_site(
 
 
 async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
-    """Load `domain` and check `window.__reformHeatmap__`. Returns (reachable, detected, err)."""
+    """Load `domain` and check `window.__reformHeatmap__`.
+
+    Returns (reachable, detected, err).
+
+    Why the timing matters: Next.js `<Script strategy="afterInteractive">`
+    only loads after hydration, which is itself after the JS bundle parses
+    and runs. On real apps that's often 5-10s, longer than the old 5s
+    timeout. We now wait on `networkidle` and give the marker check up to
+    12s. If the marker still hasn't appeared, we do a DOM-level check for
+    the script *tag* itself — tag-present-but-not-executed is a much
+    better diagnostic than the user-facing "not detected" alone.
+    """
     try:
         from playwright.async_api import async_playwright
     except Exception as exc:  # noqa: BLE001
@@ -312,22 +323,51 @@ async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
             try:
                 page = await browser.new_page(viewport={"width": 1280, "height": 800})
                 try:
-                    resp = await page.goto(domain, wait_until="domcontentloaded", timeout=15000)
-                except Exception as exc:  # noqa: BLE001
-                    return False, False, f"Page did not load: {exc}"
+                    # `networkidle` waits for ~500ms of no network requests.
+                    # On a Next.js site this happens *after* hydration, so the
+                    # afterInteractive Script will have started fetching by then.
+                    resp = await page.goto(domain, wait_until="networkidle", timeout=25000)
+                except Exception:
+                    # networkidle can time out on chatty pages — fall back to a
+                    # cheaper load condition so we don't block the user. The
+                    # marker check below has its own wait.
+                    try:
+                        resp = await page.goto(domain, wait_until="domcontentloaded", timeout=15000)
+                    except Exception as exc:  # noqa: BLE001
+                        return False, False, f"Page did not load: {exc}"
                 if resp is None:
                     return False, False, "No response from server"
                 if resp.status >= 400:
                     return False, False, f"HTTP {resp.status}"
-                # Wait up to 5s for the tracker to initialize.
+                # Primary check — the tracker sets this once it's bootstrapped.
                 try:
                     await page.wait_for_function(
                         "() => !!(window.__reformHeatmap__ && window.__reformHeatmap__.loaded)",
-                        timeout=5000,
+                        timeout=12000,
                     )
                     return True, True, None
                 except Exception:
-                    return True, False, "Snippet not detected within 5s"
+                    pass
+                # Fallback diagnosis — is the script *tag* present? If yes,
+                # the tag is there but the script didn't run (CSP, network
+                # block, etc.). If no, the injection isn't actually live yet
+                # (deploy stale, wrong file, build pulled an old version).
+                tag_present = False
+                try:
+                    tag_present = bool(await page.evaluate(
+                        "() => !!document.querySelector('script[src*=\"/api/heatmap/h.js\"]')"
+                    ))
+                except Exception:
+                    pass
+                if tag_present:
+                    return True, False, (
+                        "Tracking code is on your site but didn't load — your "
+                        "site may be blocking the script (check CSP / ad blocker)."
+                    )
+                return True, False, (
+                    "We don't see the tracking code on your site yet. If you just "
+                    "merged on GitHub, give your host a minute to redeploy."
+                )
             finally:
                 await browser.close()
     except Exception as exc:  # noqa: BLE001
