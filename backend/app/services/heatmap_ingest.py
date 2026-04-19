@@ -295,4 +295,13 @@ async def process_events(
     # reliable timestamp without a separate COUNT(*) on the sessions table.
     if site.first_event_at is None:
         site.first_event_at = now
+
+    # Debug-trace at INFO so we can confirm end-to-end ingest from logs alone.
+    # One line per accepted batch — the same cadence as the route-level log.
+    logger.info(
+        "process_events: site=%s page=%s path=%s vp=%s clicks=%d moves=%d scrolls=%d "
+        "agg_rows=%d session_first_time=%s",
+        str(site.id)[:8], str(page.id)[:8], path, viewport_cls,
+        len(clicks), len(moves), len(scrolls), len(agg_rows), first_time,
+    )
     return accepted, len(rage)

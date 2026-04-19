@@ -882,3 +882,121 @@ async def version_comparison(
         "current_session_count": int(sess_count),
         "low_data_threshold": _VERSION_LOW_DATA_THRESHOLD,
     }
+
+
+# ─── Debug / triangulation endpoint ────────────────────────────────────
+
+
+@router.get("/sites/{site_id}/debug")
+async def site_debug(
+    site_id: str,
+    github_user_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Surface the live state of a heatmap site for triangulation.
+
+    Returns enough information for a developer to instantly answer:
+      • is the site row present and which key does it expect?
+      • have any events ever arrived (last_event_at, first_event_at)?
+      • do session / page / aggregate rows exist?
+      • which paths is ingest creating rows for? (catches dashboard ↔ tracker
+        path mismatches like /dashboard vs /dashboard/)
+
+    Read-only. Auth-scoped to the same github_user_id that owns the site.
+    """
+    site = await _load_site(db, site_id, github_user_id)
+
+    sess_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapSession).where(
+                HeatmapSession.site_id == site.id,
+            )
+        )
+    ).scalar() or 0
+    page_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapPage).where(
+                HeatmapPage.site_id == site.id,
+            )
+        )
+    ).scalar() or 0
+    agg_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapAggregate)
+            .join(HeatmapPage, HeatmapPage.id == HeatmapAggregate.page_id)
+            .where(HeatmapPage.site_id == site.id)
+        )
+    ).scalar() or 0
+
+    pages = (
+        await db.execute(
+            select(HeatmapPage)
+            .where(HeatmapPage.site_id == site.id)
+            .order_by(HeatmapPage.last_seen_at.desc())
+            .limit(20)
+        )
+    ).scalars().all()
+
+    recent_sessions = (
+        await db.execute(
+            select(
+                HeatmapSession.session_id,
+                HeatmapSession.viewport_class,
+                HeatmapSession.started_at,
+                HeatmapSession.ended_at,
+                HeatmapSession.user_agent,
+            )
+            .where(HeatmapSession.site_id == site.id)
+            .order_by(HeatmapSession.ended_at.desc())
+            .limit(5)
+        )
+    ).all()
+
+    return {
+        "site": {
+            "id": str(site.id),
+            "site_key": site.site_key,
+            "site_key_short": site.site_key[:12] + "…" if len(site.site_key) > 12 else site.site_key,
+            "domain": site.domain,
+            "verified_at": site.verified_at.isoformat() if site.verified_at else None,
+            "first_event_at": site.first_event_at.isoformat() if site.first_event_at else None,
+            "last_event_at": site.last_event_at.isoformat() if site.last_event_at else None,
+            "install_status": site.install_status,
+        },
+        # The URL the tracker JS will POST to. If the snippet on the deployed
+        # site points elsewhere, that's a stale install — re-run auto-install
+        # or refetch /h.js.
+        "expected_collect_url": f"{api_base_from_request(request)}/api/heatmap/collect",
+        "expected_tracker_url": (
+            f"{api_base_from_request(request)}/api/heatmap/h.js?site={site.site_key}"
+        ),
+        "counts": {
+            "sessions": int(sess_count),
+            "pages": int(page_count),
+            "aggregates": int(agg_count),
+        },
+        "pages": [
+            {
+                "id": str(p.id),
+                "path": p.path,
+                "viewport_class": p.viewport_class,
+                "session_count": p.session_count or 0,
+                "page_height_px": p.page_height_px or 0,
+                "first_seen_at": p.first_seen_at.isoformat() if p.first_seen_at else None,
+                "last_seen_at": p.last_seen_at.isoformat() if p.last_seen_at else None,
+                "has_screenshot": bool(p.screenshot_key),
+            }
+            for p in pages
+        ],
+        "recent_sessions": [
+            {
+                "session_id_short": s.session_id[:12] + "…" if len(s.session_id) > 12 else s.session_id,
+                "viewport_class": s.viewport_class,
+                "started_at": s.started_at.isoformat() if s.started_at else None,
+                "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+                "browser_label": _parse_browser_label(s.user_agent),
+            }
+            for s in recent_sessions
+        ],
+    }
