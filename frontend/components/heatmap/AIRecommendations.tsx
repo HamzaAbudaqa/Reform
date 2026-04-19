@@ -122,29 +122,6 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
     }
   }, [pageId, githubUserId])
 
-  const regenerateOne = useCallback(async (sugId: string) => {
-    setRegeneratingId(sugId)
-    setError(null)
-    try {
-      const res = await fetch(
-        apiUrl(`/api/heatmap/pages/${pageId}/insights/${sugId}/regenerate`),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ github_user_id: githubUserId }),
-        },
-      )
-      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't regenerate that suggestion."))
-      const raw = await res.json() as { suggestions?: Array<Record<string, unknown>> }
-      const nextSuggestions = Array.isArray(raw.suggestions) ? raw.suggestions.map(mapSuggestion) : []
-      setData(prev => (prev ? { ...prev, suggestions: nextSuggestions } : prev))
-    } catch (e) {
-      setError(humanizeError(e, "We couldn't regenerate that suggestion."))
-    } finally {
-      setRegeneratingId(null)
-    }
-  }, [pageId, githubUserId])
-
   const proposeFixForInsight = useCallback(async (insightId: string) => {
     setRegeneratingId(insightId)
     setError(null)
@@ -353,10 +330,8 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
               <SuggestionCard
                 key={s.id}
                 suggestion={s}
-                regenerating={regeneratingId === s.id}
                 onStage={() => setStatus(s.id, s.status === 'staged' ? 'none' : 'staged')}
                 onReject={() => setStatus(s.id, 'rejected')}
-                onRegenerate={() => regenerateOne(s.id)}
                 onHover={(hover) => onHoverRegion?.(hover ? s : null)}
               />
             ))}
@@ -483,17 +458,13 @@ function InsightRow({
 
 function SuggestionCard({
   suggestion,
-  regenerating,
   onStage,
   onReject,
-  onRegenerate,
   onHover,
 }: {
   suggestion: Suggestion
-  regenerating: boolean
   onStage: () => void
   onReject: () => void
-  onRegenerate: () => void
   onHover: (hover: boolean) => void
 }) {
   const conf = CONFIDENCE_TONE[suggestion.confidence]
@@ -547,15 +518,6 @@ function SuggestionCard({
           className="inline-flex items-center justify-center rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-600 transition hover:text-neutral-950 hover:bg-neutral-50"
         >
           Reject
-        </button>
-        <button
-          onClick={onRegenerate}
-          disabled={regenerating}
-          title="Ask for an alternative strategy"
-          className="ml-auto inline-flex items-center justify-center gap-1 rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-600 transition hover:text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
-        >
-          {regenerating ? <Spinner /> : <WandIcon />}
-          {regenerating ? 'Rethinking…' : 'Magic wand'}
         </button>
       </div>
     </div>

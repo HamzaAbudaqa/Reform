@@ -61,7 +61,6 @@ from app.services.heatmap_insights import (
     gather_page_evidence,
     generate_insights,
     is_cache_fresh,
-    regenerate_single_suggestion,
 )
 from app.services.heatmap_installer import install_tracking_via_github
 from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
@@ -1005,78 +1004,6 @@ async def set_suggestion_status(
         existing.status = req.status
         existing.updated_at = now
     return {"ok": True, "status": req.status}
-
-
-@router.post("/pages/{page_id}/insights/{suggestion_id}/regenerate")
-async def regenerate_suggestion(
-    page_id: str,
-    suggestion_id: str,
-    req: RegenerateSuggestionRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Per-card magic wand: ask Claude for an alternative strategy for one
-    suggestion while leaving the rest of the cached panel intact.
-
-    Evidence is re-gathered (same site/page) and fed to Claude alongside
-    the previous suggestion so the model can diverge from it explicitly.
-    The returned card gets a fresh `id` — any existing status row for the
-    old id is dropped (the user never chose *this* suggestion; they chose
-    the one that used to live here). Cache TTL is not reset; the panel as
-    a whole stays whatever age it was.
-    """
-    page, site = await _load_page_scoped(db, page_id, req.github_user_id)
-
-    cached = page.latest_insights_json or {}
-    suggestions = list(cached.get("suggestions", []))
-    idx = next(
-        (i for i, s in enumerate(suggestions) if s.get("id") == suggestion_id),
-        -1,
-    )
-    if idx < 0:
-        raise HTTPException(status_code=404, detail="Unknown suggestion id for this page")
-
-    previous = suggestions[idx]
-
-    screenshot_url = (
-        presign_screenshot_url(page.screenshot_key) if page.screenshot_key else None
-    )
-    evidence = await gather_page_evidence(db, page, site.id, screenshot_url=screenshot_url)
-    new_sug = await regenerate_single_suggestion(evidence, previous)
-    if new_sug is None:
-        raise HTTPException(
-            status_code=502,
-            detail="Couldn't generate an alternative right now — try again in a moment.",
-        )
-
-    suggestions[idx] = new_sug
-    # Persist the swapped panel. Not resetting latest_insights_at — the
-    # rest of the panel hasn't changed, and refreshing TTL here would
-    # silently extend the cache lifetime of stale insights.
-    page.latest_insights_json = {
-        **cached,
-        "suggestions": suggestions,
-    }
-
-    # Old id is gone — drop its status row so it doesn't become an orphan.
-    await db.execute(
-        HeatmapSuggestionStatus.__table__.delete().where(
-            HeatmapSuggestionStatus.page_id == page.id,
-            HeatmapSuggestionStatus.suggestion_id == suggestion_id,
-        )
-    )
-
-    # Return the fresh panel so the client can drop it in without a second
-    # round-trip to /insights.
-    hydrated = await _hydrate_suggestion_status(db, page.id, suggestions)
-    return {
-        "suggestion": next((s for s in hydrated if s.get("id") == new_sug["id"]), new_sug),
-        "insights": cached.get("insights", []),
-        "suggestions": hydrated,
-        "note": cached.get("note", ""),
-        "page_path": page.path,
-        "generated_at": page.latest_insights_at.isoformat() if page.latest_insights_at else None,
-        "cached": False,
-    }
 
 
 @router.post("/pages/{page_id}/insights/{insight_id}/propose-suggestion")
