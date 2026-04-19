@@ -103,6 +103,29 @@ def default_api_base() -> str:
     ).rstrip("/")
 
 
+def api_base_from_request(request) -> str:
+    """Return the API base URL appropriate for `request`.
+
+    Precedence:
+      1. API_BASE_URL / BACKEND_URL env var (operator override)
+      2. X-Forwarded-Proto + X-Forwarded-Host (Railway / Vercel / Heroku
+         set these on proxied requests)
+      3. The URL the client used to reach us (request.url)
+
+    Without this, a misconfigured prod deploy bakes localhost:8000 into the
+    JS we serve to user sites — events from real visitors then post into
+    nothing.
+    """
+    env = os.environ.get("API_BASE_URL") or os.environ.get("BACKEND_URL")
+    if env:
+        return env.rstrip("/")
+    fwd_host = request.headers.get("x-forwarded-host")
+    if fwd_host:
+        fwd_proto = request.headers.get("x-forwarded-proto", "https")
+        return f"{fwd_proto}://{fwd_host}".rstrip("/")
+    return f"{request.url.scheme}://{request.url.netloc}".rstrip("/")
+
+
 def _escape_js(value: str) -> str:
     """Escape a string for safe inlining inside a JS string literal."""
     return (

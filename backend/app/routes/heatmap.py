@@ -49,7 +49,7 @@ from app.schemas.heatmap import (
     VerifySiteResponse,
 )
 from app.services.heatmap_ingest import process_events, viewport_class
-from app.services.heatmap_snippet import build_snippet, default_api_base, serve_tracker
+from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
 from app.services.s3_client import presign_screenshot_url, upload_screenshot
 from app.services.screenshot import take_screenshot_b64
 
@@ -98,8 +98,8 @@ async def collect_preflight() -> Response:
 
 
 @router.get("/h.js")
-async def tracker_js(site: str = Query(..., min_length=8, max_length=64)) -> Response:
-    api_base = default_api_base()
+async def tracker_js(request: Request, site: str = Query(..., min_length=8, max_length=64)) -> Response:
+    api_base = api_base_from_request(request)
     js = serve_tracker(site, f"{api_base}/api/heatmap/collect")
     headers = dict(_PUBLIC_CORS)
     headers["Content-Type"] = "application/javascript; charset=utf-8"
