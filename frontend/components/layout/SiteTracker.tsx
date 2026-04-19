@@ -47,8 +47,16 @@ export default function SiteTracker() {
         path: window.location.pathname,
       }
 
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
-      navigator.sendBeacon(apiUrl('/analytics/track-visit'), blob)
+      // fetch+keepalive (not sendBeacon) so we can set credentials: 'omit'.
+      // sendBeacon forces credentials mode 'include', which triggers a CORS
+      // preflight that the backend (allow_credentials=False) rejects.
+      fetch(apiUrl('/analytics/track-visit'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'omit',
+        keepalive: true,
+      }).catch(() => {})
     }
 
     const handleVisibility = () => {

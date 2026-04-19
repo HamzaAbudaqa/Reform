@@ -321,10 +321,12 @@ Return ONLY this JSON, no markdown fences:
   ],
   "change_summary": ["visible improvement in plain English"],
   "transformation_notes": [
-    "1-4 specific, structural bullets — each naming which competitor pattern was applied and how.",
-    "Reference the competitor by URL domain when possible (e.g., 'Applied vercel.com-style section rhythm: 96px vertical gap between sections').",
-    "Describe a concrete structural move, not a feeling. Avoid cheesy / over-literal phrasing.",
-    "Good: 'Adopted github.com primary/secondary CTA pairing — solid indigo primary, ghost secondary at same size.'",
-    "Bad: 'Made it look cooler like Vercel.'"
+    "1-4 short, plain-English bullets. Each one names a competitor and the vibe you borrowed from them.",
+    "Talk like a designer to a friend, not like a code reviewer. No class names, padding values, ARIA attributes, or semantic-HTML jargon.",
+    "One sentence each. Describe what the page feels like now, not the CSS that got it there.",
+    "Good: 'Borrowed Linear's calm stat-card vibe — big numbers, tiny labels, lots of breathing room.'",
+    "Good: 'Took Vercel's one-bold-button rule so the main action actually pops.'",
+    "Good: 'Stole Stripe's two-step delete flow — destructive actions now ask for confirmation.'",
+    "Bad: 'Applied p-6 padding and space-y-6 vertical gap matching linear.app section rhythm.'"
   ]
 }}"""

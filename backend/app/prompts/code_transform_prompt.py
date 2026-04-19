@@ -186,9 +186,10 @@ Return a JSON object with this exact structure:
     "Plain English description of a visible improvement"
   ],
   "transformation_notes": [
-    "1-4 bullets describing which competitor patterns were applied.",
-    "Name competitors by URL domain (e.g., 'Applied vercel.com-style 96px section rhythm').",
-    "Be structural and specific. No cheesy phrasing."
+    "1-4 short, plain-English bullets. Each one names a competitor and the vibe you borrowed.",
+    "Talk like a designer to a friend, not like a code reviewer. No class names, padding values, or ARIA jargon.",
+    "Good: 'Borrowed Linear's calm stat-card vibe — big numbers, tiny labels.'",
+    "Bad: 'Applied p-6 padding with space-y-6 vertical gap per linear.app pattern.'"
   ]
 }}
 

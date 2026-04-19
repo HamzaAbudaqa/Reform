@@ -1400,6 +1400,15 @@ function TransformPage() {
     const branch = repo.default_branch || 'main'
     const effectiveMode: RunMode = mode || runMode
 
+    // Stamp a fresh start time *before* flipping to 'ingesting' so the
+    // progress bar mounts with an accurate timestamp instead of inheriting
+    // a stale one from a previous run (which would render the bar as
+    // already nearly full and then snap back to 0 once the pipeline
+    // actually starts streaming).
+    const pipelineStartTs = Date.now()
+    setPipelineStartedAt(pipelineStartTs)
+    try { localStorage.setItem('refineui_pipeline_started_at', String(pipelineStartTs)) } catch { /* */ }
+
     // Show loading immediately so the user gets instant visual feedback.
     setPipelineStep('ingesting')
 
@@ -1461,12 +1470,6 @@ function TransformPage() {
         }
       } catch { /* non-fatal — fall through to fresh run */ }
     }
-
-    // Stamp a persistent start time so the progress timer resumes after
-    // tab-switches / component remounts instead of snapping back to 0s.
-    const pipelineStartTs = Date.now()
-    setPipelineStartedAt(pipelineStartTs)
-    try { localStorage.setItem('refineui_pipeline_started_at', String(pipelineStartTs)) } catch { /* */ }
 
     try {
       let uxLabFindings: unknown[] | null = null
