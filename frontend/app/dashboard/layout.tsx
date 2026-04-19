@@ -11,8 +11,8 @@ import { clearSelectedRepo } from '@/lib/selectedRepo'
 const NAV_ITEMS = [
   { href: '/dashboard/discovery', label: 'Project Discovery' },
   { href: '/dashboard/simulation', label: 'UX Analysis' },
-  { href: '/dashboard/heatmap', label: 'Heatmap' },
   { href: '/dashboard/transform', label: 'UI Transformation' },
+  { href: '/dashboard/heatmap', label: 'Heatmap' },
 ]
 
 type NavBounds = {
@@ -93,7 +93,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 sm:gap-8 min-w-0">
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <span className="text-[20px] font-bold text-neutral-950" style={{ letterSpacing: '-0.04em' }}>Reform</span>
-              <span className="hidden sm:inline-block text-[11px] text-neutral-400 ml-1">analysis workspace</span>
             </Link>
 
             <DashboardNav
