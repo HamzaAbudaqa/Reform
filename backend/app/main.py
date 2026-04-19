@@ -80,6 +80,7 @@ async def startup():
 _default_origins = (
     "http://localhost:3000,"
     "https://refineui-chi.vercel.app,"
+    "https://acme-deploy-console.vercel.app,"
     "https://uireform.com,"
     "https://www.uireform.com"
 )
