@@ -209,6 +209,43 @@
       if (document.visibilityState === "hidden") { emitScroll(); flush(); }
     });
     window.addEventListener("pagehide", function () { emitScroll(); flush(); });
+
+    // ── SPA route change detection ────────────────────────────────────
+    // Next.js App Router, React Router, and every other client-side
+    // router navigate by calling history.pushState/replaceState without
+    // reloading the document, so `emitView` on DOMContentLoaded fires
+    // only once per hard load. Without this hook, a site that renders
+    // 10 routes as an SPA would only ever register a view for the first.
+    // We wrap the history methods (preserving the original return value
+    // and `this`), and listen for `popstate` (back/forward). On a real
+    // route change we reset per-page state, emit a view, and flush so
+    // the new path gets its own HeatmapPage row without waiting up to
+    // FLUSH_INTERVAL_MS for the next scheduled flush.
+    var currentPath = location.pathname + location.search;
+    function onRouteChanged() {
+      try {
+        var next = location.pathname + location.search;
+        if (next === currentPath) return;
+        currentPath = next;
+        maxScrollY = 0;
+        pageLoadAt = Date.now();
+        emitView();
+        flush();
+      } catch (err) { warnOnce(err); }
+    }
+    var _push = history.pushState;
+    history.pushState = function () {
+      var rv = _push.apply(this, arguments);
+      onRouteChanged();
+      return rv;
+    };
+    var _replace = history.replaceState;
+    history.replaceState = function () {
+      var rv = _replace.apply(this, arguments);
+      onRouteChanged();
+      return rv;
+    };
+    window.addEventListener("popstate", onRouteChanged);
   } catch (err) {
     warnOnce(err);
   }
