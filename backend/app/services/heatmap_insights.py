@@ -267,7 +267,8 @@ CONSTRAINTS
 4. `confidence` = how sure you are the pattern is real. "high" requires both rage/click data AND a clear screenshot affordance you can point to. "medium" requires a clear pattern in one of those. "low" otherwise.
 5. `severity` = how harmful the issue is IF the pattern is real. "high" = users are likely bouncing, blocked, or failing a primary goal. "medium" = friction on an important flow but not a blocker. "low" = polish / nice-to-have. Confidence and severity are orthogonal — do NOT assume they move together.
 6. `target_region` (optional, suggestions only): if the screenshot makes the target area visually obvious, emit normalized [0,1] coordinates ({{x, y, width, height}}) where (0,0) is the top-left of the full page. Omit for page-wide or non-spatial changes.
-7. If the evidence genuinely doesn't support a category, omit it — do NOT fabricate.
+7. **Pairing rule (critical):** every insight you emit MUST come with at least one concrete suggestion in the suggestions array that addresses it. Users act on suggestions, not observations — an insight with no paired fix is dead UI. If you truly cannot propose a concrete, code-level fix for an observation, omit the insight entirely. It is better to return one insight + one suggestion than four insights + zero suggestions.
+8. If the evidence genuinely doesn't support a category, omit it — do NOT fabricate.
 
 Return your output by calling the `report_recommendations` tool exactly once."""
 
@@ -501,6 +502,118 @@ _ALT_TOOL_DEFINITION = {
         "required": ["suggestion"],
     },
 }
+
+
+# ── Insight → Suggestion (per-card "Propose a fix") ───────────────────
+
+
+_INSIGHT_TO_SUG_SYSTEM_PROMPT = (
+    "You are a senior UX designer. The user is looking at a behavioral "
+    "INSIGHT (an observation about how visitors use their page) and wants "
+    "a concrete, code-level fix they can ship. Your job is to propose "
+    "exactly one actionable suggestion that addresses the insight, "
+    "grounded in the same evidence. Do not restate the insight — prescribe "
+    "the change."
+)
+
+
+_INSIGHT_TO_SUG_USER_PROMPT_TEMPLATE = """Turn this behavioral insight into ONE concrete UI suggestion an AI code transformer can act on.
+
+INSIGHT
+-------
+Category: {insight_type}
+Title: {insight_title}
+Summary: {insight_summary}
+Evidence cited: {insight_evidence}
+
+EVIDENCE
+--------
+{evidence}
+
+CONSTRAINTS
+-----------
+1. `evidence` field cites a specific number, percentage, or location from above.
+2. `transform_instruction` is a single self-contained sentence that names the element, the change, and any constraint — actionable without further context.
+3. `confidence` = how sure the pattern is real; `severity` = how harmful if true (orthogonal).
+4. `target_region` (optional): normalized [0,1] coords if the screenshot makes it visually obvious.
+5. Propose a suggestion that directly addresses the insight. Do not pivot to a tangential fix.
+
+Return your output by calling the `report_suggestion_for_insight` tool exactly once."""
+
+
+_INSIGHT_TO_SUG_TOOL_DEFINITION = {
+    "name": "report_suggestion_for_insight",
+    "description": (
+        "Report a single concrete UX suggestion that addresses a specific "
+        "behavioral insight. Call this tool exactly once."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "suggestion": _TOOL_DEFINITION["input_schema"]["properties"]["suggestions"]["items"],
+        },
+        "required": ["suggestion"],
+    },
+}
+
+
+async def convert_insight_to_suggestion(
+    ev: PageEvidence,
+    insight: dict,
+) -> dict | None:
+    """Generate a concrete suggestion that addresses `insight`.
+
+    Used by the per-insight "Propose a fix" wand in the frontend — gives
+    users an out when the main generation pass returned an observation
+    without a matching actionable change. Returns the new suggestion
+    (with freshly minted id) or None on model/transport failure.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+
+    client = anthropic.Anthropic(api_key=api_key)
+    prompt_text = _INSIGHT_TO_SUG_USER_PROMPT_TEMPLATE.format(
+        evidence=_evidence_to_text(ev),
+        insight_type=insight.get("type", ""),
+        insight_title=insight.get("title", ""),
+        insight_summary=insight.get("summary", ""),
+        insight_evidence=insight.get("evidence", ""),
+    )
+    content: list[dict] = []
+    if ev.screenshot_url:
+        content.append({"type": "image", "source": {"type": "url", "url": ev.screenshot_url}})
+    content.append({"type": "text", "text": prompt_text})
+
+    try:
+        import asyncio
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model="claude-sonnet-4-6",
+            max_tokens=800,
+            system=_INSIGHT_TO_SUG_SYSTEM_PROMPT,
+            tools=[_INSIGHT_TO_SUG_TOOL_DEFINITION],
+            tool_choice={"type": "tool", "name": "report_suggestion_for_insight"},
+            messages=[{"role": "user", "content": content}],
+        )
+    except Exception as exc:  # noqa: BLE001
+        if is_anthropic_exception(exc):
+            log_and_classify(exc)
+        else:
+            logger.error("convert_insight_to_suggestion: model call failed: %s", exc, exc_info=True)
+        return None
+
+    for block in message.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "report_suggestion_for_insight":
+            payload = block.input or {}
+            if isinstance(payload, dict) and isinstance(payload.get("suggestion"), dict):
+                new_sug = dict(payload["suggestion"])
+                new_sug["id"] = "sug_" + secrets.token_hex(4)
+                return new_sug
+            break
+
+    logger.warning("convert_insight_to_suggestion: model returned no tool_use block")
+    return None
 
 
 async def regenerate_single_suggestion(

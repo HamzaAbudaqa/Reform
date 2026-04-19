@@ -163,49 +163,6 @@ export function mapEventSummary(raw: Record<string, unknown>): EventSummary {
   }
 }
 
-// ── Version comparison (current vs previous accepted UI) ──────────────
-
-export interface VersionInfo {
-  runId: string
-  label: string
-  deployedAt: string | null
-  screenshotUrl: string
-  pagePath: string
-  pageCount: number
-}
-
-export interface VersionComparison {
-  hasVersions: boolean
-  current: VersionInfo | null
-  previous: VersionInfo | null
-  lowData: boolean
-  currentSessionCount: number
-  lowDataThreshold: number
-}
-
-function mapVersion(raw: Record<string, unknown> | null): VersionInfo | null {
-  if (!raw) return null
-  return {
-    runId: String(raw.run_id ?? ''),
-    label: String(raw.label ?? ''),
-    deployedAt: raw.deployed_at ? String(raw.deployed_at) : null,
-    screenshotUrl: String(raw.screenshot_url ?? ''),
-    pagePath: String(raw.page_path ?? ''),
-    pageCount: Number(raw.page_count ?? 0),
-  }
-}
-
-export function mapVersionComparison(raw: Record<string, unknown>): VersionComparison {
-  return {
-    hasVersions: Boolean(raw.has_versions),
-    current: mapVersion(raw.current as Record<string, unknown> | null),
-    previous: mapVersion(raw.previous as Record<string, unknown> | null),
-    lowData: Boolean(raw.low_data),
-    currentSessionCount: Number(raw.current_session_count ?? 0),
-    lowDataThreshold: Number(raw.low_data_threshold ?? 20),
-  }
-}
-
 // ── AI insights & suggestions ───────────────────────────────────────────
 
 export type InsightType = 'rage_click' | 'scroll_depth' | 'cta_prominence' | 'navigation'

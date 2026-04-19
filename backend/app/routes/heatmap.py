@@ -34,9 +34,7 @@ from app.models import (
     HeatmapSession,
     HeatmapSite,
     HeatmapSuggestionStatus,
-    PageResult,
     Project,
-    TransformRun,
 )
 from app.schemas.heatmap import (
     AutoInstallRequest,
@@ -59,6 +57,7 @@ from app.schemas.heatmap import (
 from app.services.heatmap_ingest import process_events, viewport_class
 from app.services.heatmap_insights import (
     MIN_SESSIONS_FOR_INSIGHTS,
+    convert_insight_to_suggestion,
     gather_page_evidence,
     generate_insights,
     is_cache_fresh,
@@ -807,139 +806,6 @@ def _parse_browser_label(ua: str | None) -> str | None:
     return browser or os_label
 
 
-# ─── Version comparison ────────────────────────────────────────────────
-#
-# A "version" here is any completed TransformRun for the project. The user
-# never sees the word "transform run" — UI calls them "Current design" and
-# "Before this change". Reusing the existing TransformRun + PageResult model
-# means no new tables and the comparison stays accurate without a parallel
-# version-ledger to keep in sync.
-
-# Sessions threshold under which we tell the user "still collecting" rather
-# than pretending the heatmap on the new version is meaningful. Picked low
-# enough that any modest test traffic clears it.
-_VERSION_LOW_DATA_THRESHOLD = 20
-
-
-def _pick_version_screenshot(run: TransformRun) -> tuple[str, str]:
-    """Return (presigned_url, page_path) for a representative page of `run`.
-
-    Prefers the first PageResult with an after_screenshot_key. Falls back
-    to before_screenshot_key (so the very first run, where 'after' may not
-    have rendered, still surfaces *something*). Returns ("", "") if neither
-    is available.
-    """
-    for p in run.page_results or []:
-        key = p.after_screenshot_key or p.before_screenshot_key
-        if key:
-            url = presign_screenshot_url(key) or ""
-            return url, p.page_path or p.route or "/"
-    return "", ""
-
-
-@router.get("/sites/{site_id}/version-comparison")
-async def version_comparison(
-    site_id: str,
-    github_user_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Return the current and previous accepted UI versions for a site.
-
-    Strategy: pull the two most recent completed TransformRuns for the
-    project this site belongs to. The first one is "current" (post-accept,
-    likely just deployed). The second is "previous" (the design users
-    were seeing before the change). For each, pick a representative
-    screenshot from its PageResult set.
-
-    The frontend uses this to show a side-by-side baseline so a freshly
-    accepted version doesn't feel empty while heatmap data accrues.
-    """
-    site = await _load_site(db, site_id, github_user_id)
-
-    runs = (
-        await db.execute(
-            select(TransformRun)
-            .where(
-                TransformRun.project_id == site.project_id,
-                TransformRun.status.in_(("complete", "completed")),
-            )
-            .order_by(TransformRun.created_at.desc())
-            .limit(2)
-        )
-    ).scalars().all()
-
-    if not runs:
-        return {
-            "has_versions": False,
-            "current": None,
-            "previous": None,
-            "low_data": False,
-            "current_session_count": 0,
-            "low_data_threshold": _VERSION_LOW_DATA_THRESHOLD,
-        }
-
-    # Eager-load page_results for the runs we picked. The relationship is
-    # lazy by default, so a naive access would trigger a sync I/O attempt
-    # under asyncpg (which raises). Re-query with a join on the children.
-    from sqlalchemy.orm import selectinload
-    run_ids = [r.id for r in runs]
-    runs_full = (
-        await db.execute(
-            select(TransformRun)
-            .options(selectinload(TransformRun.page_results))
-            .where(TransformRun.id.in_(run_ids))
-            .order_by(TransformRun.created_at.desc())
-        )
-    ).scalars().all()
-
-    current = runs_full[0]
-    previous = runs_full[1] if len(runs_full) > 1 else None
-
-    cur_screenshot, cur_path = _pick_version_screenshot(current)
-    prev_screenshot, prev_path = _pick_version_screenshot(previous) if previous else ("", "")
-
-    # Sessions observed since the current version went out. We use the
-    # run's created_at — completed_at is sometimes NULL on older rows.
-    cur_started = current.completed_at or current.created_at
-    sess_count = (
-        await db.execute(
-            select(func.count()).select_from(HeatmapSession).where(
-                HeatmapSession.site_id == site.id,
-                HeatmapSession.started_at >= cur_started,
-            )
-        )
-    ).scalar() or 0
-
-    low_data = bool(sess_count < _VERSION_LOW_DATA_THRESHOLD)
-
-    return {
-        "has_versions": True,
-        "current": {
-            "run_id": str(current.id),
-            "label": "Current design",
-            "deployed_at": cur_started.isoformat() if cur_started else None,
-            "screenshot_url": cur_screenshot,
-            "page_path": cur_path,
-            "page_count": current.total_pages_found or 0,
-        },
-        "previous": (
-            {
-                "run_id": str(previous.id),
-                "label": "Before this change",
-                "deployed_at": (previous.completed_at or previous.created_at).isoformat()
-                    if (previous.completed_at or previous.created_at) else None,
-                "screenshot_url": prev_screenshot,
-                "page_path": prev_path,
-                "page_count": previous.total_pages_found or 0,
-            }
-            if previous else None
-        ),
-        "low_data": low_data,
-        "current_session_count": int(sess_count),
-        "low_data_threshold": _VERSION_LOW_DATA_THRESHOLD,
-    }
-
-
 # ─── Debug / triangulation endpoint ────────────────────────────────────
 
 
@@ -1205,6 +1071,69 @@ async def regenerate_suggestion(
     return {
         "suggestion": next((s for s in hydrated if s.get("id") == new_sug["id"]), new_sug),
         "insights": cached.get("insights", []),
+        "suggestions": hydrated,
+        "note": cached.get("note", ""),
+        "page_path": page.path,
+        "generated_at": page.latest_insights_at.isoformat() if page.latest_insights_at else None,
+        "cached": False,
+    }
+
+
+@router.post("/pages/{page_id}/insights/{insight_id}/propose-suggestion")
+async def propose_suggestion_for_insight(
+    page_id: str,
+    insight_id: str,
+    req: RegenerateSuggestionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-insight magic wand: ask Claude for a concrete fix that addresses
+    a specific observation, append it to the suggestions list, and remove
+    the now-resolved insight.
+
+    Used when the main generation pass returned an insight but no matching
+    suggestion — the user clicks "Propose a fix" on the insight card and
+    gets back a stageable change with an id and transform_instruction.
+    """
+    page, site = await _load_page_scoped(db, page_id, req.github_user_id)
+
+    cached = page.latest_insights_json or {}
+    insights = list(cached.get("insights", []))
+    suggestions = list(cached.get("suggestions", []))
+    idx = next(
+        (i for i, item in enumerate(insights) if item.get("id") == insight_id),
+        -1,
+    )
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Unknown insight id for this page")
+
+    insight_item = insights[idx]
+
+    screenshot_url = (
+        presign_screenshot_url(page.screenshot_key) if page.screenshot_key else None
+    )
+    evidence = await gather_page_evidence(db, page, site.id, screenshot_url=screenshot_url)
+    new_sug = await convert_insight_to_suggestion(evidence, insight_item)
+    if new_sug is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't propose a fix right now — try again in a moment.",
+        )
+
+    # Replace the insight with its concrete fix. The insight goes away
+    # because it's now represented by an actionable suggestion — keeping
+    # both would double-count the same observation in the UI.
+    insights.pop(idx)
+    suggestions.append(new_sug)
+    page.latest_insights_json = {
+        **cached,
+        "insights": insights,
+        "suggestions": suggestions,
+    }
+
+    hydrated = await _hydrate_suggestion_status(db, page.id, suggestions)
+    return {
+        "suggestion": next((s for s in hydrated if s.get("id") == new_sug["id"]), new_sug),
+        "insights": insights,
         "suggestions": hydrated,
         "note": cached.get("note", ""),
         "page_path": page.path,

@@ -9,7 +9,6 @@ import HeatmapControls from '@/components/heatmap/HeatmapControls'
 import HeatmapSetup from '@/components/heatmap/HeatmapSetup'
 import PageList from '@/components/heatmap/PageList'
 import StatsHeader from '@/components/heatmap/StatsHeader'
-import VersionComparison from '@/components/heatmap/VersionComparison'
 import { apiUrl } from '@/lib/api'
 import { getSelectedRepo } from '@/lib/selectedRepo'
 import type { HeatmapData, HeatmapDevice, HeatmapLayer, HeatmapPage, HeatmapSite, Suggestion } from '@/types/heatmap'
@@ -266,8 +265,6 @@ function HeatmapPageInner() {
           )}
         </main>
       </div>
-
-      <VersionComparison siteId={site.id} githubUserId={githubUserId} />
 
       {selectedPage && (
         <AIRecommendations

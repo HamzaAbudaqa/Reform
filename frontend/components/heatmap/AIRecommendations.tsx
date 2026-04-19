@@ -17,7 +17,7 @@ import type {
   Suggestion,
   SuggestionStatus,
 } from '@/types/heatmap'
-import { mapInsightsResponse, mapSuggestion } from '@/types/heatmap'
+import { mapInsight, mapInsightsResponse, mapSuggestion } from '@/types/heatmap'
 
 interface Props {
   pageId: string
@@ -140,6 +140,42 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
       setData(prev => (prev ? { ...prev, suggestions: nextSuggestions } : prev))
     } catch (e) {
       setError(humanizeError(e, "We couldn't regenerate that suggestion."))
+    } finally {
+      setRegeneratingId(null)
+    }
+  }, [pageId, githubUserId])
+
+  const proposeFixForInsight = useCallback(async (insightId: string) => {
+    setRegeneratingId(insightId)
+    setError(null)
+    try {
+      const res = await fetch(
+        apiUrl(`/api/heatmap/pages/${pageId}/insights/${insightId}/propose-suggestion`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ github_user_id: githubUserId }),
+        },
+      )
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't propose a fix for that."))
+      const raw = await res.json() as {
+        insights?: Array<Record<string, unknown>>
+        suggestions?: Array<Record<string, unknown>>
+      }
+      setData(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          insights: Array.isArray(raw.insights)
+            ? (raw.insights as Array<Record<string, unknown>>).map(mapInsight)
+            : prev.insights,
+          suggestions: Array.isArray(raw.suggestions)
+            ? raw.suggestions.map(mapSuggestion)
+            : prev.suggestions,
+        }
+      })
+    } catch (e) {
+      setError(humanizeError(e, "We couldn't propose a fix for that."))
     } finally {
       setRegeneratingId(null)
     }
@@ -297,7 +333,12 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
       {data.insights.length > 0 && (
         <div className="mb-5 flex flex-col gap-2">
           {data.insights.map(insight => (
-            <InsightRow key={insight.id} insight={insight} />
+            <InsightRow
+              key={insight.id}
+              insight={insight}
+              proposing={regeneratingId === insight.id}
+              onProposeFix={() => proposeFixForInsight(insight.id)}
+            />
           ))}
         </div>
       )}
@@ -396,7 +437,15 @@ function SeverityBadge({ severity }: { severity: SeverityLevel }) {
   )
 }
 
-function InsightRow({ insight }: { insight: Insight }) {
+function InsightRow({
+  insight,
+  proposing,
+  onProposeFix,
+}: {
+  insight: Insight
+  proposing: boolean
+  onProposeFix: () => void
+}) {
   const conf = CONFIDENCE_TONE[insight.confidence]
   return (
     <div className="rounded-xl border border-black/[0.06] bg-neutral-50 px-4 py-3">
@@ -417,6 +466,17 @@ function InsightRow({ insight }: { insight: Insight }) {
       <p className="mt-1.5 text-[11.5px] text-neutral-500">
         <span className="font-semibold text-neutral-700">Evidence:</span> {insight.evidence}
       </p>
+      <div className="mt-2.5 flex items-center justify-end">
+        <button
+          onClick={onProposeFix}
+          disabled={proposing}
+          title="Turn this observation into a stageable UI change"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-700 transition hover:text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
+        >
+          {proposing ? <Spinner /> : <WandIcon />}
+          {proposing ? 'Proposing…' : 'Propose a fix'}
+        </button>
+      </div>
     </div>
   )
 }
