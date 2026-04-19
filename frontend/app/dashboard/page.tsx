@@ -69,10 +69,10 @@ function pillForStatus(status: RunStatus | null): StatusPillStyle {
       }
     default:
       return {
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        color: 'rgba(255,255,255,0.5)',
-        dot: 'rgba(255,255,255,0.3)',
+        background: 'rgba(0,0,0,0.04)',
+        border: '1px solid rgba(0,0,0,0.08)',
+        color: 'rgba(0,0,0,0.5)',
+        dot: 'rgba(0,0,0,0.3)',
         label: 'No runs',
         pulse: false,
       }
@@ -86,9 +86,9 @@ function ModeBadge({ mode }: { mode: RunMode | null | undefined }) {
     <span
       className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
       style={{
-        background: isExplore ? 'rgba(124,58,237,0.08)' : 'rgba(255,255,255,0.04)',
-        color: isExplore ? 'rgba(168,85,247,0.75)' : 'rgba(255,255,255,0.45)',
-        border: isExplore ? '1px solid rgba(124,58,237,0.2)' : '1px solid rgba(255,255,255,0.06)',
+        background: isExplore ? 'rgba(124,58,237,0.08)' : 'rgba(0,0,0,0.04)',
+        color: isExplore ? 'rgba(168,85,247,0.75)' : 'rgba(0,0,0,0.45)',
+        border: isExplore ? '1px solid rgba(124,58,237,0.2)' : '1px solid rgba(0,0,0,0.06)',
       }}
     >
       {mode}
@@ -143,8 +143,8 @@ function ProjectRow({
     <div
       className="rounded-xl transition-all"
       style={{
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(0,0,0,0.02)',
+        border: '1px solid rgba(0,0,0,0.06)',
         boxShadow: '0 2px 16px rgba(0,0,0,0.2)',
       }}
     >
@@ -157,7 +157,7 @@ function ProjectRow({
             width: 168,
             height: 104,
             background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.04))',
-            border: '1px solid rgba(255,255,255,0.06)',
+            border: '1px solid rgba(0,0,0,0.06)',
           }}
           aria-label={`Open ${repoShort}`}
         >
@@ -189,17 +189,17 @@ function ProjectRow({
                 className="block text-left group"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-[15px] font-semibold text-white truncate group-hover:text-purple-200 transition-colors">
+                  <h3 className="text-[15px] font-semibold text-neutral-950 truncate group-hover:text-neutral-700 transition-colors">
                     {repoShort}
                   </h3>
                   <span
                     className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                    style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)' }}
+                    style={{ background: 'rgba(0,0,0,0.03)', color: 'rgba(0,0,0,0.4)' }}
                   >
                     {project.branch || 'main'}
                   </span>
                 </div>
-                <p className="text-[11px] font-mono mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                <p className="text-[11px] font-mono mt-0.5 truncate" style={{ color: 'rgba(0,0,0,0.3)' }}>
                   {project.repo_name}
                 </p>
               </button>
@@ -221,16 +221,16 @@ function ProjectRow({
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          <div className="mt-2 flex items-center gap-2 text-[11px]" style={{ color: 'rgba(0,0,0,0.45)' }}>
             <span>{formatRelativeTime(project.updated_at)}</span>
-            <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+            <span style={{ color: 'rgba(0,0,0,0.2)' }}>•</span>
             <span>{project.total_runs} run{project.total_runs === 1 ? '' : 's'}</span>
           </div>
 
           {(summary || firstNote) && (
             <div className="mt-2 space-y-1">
               {summary && (
-                <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                <p className="text-[12px]" style={{ color: 'rgba(0,0,0,0.55)' }}>
                   {summary}
                 </p>
               )}
@@ -253,9 +253,9 @@ function ProjectRow({
               disabled={!activeRunExists}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
-                background: activeRunExists ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.03)',
-                color: activeRunExists ? 'white' : 'rgba(255,255,255,0.3)',
-                border: activeRunExists ? 'none' : '1px solid rgba(255,255,255,0.06)',
+                background: activeRunExists ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(0,0,0,0.03)',
+                color: activeRunExists ? 'white' : 'rgba(0,0,0,0.3)',
+                border: activeRunExists ? 'none' : '1px solid rgba(0,0,0,0.06)',
                 boxShadow: activeRunExists ? '0 0 20px rgba(124,58,237,0.2)' : 'none',
               }}
               title={activeRunExists ? 'Continue watching the in-progress run' : 'No active run to resume'}
@@ -281,8 +281,8 @@ function ProjectRow({
               className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
                 background: 'transparent',
-                color: 'rgba(255,255,255,0.55)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                color: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(0,0,0,0.08)',
               }}
               title="Fresh competitor discovery — takes longer, may differ"
             >
@@ -291,21 +291,21 @@ function ProjectRow({
             <button
               onClick={openLatest}
               className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors hover:bg-white/[0.04]"
-              style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid transparent' }}
+              style={{ color: 'rgba(0,0,0,0.5)', border: '1px solid transparent' }}
             >
               View Latest
             </button>
             <button
               onClick={openEditLab}
               className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors hover:bg-white/[0.04]"
-              style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid transparent' }}
+              style={{ color: 'rgba(0,0,0,0.5)', border: '1px solid transparent' }}
             >
               Open Edit Lab
             </button>
             <button
               onClick={() => onOpenHistory(project)}
               className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors hover:bg-white/[0.04]"
-              style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid transparent' }}
+              style={{ color: 'rgba(0,0,0,0.5)', border: '1px solid transparent' }}
             >
               History
             </button>
@@ -399,8 +399,8 @@ function DashboardContent() {
 
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">Your Projects</h1>
-          <p className="text-[13px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <h1 className="text-3xl font-bold text-neutral-950">Your Projects</h1>
+          <p className="text-[13px] mt-1" style={{ color: 'rgba(0,0,0,0.35)' }}>
             Workspace for every repo you&apos;ve connected — resume, rerun, and explore.
           </p>
         </div>
@@ -421,8 +421,8 @@ function DashboardContent() {
       {!subLoading && (
         <div className="mb-6 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Scans</span>
-            <div className="w-24 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.25)' }}>Scans</span>
+            <div className="w-24 h-1.5 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -431,22 +431,22 @@ function DashboardContent() {
                 }}
               />
             </div>
-            <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <span className="text-[11px] font-mono" style={{ color: 'rgba(0,0,0,0.3)' }}>
               {subscription.scans_used}/{subscription.scans_limit}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>Repos</span>
-            <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'rgba(0,0,0,0.25)' }}>Repos</span>
+            <span className="text-[11px] font-mono" style={{ color: 'rgba(0,0,0,0.3)' }}>
               {subscription.repos_connected}/{subscription.repos_limit === -1 ? '\u221e' : subscription.repos_limit}
             </span>
           </div>
           <span
             className="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full"
             style={{
-              background: isFree ? 'rgba(255,255,255,0.04)' : 'rgba(124,58,237,0.1)',
-              color: isFree ? 'rgba(255,255,255,0.3)' : 'rgba(168,85,247,0.7)',
-              border: isFree ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(124,58,237,0.2)',
+              background: isFree ? 'rgba(0,0,0,0.04)' : 'rgba(124,58,237,0.1)',
+              color: isFree ? 'rgba(0,0,0,0.3)' : 'rgba(168,85,247,0.7)',
+              border: isFree ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(124,58,237,0.2)',
             }}
           >
             {subscription.plan}
@@ -469,10 +469,10 @@ function DashboardContent() {
       {(projects.length > 0 || loading) && (
         <div
           className="rounded-xl px-3 py-2 mb-4 flex flex-wrap items-center gap-2"
-          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+          style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.05)' }}
         >
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
             </svg>
@@ -481,7 +481,7 @@ function DashboardContent() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search repos..."
-              className="bg-transparent flex-1 text-[12px] text-white outline-none placeholder:text-white/20"
+              className="bg-transparent flex-1 text-[12px] text-neutral-950 outline-none placeholder:text-neutral-400"
             />
           </div>
           <div className="flex items-center gap-1 flex-wrap">
@@ -500,8 +500,8 @@ function DashboardContent() {
                   className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
                   style={{
                     background: active ? 'rgba(168,85,247,0.12)' : 'transparent',
-                    color: active ? 'rgba(168,85,247,0.9)' : 'rgba(255,255,255,0.5)',
-                    border: active ? '1px solid rgba(168,85,247,0.25)' : '1px solid rgba(255,255,255,0.05)',
+                    color: active ? 'rgba(168,85,247,0.9)' : 'rgba(0,0,0,0.5)',
+                    border: active ? '1px solid rgba(168,85,247,0.25)' : '1px solid rgba(0,0,0,0.05)',
                   }}
                 >
                   {labels[f]}
@@ -509,16 +509,16 @@ function DashboardContent() {
               )
             })}
           </div>
-          <div className="h-4 w-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <div className="h-4 w-px" style={{ background: 'rgba(0,0,0,0.08)' }} />
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value as SortBy)}
             className="bg-transparent text-[11px] px-2 py-1 rounded-md outline-none cursor-pointer"
-            style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ color: 'rgba(0,0,0,0.6)', border: '1px solid rgba(0,0,0,0.08)' }}
             aria-label="Sort"
           >
-            <option value="recent" style={{ background: '#0d0c16' }}>Recent activity</option>
-            <option value="name" style={{ background: '#0d0c16' }}>Repo name</option>
+            <option value="recent" style={{ background: '#ffffff', color: '#0a0a0a' }}>Recent activity</option>
+            <option value="name" style={{ background: '#ffffff', color: '#0a0a0a' }}>Repo name</option>
           </select>
         </div>
       )}
@@ -534,8 +534,8 @@ function DashboardContent() {
               <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-white mb-2">No projects yet</h2>
-          <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <h2 className="text-lg font-semibold text-neutral-950 mb-2">No projects yet</h2>
+          <p className="text-[13px] mb-6" style={{ color: 'rgba(0,0,0,0.35)' }}>
             Run your first transformation to see it here.
           </p>
           <button
@@ -548,7 +548,7 @@ function DashboardContent() {
         </div>
       ) : visibleProjects.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <p className="text-[13px]" style={{ color: 'rgba(0,0,0,0.35)' }}>
             No projects match your filters.
           </p>
         </div>

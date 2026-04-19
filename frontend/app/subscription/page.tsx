@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -208,11 +208,11 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Redirect away when billing is disabled (hackathon mode)
-  useEffect(() => {
-    if (!BILLING_ENABLED) router.replace('/dashboard')
-  }, [router])
-  if (!BILLING_ENABLED) return null
+  // Note: this page used to hard-redirect to /dashboard whenever
+  // BILLING_ENABLED was false, which broke every "View Plans" link in
+  // the dashboard. Now we always render the plans so users can see what
+  // tiers exist; the checkout buttons themselves will surface a friendly
+  // "billing isn't enabled yet" message when the env flag is off.
 
   async function startCheckout(priceId: string) {
     setLoading(true)
@@ -243,6 +243,11 @@ export default function SubscriptionPage() {
 
   async function handleCheckout(priceId: string) {
     if (status === 'loading') return
+
+    if (!BILLING_ENABLED) {
+      setError("Billing isn't enabled yet — paid plans are coming soon. Until then, you can keep using the free tier.")
+      return
+    }
 
     if (!priceId) {
       console.error('Checkout blocked: price ID is undefined. Check NEXT_PUBLIC_STRIPE_PRO_PRICE_ID and NEXT_PUBLIC_STRIPE_MAX_PRICE_ID env variables.')
