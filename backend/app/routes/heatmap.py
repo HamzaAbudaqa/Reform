@@ -45,6 +45,7 @@ from app.schemas.heatmap import (
     CreateSiteRequest,
     HeatmapBucket,
     HeatmapDataResponse,
+    InstallModeRequest,
     PageOut,
     SiteOut,
     VerifySiteRequest,
@@ -201,7 +202,19 @@ def _site_to_out(site: HeatmapSite) -> SiteOut:
         snippet=snippet,
         verified_at=site.verified_at.isoformat() if site.verified_at else None,
         last_event_at=site.last_event_at.isoformat() if site.last_event_at else None,
+        first_event_at=site.first_event_at.isoformat() if site.first_event_at else None,
         created_at=site.created_at.isoformat() if site.created_at else "",
+        install_status=site.install_status or "not_started",
+        install_mode=site.install_mode,
+        install_framework=site.install_framework,
+        install_target_file=site.install_target_file,
+        install_pr_url=site.install_pr_url,
+        install_pr_number=site.install_pr_number,
+        install_branch_name=site.install_branch_name,
+        install_error=site.install_error,
+        install_attempted_at=(
+            site.install_attempted_at.isoformat() if site.install_attempted_at else None
+        ),
     )
 
 
@@ -275,6 +288,9 @@ async def verify_site(
     reachable, snippet_detected, err = await _verify_snippet(site.domain)
     if snippet_detected:
         site.verified_at = datetime.now(timezone.utc)
+        # Setup is complete — persist so a refresh skips the setup card.
+        site.install_status = "tracking_live"
+        site.install_error = None
     return VerifySiteResponse(
         reachable=reachable,
         snippet_detected=snippet_detected,
@@ -508,6 +524,32 @@ async def auto_install(
         snippet_url=snippet_url,
     )
 
+    # Persist install state so a refresh / revisit restores the right view.
+    site.install_attempted_at = datetime.now(timezone.utc)
+    site.install_mode = "automatic"
+    if result.success:
+        # already_installed is reported as success with a flagged error_kind;
+        # we still treat it as awaiting the GitHub merge unless verify already
+        # marked the site live elsewhere.
+        site.install_status = (
+            site.install_status if site.install_status == "tracking_live"
+            else "awaiting_github_action"
+        )
+        site.install_pr_url = result.pr_url or site.install_pr_url
+        site.install_pr_number = result.pr_number or site.install_pr_number
+        site.install_branch_name = result.branch_name or site.install_branch_name
+        site.install_target_file = result.target_file or site.install_target_file
+        site.install_framework = result.framework or site.install_framework
+        site.install_error = None
+    else:
+        # Soft-failure modes (unsupported_framework / injection_failed) leave
+        # the user on the choice card — record the error so we can show a
+        # friendly recovery state on next visit.
+        site.install_status = "failed"
+        site.install_error = result.error
+        if result.framework:
+            site.install_framework = result.framework
+
     return AutoInstallResponse(
         success=result.success,
         pr_url=result.pr_url,
@@ -519,3 +561,137 @@ async def auto_install(
         error=result.error,
         error_kind=result.error_kind,
     )
+
+
+@router.post("/sites/{site_id}/install-mode", response_model=SiteOut)
+async def set_install_mode(
+    site_id: str,
+    req: InstallModeRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SiteOut:
+    """Record which install path the user is on.
+
+    Lets the manual-fallback flow restore correctly after a refresh.
+    Also clears stale errors when the user explicitly switches mode.
+    """
+    site = await _load_site(db, site_id, req.github_user_id)
+    mode = (req.mode or "").strip().lower()
+    if mode not in ("manual", "automatic", "not_started"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+
+    if mode == "manual":
+        site.install_mode = "manual"
+        # Don't downgrade tracking_live → manual_fallback if the site is
+        # already verified (an over-zealous click shouldn't undo setup).
+        if site.install_status != "tracking_live":
+            site.install_status = "manual_fallback"
+            site.install_error = None
+    elif mode == "automatic":
+        site.install_mode = "automatic"
+        if site.install_status not in ("tracking_live", "awaiting_github_action"):
+            site.install_status = "not_started"
+    else:
+        site.install_mode = None
+        if site.install_status != "tracking_live":
+            site.install_status = "not_started"
+            site.install_error = None
+
+    return _site_to_out(site)
+
+
+# ─── First-event signal ────────────────────────────────────────────────
+
+
+@router.get("/sites/{site_id}/event-summary")
+async def event_summary(
+    site_id: str,
+    github_user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Cheap proof-of-life payload for the post-install celebration.
+
+    Reads aggregate session data only — no raw events, no PII beyond a
+    coarse browser/OS label parsed from the stored UA string.
+    """
+    site = await _load_site(db, site_id, github_user_id)
+    sess_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapSession).where(
+                HeatmapSession.site_id == site.id,
+            )
+        )
+    ).scalar() or 0
+
+    if not sess_count:
+        return {
+            "has_events": False,
+            "session_count": 0,
+            "first_event_at": None,
+            "latest_event_at": None,
+            "latest_viewport_class": None,
+            "latest_browser_label": None,
+        }
+
+    first_at = (
+        await db.execute(
+            select(func.min(HeatmapSession.started_at)).where(
+                HeatmapSession.site_id == site.id,
+            )
+        )
+    ).scalar()
+
+    latest = (
+        await db.execute(
+            select(
+                HeatmapSession.viewport_class,
+                HeatmapSession.user_agent,
+                HeatmapSession.ended_at,
+            )
+            .where(HeatmapSession.site_id == site.id)
+            .order_by(HeatmapSession.ended_at.desc())
+            .limit(1)
+        )
+    ).first()
+
+    return {
+        "has_events": True,
+        "session_count": int(sess_count),
+        "first_event_at": first_at.isoformat() if first_at else None,
+        "latest_event_at": latest.ended_at.isoformat() if latest and latest.ended_at else None,
+        "latest_viewport_class": latest.viewport_class if latest else None,
+        "latest_browser_label": _parse_browser_label(latest.user_agent if latest else None),
+    }
+
+
+_BROWSER_PATTERNS = [
+    ("Edg/", "Edge"),
+    ("OPR/", "Opera"),
+    ("Firefox/", "Firefox"),
+    ("Chrome/", "Chrome"),
+    ("Safari/", "Safari"),
+]
+_OS_PATTERNS = [
+    ("Windows NT", "Windows"),
+    ("Mac OS X", "macOS"),
+    ("Macintosh", "macOS"),
+    ("Android", "Android"),
+    ("iPhone", "iOS"),
+    ("iPad", "iPadOS"),
+    ("Linux", "Linux"),
+]
+
+
+def _parse_browser_label(ua: str | None) -> str | None:
+    """Return a friendly "Chrome on macOS" label from a UA string.
+
+    Best-effort and intentionally coarse — we only surface this in the
+    proof-of-life card, never in analytics. Returns None if the string is
+    missing or unrecognized.
+    """
+    if not ua:
+        return None
+    browser = next((label for needle, label in _BROWSER_PATTERNS if needle in ua), None)
+    os_label = next((label for needle, label in _OS_PATTERNS if needle in ua), None)
+    if browser and os_label:
+        return f"{browser} on {os_label}"
+    return browser or os_label

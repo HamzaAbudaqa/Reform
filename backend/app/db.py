@@ -112,3 +112,24 @@ async def create_tables():
             "CREATE INDEX IF NOT EXISTS ix_heatmap_agg_page_layer_date "
             "ON heatmap_aggregates (page_id, layer, date_bucket DESC)"
         ))
+
+        # Heatmap install state + first-event tracking. Added after the initial
+        # heatmap deploy, so existing rows need backfill via ALTER TABLE. Default
+        # for install_status is set in the model; existing rows pick it up here.
+        _heatmap_site_migrations = [
+            ("first_event_at", "TIMESTAMPTZ"),
+            ("install_status", "VARCHAR NOT NULL DEFAULT 'not_started'"),
+            ("install_mode", "VARCHAR"),
+            ("install_framework", "VARCHAR"),
+            ("install_target_file", "VARCHAR"),
+            ("install_pr_url", "VARCHAR"),
+            ("install_pr_number", "INTEGER"),
+            ("install_branch_name", "VARCHAR"),
+            ("install_error", "TEXT"),
+            ("install_attempted_at", "TIMESTAMPTZ"),
+        ]
+        for col_name, col_type in _heatmap_site_migrations:
+            await conn.execute(text(
+                f"ALTER TABLE heatmap_sites ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+            ))
+            _log.info("Ensured column heatmap_sites.%s (%s)", col_name, col_type)

@@ -181,7 +181,27 @@ class HeatmapSite(Base):
     domain = Column(String, nullable=False)                     # "https://example.com"
     verified_at = Column(DateTime(timezone=True), nullable=True)
     last_event_at = Column(DateTime(timezone=True), nullable=True)
+    first_event_at = Column(DateTime(timezone=True), nullable=True)   # set on first ingest after activation
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    # Install state — persisted so the user can refresh / leave / come back
+    # and resume in the right place.
+    #
+    # install_status values (the only ones the frontend checks):
+    #   not_started             — fresh site, show the choice card
+    #   awaiting_github_action  — auto-install opened a PR; "Almost done" card
+    #   manual_fallback         — user picked manual install; restore that flow
+    #   tracking_live           — verified once; setup is complete
+    #   failed                  — last install attempt failed; choice card + notice
+    install_status = Column(String, nullable=False, default="not_started")
+    install_mode = Column(String, nullable=True)                # "automatic" | "manual"
+    install_framework = Column(String, nullable=True)            # "Next.js (App Router)" etc.
+    install_target_file = Column(String, nullable=True)          # repo-relative path that was modified
+    install_pr_url = Column(String, nullable=True)
+    install_pr_number = Column(Integer, nullable=True)
+    install_branch_name = Column(String, nullable=True)
+    install_error = Column(Text, nullable=True)
+    install_attempted_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class HeatmapPage(Base):

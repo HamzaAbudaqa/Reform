@@ -291,4 +291,8 @@ async def process_events(
     await _upsert_aggregates(db, list(agg_rows.values()))
 
     site.last_event_at = now
+    # Stamp the first ever event so the post-install celebration card has a
+    # reliable timestamp without a separate COUNT(*) on the sessions table.
+    if site.first_event_at is None:
+        site.first_event_at = now
     return accepted, len(rage)

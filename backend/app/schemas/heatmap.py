@@ -72,7 +72,18 @@ class SiteOut(BaseModel):
     snippet: str
     verified_at: str | None = None
     last_event_at: str | None = None
+    first_event_at: str | None = None
     created_at: str
+    # Persisted setup state — drives the resume-on-refresh logic in the UI.
+    install_status: str = "not_started"
+    install_mode: str | None = None
+    install_framework: str | None = None
+    install_target_file: str | None = None
+    install_pr_url: str | None = None
+    install_pr_number: int | None = None
+    install_branch_name: str | None = None
+    install_error: str | None = None
+    install_attempted_at: str | None = None
 
 
 class VerifySiteRequest(BaseModel):
@@ -141,3 +152,23 @@ class AutoInstallResponse(BaseModel):
     framework: str = ""
     error: str | None = None
     error_kind: str | None = None
+
+
+class InstallModeRequest(BaseModel):
+    """Body for `POST /sites/{id}/install-mode` — used to mark the site as
+    being in manual fallback (so a refresh restores the manual flow)."""
+    github_user_id: str
+    mode: str  # "manual" | "automatic" | "not_started"
+
+
+# ─── First-event signal ────────────────────────────────────────────────
+
+
+class EventSummary(BaseModel):
+    """Lightweight proof-of-life payload for the post-install celebration."""
+    has_events: bool = False
+    session_count: int = 0
+    first_event_at: str | None = None
+    latest_event_at: str | None = None
+    latest_viewport_class: str | None = None       # "desktop" | "tablet" | "mobile"
+    latest_browser_label: str | None = None        # "Chrome on macOS", best-effort UA parse

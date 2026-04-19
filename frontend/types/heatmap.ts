@@ -22,6 +22,17 @@ export interface HeatmapData {
   rageClickRate: number
 }
 
+// Persisted install state — mirrors the backend's HeatmapSite columns so the
+// frontend can resume the right step after a refresh.
+export type InstallStatus =
+  | 'not_started'
+  | 'awaiting_github_action'
+  | 'manual_fallback'
+  | 'tracking_live'
+  | 'failed'
+
+export type InstallMode = 'automatic' | 'manual' | null
+
 export interface HeatmapSite {
   id: string
   projectId: string
@@ -30,7 +41,17 @@ export interface HeatmapSite {
   snippet: string
   verifiedAt: string | null
   lastEventAt: string | null
+  firstEventAt: string | null
   createdAt: string
+  installStatus: InstallStatus
+  installMode: InstallMode
+  installFramework: string | null
+  installTargetFile: string | null
+  installPrUrl: string | null
+  installPrNumber: number | null
+  installBranchName: string | null
+  installError: string | null
+  installAttemptedAt: string | null
 }
 
 export interface HeatmapPage {
@@ -55,6 +76,8 @@ export const HEATMAP_GRID = 50
 // ── API payload mappers ─────────────────────────────────────────────────
 
 export function mapSite(raw: Record<string, unknown>): HeatmapSite {
+  const status = String(raw.install_status ?? 'not_started') as InstallStatus
+  const mode = raw.install_mode ? (String(raw.install_mode) as InstallMode) : null
   return {
     id: String(raw.id ?? ''),
     projectId: String(raw.project_id ?? ''),
@@ -63,7 +86,17 @@ export function mapSite(raw: Record<string, unknown>): HeatmapSite {
     snippet: String(raw.snippet ?? ''),
     verifiedAt: raw.verified_at ? String(raw.verified_at) : null,
     lastEventAt: raw.last_event_at ? String(raw.last_event_at) : null,
+    firstEventAt: raw.first_event_at ? String(raw.first_event_at) : null,
     createdAt: String(raw.created_at ?? ''),
+    installStatus: status,
+    installMode: mode,
+    installFramework: raw.install_framework ? String(raw.install_framework) : null,
+    installTargetFile: raw.install_target_file ? String(raw.install_target_file) : null,
+    installPrUrl: raw.install_pr_url ? String(raw.install_pr_url) : null,
+    installPrNumber: raw.install_pr_number != null ? Number(raw.install_pr_number) : null,
+    installBranchName: raw.install_branch_name ? String(raw.install_branch_name) : null,
+    installError: raw.install_error ? String(raw.install_error) : null,
+    installAttemptedAt: raw.install_attempted_at ? String(raw.install_attempted_at) : null,
   }
 }
 
@@ -104,6 +137,29 @@ export function mapVerify(raw: Record<string, unknown>): VerifyResult {
     snippetDetected: Boolean(raw.snippet_detected),
     lastEventAt: raw.last_event_at ? String(raw.last_event_at) : null,
     error: raw.error ? String(raw.error) : null,
+  }
+}
+
+// ── Event summary (proof-of-life after tracking goes live) ─────────────
+
+export interface EventSummary {
+  hasEvents: boolean
+  sessionCount: number
+  firstEventAt: string | null
+  latestEventAt: string | null
+  latestViewportClass: 'desktop' | 'tablet' | 'mobile' | null
+  latestBrowserLabel: string | null
+}
+
+export function mapEventSummary(raw: Record<string, unknown>): EventSummary {
+  return {
+    hasEvents: Boolean(raw.has_events),
+    sessionCount: Number(raw.session_count ?? 0),
+    firstEventAt: raw.first_event_at ? String(raw.first_event_at) : null,
+    latestEventAt: raw.latest_event_at ? String(raw.latest_event_at) : null,
+    latestViewportClass:
+      (raw.latest_viewport_class as EventSummary['latestViewportClass']) ?? null,
+    latestBrowserLabel: raw.latest_browser_label ? String(raw.latest_browser_label) : null,
   }
 }
 

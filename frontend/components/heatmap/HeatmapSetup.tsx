@@ -30,6 +30,39 @@ function buildSnippet(siteKey: string): string {
 //   manual       — user picked manual install (existing 3-step flow)
 type Phase = 'url' | 'choice' | 'installing' | 'almost-done' | 'manual'
 
+// Map persisted site state → starting phase. This is what makes the flow
+// feel durable: a refresh, a tab close, or a return-tomorrow all land in
+// the same place the user left.
+function phaseForSite(site: HeatmapSite | null): Phase {
+  if (!site) return 'url'
+  if (site.installStatus === 'awaiting_github_action' && site.installPrUrl) {
+    return 'almost-done'
+  }
+  if (site.installStatus === 'manual_fallback' || site.installMode === 'manual') {
+    return 'manual'
+  }
+  // 'tracking_live' shouldn't reach here — the parent gates on verifiedAt and
+  // unmounts setup. If it does (race), keep the user on the choice card.
+  return 'choice'
+}
+
+// Reconstruct an AutoInstallResult shape from persisted site state so the
+// AlmostDoneCard can render after a refresh without re-running auto-install.
+function resultFromSite(site: HeatmapSite): AutoInstallResult | null {
+  if (!site.installPrUrl) return null
+  return {
+    success: true,
+    prUrl: site.installPrUrl,
+    prNumber: site.installPrNumber ?? 0,
+    branchName: site.installBranchName ?? '',
+    branchUrl: '',
+    targetFile: site.installTargetFile ?? '',
+    framework: site.installFramework ?? '',
+    error: null,
+    errorKind: null,
+  }
+}
+
 export default function HeatmapSetup({
   githubUserId,
   projectId,
@@ -42,11 +75,22 @@ export default function HeatmapSetup({
 
   const [domain, setDomain] = useState(initialSite?.domain ?? '')
   const [site, setSite] = useState<HeatmapSite | null>(initialSite)
-  const [phase, setPhase] = useState<Phase>(initialSite ? 'choice' : 'url')
+  const [phase, setPhase] = useState<Phase>(phaseForSite(initialSite))
+  // True when we landed on `almost-done` because the persisted site already
+  // had a PR — vs. just having created one. AlmostDoneCard uses this to skip
+  // the "click Open GitHub first" gate and start polling immediately.
+  const [resumedAlmostDone, setResumedAlmostDone] = useState(
+    () => phaseForSite(initialSite) === 'almost-done',
+  )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [installResult, setInstallResult] = useState<AutoInstallResult | null>(null)
-  const [installError, setInstallError] = useState<string | null>(null)
+  const [installResult, setInstallResult] = useState<AutoInstallResult | null>(
+    () => (initialSite ? resultFromSite(initialSite) : null),
+  )
+  // Surface the *prior* failure (if any) so the user gets context on resume.
+  const [installError, setInstallError] = useState<string | null>(
+    () => (initialSite?.installStatus === 'failed' ? initialSite.installError : null),
+  )
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
   const [copied, setCopied] = useState(false)
   const [editingUrl, setEditingUrl] = useState(!initialSite)
@@ -75,10 +119,16 @@ export default function HeatmapSetup({
       setSite(next)
       setEditingUrl(false)
       setVerifyResult(null)
-      setInstallResult(null)
-      setInstallError(null)
+      // POST /sites is idempotent — if the user re-entered the same URL we
+      // get back the existing site with whatever install state it had. Honor
+      // that so we restore the right phase instead of starting over.
+      const restoredResult = resultFromSite(next)
+      setInstallResult(restoredResult)
+      setInstallError(next.installStatus === 'failed' ? next.installError : null)
       onSiteReady(next)
-      setPhase('choice')
+      const restoredPhase = phaseForSite(next)
+      setResumedAlmostDone(restoredPhase === 'almost-done')
+      setPhase(restoredPhase)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
@@ -117,6 +167,7 @@ export default function HeatmapSetup({
       if (result.success) {
         // "already_installed" is also success — the Almost Done card will
         // poll and likely flip to verified within a few seconds.
+        setResumedAlmostDone(false)
         setPhase('almost-done')
       } else {
         // Friendly message + drop into manual flow so the user is never stuck.
@@ -127,6 +178,42 @@ export default function HeatmapSetup({
       setInstallError(e instanceof Error ? e.message : 'Something went wrong')
       setPhase('choice')
     }
+  }
+
+  // ── Install-mode persistence ─────────────────────────────────────────
+
+  // Fire-and-forget: record the install path so a refresh resumes here.
+  // We intentionally don't await — the optimistic UI shouldn't block on
+  // a background bookkeeping write. If it fails, the user just sees a
+  // slightly stale state on next refresh, never a broken flow.
+  async function persistMode(mode: 'manual' | 'automatic' | 'not_started') {
+    if (!site) return
+    try {
+      const res = await fetch(apiUrl(`/api/heatmap/sites/${site.id}/install-mode`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_user_id: githubUserId, mode }),
+      })
+      if (res.ok) {
+        const next = mapSite(await res.json())
+        setSite(next)
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  function chooseManual() {
+    setPhase('manual')
+    setError(null)
+    void persistMode('manual')
+  }
+
+  function backToChoice() {
+    setPhase('choice')
+    setVerifyResult(null)
+    setError(null)
+    void persistMode('not_started')
   }
 
   // ── Manual install path ──────────────────────────────────────────────
@@ -183,6 +270,7 @@ export default function HeatmapSetup({
           framework={installResult.framework}
           githubUserId={githubUserId}
           onVerified={onVerified}
+          resumed={resumedAlmostDone}
         />
         <PrivacyFooter />
       </div>
@@ -239,6 +327,7 @@ export default function HeatmapSetup({
                 setVerifyResult(null)
                 setInstallResult(null)
                 setInstallError(null)
+                setResumedAlmostDone(false)
                 setPhase('url')
               }}
               className="flex-shrink-0 text-[11.5px] font-medium text-neutral-500 transition hover:text-neutral-950"
@@ -253,7 +342,7 @@ export default function HeatmapSetup({
       {site && !editingUrl && phase === 'choice' && (
         <ChoiceCard
           onAuto={startAutoInstall}
-          onManual={() => setPhase('manual')}
+          onManual={chooseManual}
           installError={installError}
           hasGithubAuth={!!accessToken}
         />
@@ -269,11 +358,7 @@ export default function HeatmapSetup({
           checking={busy}
           onCheck={checkInstallation}
           verifyResult={verifyResult}
-          onBack={() => {
-            setPhase('choice')
-            setVerifyResult(null)
-            setError(null)
-          }}
+          onBack={backToChoice}
           error={error}
         />
       )}
