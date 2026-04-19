@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { apiUrl } from '@/lib/api'
+import { humanizeError, humanizeResponse } from '@/lib/humanizeError'
 
 interface Rect {
   x: number
@@ -195,8 +196,7 @@ export default function MagicWandEditor({
         }),
       })
       if (!res.ok) {
-        const detail = await res.text()
-        throw new Error(detail || `Load failed (${res.status})`)
+        throw new Error(await humanizeResponse(res, "We couldn't start the edit session."))
       }
       const data = (await res.json()) as LoadResponse
       if (data.error) throw new Error(data.error)
@@ -205,7 +205,7 @@ export default function MagicWandEditor({
       setDocumentSize(data.document_size)
       if (data.screenshot) setLiveScreenshot(data.screenshot)
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to start edit session')
+      setLoadError(humanizeError(e, "We couldn't start the edit session."))
     } finally {
       setLoading(false)
     }
@@ -311,13 +311,12 @@ export default function MagicWandEditor({
         }),
       })
       if (!res.ok) {
-        const detail = await res.text()
-        throw new Error(detail || `Apply failed (${res.status})`)
+        throw new Error(await humanizeResponse(res, "We couldn't apply that change."))
       }
       const data = (await res.json()) as ApplyResponse
       if (data.session_expired) {
         setSessionId(null)
-        throw new Error('Edit session expired — try again')
+        throw new Error('Your edit session expired. Please try again.')
       }
       if (data.error) throw new Error(data.error)
       if (data.screenshot) {
@@ -337,7 +336,7 @@ export default function MagicWandEditor({
       setEdits(prev => [...prev, { id, summary, prompt: prompt.trim(), target_file: data.target_file ?? null }])
       setPrompt('')
     } catch (e) {
-      setApplyError(e instanceof Error ? e.message : 'Failed to apply change')
+      setApplyError(humanizeError(e, "We couldn't apply that change."))
     } finally {
       setApplying(false)
     }
@@ -372,13 +371,12 @@ export default function MagicWandEditor({
         body: JSON.stringify({ session_id: sessionId, edit_id: editId }),
       })
       if (!res.ok) {
-        const detail = await res.text()
-        throw new Error(detail || `Revert failed (${res.status})`)
+        throw new Error(await humanizeResponse(res, "We couldn't undo that change."))
       }
       const data = await res.json()
       if (data.session_expired) {
         setSessionId(null)
-        throw new Error('Edit session expired — try again')
+        throw new Error('Your edit session expired. Please try again.')
       }
       if (data.error) throw new Error(data.error)
       if (data.screenshot) {
@@ -390,7 +388,7 @@ export default function MagicWandEditor({
       if (data.document_size) setDocumentSize(data.document_size)
       setEdits(prev => prev.slice(0, idx))
     } catch (e) {
-      setApplyError(e instanceof Error ? e.message : 'Revert failed')
+      setApplyError(humanizeError(e, "We couldn't undo that change."))
     } finally {
       setRevertingId(null)
     }

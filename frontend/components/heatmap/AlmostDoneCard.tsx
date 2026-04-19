@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { apiUrl } from '@/lib/api'
+import { humanizeResponse } from '@/lib/humanizeError'
 import type { EventSummary, HeatmapSite, VerifyResult } from '@/types/heatmap'
 import { mapEventSummary, mapVerify } from '@/types/heatmap'
 import GithubMergeWalkthrough from './GithubMergeWalkthrough'
@@ -82,7 +83,7 @@ export default function AlmostDoneCard({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ github_user_id: githubUserId }),
         })
-        if (!res.ok) throw new Error(`status ${res.status}`)
+        if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't reach your site."))
         const result = mapVerify(await res.json())
         if (cancelledRef.current) return
         setLastResult(result)

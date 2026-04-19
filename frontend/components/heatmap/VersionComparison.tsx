@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiUrl } from '@/lib/api'
+import { humanizeResponse } from '@/lib/humanizeError'
 import type { VersionComparison as VC, VersionInfo } from '@/types/heatmap'
 import { mapVersionComparison } from '@/types/heatmap'
 
@@ -34,7 +35,7 @@ export default function VersionComparison({ siteId, githubUserId, refreshKey }: 
           `/api/heatmap/sites/${siteId}/version-comparison`
           + `?github_user_id=${encodeURIComponent(githubUserId)}`
         ))
-        if (!res.ok) throw new Error(`status ${res.status}`)
+        if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't load version comparison."))
         if (cancelled) return
         setData(mapVersionComparison(await res.json()))
       } catch {

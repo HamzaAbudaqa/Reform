@@ -123,14 +123,16 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
     headers = {}
     if origin in [o.strip() for o in _allowed_origins]:
         headers["Access-Control-Allow-Origin"] = origin
-        # Match the global CORSMiddleware setting — credentials are not used
-        # in this app, and `true` here would re-introduce the same conflict
-        # the global config was just fixed to avoid.
         headers["Access-Control-Allow-Credentials"] = "false"
+    # Always log the actual exception with traceback for diagnosis. Never
+    # leak it to the user — the humanizer maps it to a short friendly
+    # message and a stable `kind` the frontend can branch on.
     _logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    from app.services.error_messages import humanize_error
+    human = humanize_error(exc)
     return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc)},
+        status_code=human.status,
+        content={"detail": human.message, "kind": human.kind},
         headers=headers,
     )
 

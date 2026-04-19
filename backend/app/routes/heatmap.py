@@ -391,7 +391,11 @@ async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
             finally:
                 await browser.close()
     except Exception as exc:  # noqa: BLE001
-        return False, False, str(exc)
+        # Use the central humanizer so we never leak Playwright stack noise
+        # (`Page.goto: net::ERR_NAME_NOT_RESOLVED at https://...`) into the
+        # user-facing error pill.
+        from app.services.error_messages import humanize_error
+        return False, False, humanize_error(exc).message
 
 
 # ─── Dashboard: pages & heatmap data ───────────────────────────────────

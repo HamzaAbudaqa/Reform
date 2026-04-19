@@ -8,6 +8,7 @@ import {
   writeHeatmapHandoff,
   type HandoffSuggestion,
 } from '@/lib/heatmapHandoff'
+import { humanizeError, humanizeResponse } from '@/lib/humanizeError'
 import type {
   ConfidenceLevel,
   Insight,
@@ -59,14 +60,14 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
         + (regenerate ? '&regenerate=true' : ''),
       )
       const res = await fetch(url, { method: 'POST' })
-      if (!res.ok) throw new Error(`status ${res.status}`)
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't load recommendations."))
       const next = mapInsightsResponse(await res.json())
       setData(next)
       // Reset selection when we regenerate — the IDs changed, so old
       // selections wouldn't map onto the new suggestions anyway.
       setSelected(new Set())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load recommendations.')
+      setError(humanizeError(e, "We couldn't load recommendations."))
     } finally {
       setLoading(false)
     }

@@ -640,7 +640,8 @@ async def load_current_preview(
         sess = await asyncio.to_thread(create_session, github_url, branch, access_token)
     except Exception as e:
         logger.error("Edit Lab load: create_session failed: %s", e, exc_info=True)
-        return {"error": f"Workspace setup failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"error": humanize_error(e).message}
 
     try:
         if overlay_files:
@@ -682,7 +683,8 @@ async def load_current_preview(
     except Exception as e:
         logger.error("Edit Lab load failed: %s", e, exc_info=True)
         # Session is still alive — leave it in the registry, the client can retry render
-        return {"session_id": sess.id, "error": f"Render failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}
 
 
 def _normalize_page_path(page_path: str) -> str:
@@ -734,7 +736,8 @@ async def navigate_to_page(session_id: str, page_path: str) -> dict:
         }
     except Exception as e:
         logger.error("Edit Lab navigate failed: %s", e, exc_info=True)
-        return {"session_id": sess.id, "error": f"Navigate failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}
 
 
 def _build_scoped_prompt(
@@ -1023,7 +1026,8 @@ async def publish_session_edits(
         )
     except Exception as e:
         logger.error("Edit Lab publish failed: %s", e, exc_info=True)
-        return {"session_id": sess.id, "error": f"Publish failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}
 
     sess.touch()
     return {
@@ -1129,7 +1133,8 @@ async def revert_last_edit(session_id: str) -> dict:
         return await _rewind_edits(sess, len(sess.edit_stack) - 1)
     except Exception as e:
         logger.error("Edit Lab revert failed: %s", e, exc_info=True)
-        return {"session_id": sess.id, "error": f"Revert failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}
 
 
 async def revert_edit_by_id(session_id: str, edit_id: str) -> dict:
@@ -1155,7 +1160,8 @@ async def revert_edit_by_id(session_id: str, edit_id: str) -> dict:
         return await _rewind_edits(sess, idx)
     except Exception as e:
         logger.error("Edit Lab revert-edit failed: %s", e, exc_info=True)
-        return {"session_id": sess.id, "error": f"Revert failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}
 
 
 async def apply_section_edit(
@@ -1445,4 +1451,5 @@ async def apply_section_edit(
                 "error_kind": info.kind,
             }
         logger.error("Edit Lab apply failed: %s", e, exc_info=True)
-        return {"session_id": sess.id, "error": f"Apply failed: {e}"}
+        from app.services.error_messages import humanize_error
+        return {"session_id": sess.id, "error": humanize_error(e).message}

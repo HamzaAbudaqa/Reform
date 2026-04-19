@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { apiUrl } from '@/lib/api'
+import { humanizeError, humanizeResponse } from '@/lib/humanizeError'
 import type { AutoInstallResult, HeatmapSite, VerifyResult } from '@/types/heatmap'
 import { mapAutoInstall, mapSite, mapVerify } from '@/types/heatmap'
 import AlmostDoneCard from './AlmostDoneCard'
@@ -114,7 +115,7 @@ export default function HeatmapSetup({
           domain: trimmed,
         }),
       })
-      if (!res.ok) throw new Error((await res.text()) || `We couldn't save your site (${res.status}).`)
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't save your site."))
       const next = mapSite(await res.json())
       setSite(next)
       setEditingUrl(false)
@@ -130,7 +131,7 @@ export default function HeatmapSetup({
       setResumedAlmostDone(restoredPhase === 'almost-done')
       setPhase(restoredPhase)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(humanizeError(e, "We couldn't save your site."))
     } finally {
       setBusy(false)
     }
@@ -158,8 +159,7 @@ export default function HeatmapSetup({
         }),
       })
       if (!res.ok) {
-        const text = (await res.text()) || `Auto-install failed (${res.status}).`
-        throw new Error(text)
+        throw new Error(await humanizeResponse(res, "We couldn't add tracking automatically."))
       }
       const result = mapAutoInstall(await res.json())
       setInstallResult(result)
@@ -175,7 +175,7 @@ export default function HeatmapSetup({
         setPhase('choice')
       }
     } catch (e) {
-      setInstallError(e instanceof Error ? e.message : 'Something went wrong')
+      setInstallError(humanizeError(e, "We couldn't add tracking automatically."))
       setPhase('choice')
     }
   }
@@ -228,12 +228,12 @@ export default function HeatmapSetup({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_user_id: githubUserId }),
       })
-      if (!res.ok) throw new Error((await res.text()) || `We couldn't reach your site right now (${res.status}).`)
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't reach your site right now."))
       const vr = mapVerify(await res.json())
       setVerifyResult(vr)
       if (vr.snippetDetected) onVerified(site)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(humanizeError(e, "We couldn't reach your site right now."))
     } finally {
       setBusy(false)
     }
