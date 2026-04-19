@@ -697,21 +697,19 @@ export default function MagicWandEditor({
         </div>
       )}
 
-      {/* Edit log — fixed to the right edge of the viewport while edit mode
-          is on so stacked wand changes stay reviewable. Deleting an entry
-          cascades: everything applied after it also reverts. */}
+      {/* Edit log — sits in normal document flow directly below the
+          preview. Was `position: fixed` to the viewport, which overlaid
+          arbitrary dashboard content (e.g. the New Deploy button on the
+          preview's underlying page). Now it scrolls with the editor and
+          never covers what's behind. */}
       {editMode && (
         <div
-          className="fixed z-40 hidden lg:flex flex-col"
+          className="mt-4 flex flex-col"
           style={{
-            right: 20,
-            top: 140,
-            width: 280,
-            maxHeight: 'calc(100vh - 180px)',
             background: 'rgba(255,255,255,0.96)',
             border: '1px solid rgba(0,0,0,0.08)',
             borderRadius: 16,
-            boxShadow: '0 12px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(124,58,237,0.06)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.05), 0 0 0 1px rgba(124,58,237,0.05)',
             backdropFilter: 'blur(12px)',
           }}
         >
@@ -724,7 +722,9 @@ export default function MagicWandEditor({
               {edits.length}
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto px-2 py-2 flex flex-col gap-1.5">
+          {/* Scroll the list when it grows long, but keep the whole panel
+              part of the document flow so nothing ever overlays the page. */}
+          <div className="overflow-y-auto px-2 py-2 flex flex-col gap-1.5" style={{ maxHeight: 280 }}>
             {edits.length === 0 ? (
               <p className="text-[11px] leading-relaxed px-3 py-6 text-center" style={{ color: 'rgba(0,0,0,0.4)' }}>
                 Drag a region on the preview and describe the change. Applied edits will appear here.
