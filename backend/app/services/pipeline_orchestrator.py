@@ -8,6 +8,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -38,6 +40,48 @@ logger = logging.getLogger(__name__)
 # model (see structural_transform_prompt.is_retry). Bumped from 2 → 4
 # to give the parser-validator feedback loop room to converge.
 MAX_TRANSFORM_RETRIES = 4
+
+# Per-page wall-clock budget. Large files (~30KB+) can take ~3 min per
+# Claude call; a 5-attempt retry loop on one bad page blocks the whole
+# pipeline (gather() waits for all pages) and the HTTP layer eventually
+# drops the SSE stream. This cap lets one bad page fall out cleanly and
+# the pipeline keeps moving with whatever good pages it has.
+_TRANSFORM_WALL_CLOCK_BUDGET_SECONDS = 240
+
+# Extract a line number from a syntax/parse error message. Works for both
+# the regex validator ("... opened at line 252") and esbuild's
+# "<stdin>:252:14:" style. First capture wins.
+_ERROR_LINE_RE = re.compile(
+    r"(?:opened at line|on line|at line|<stdin>:)\s*(\d+)",
+    re.IGNORECASE,
+)
+
+
+def _augment_error_with_context(error_msg: str, code: str, window: int = 5) -> str:
+    """Attach ±`window` lines of generated code around the reported error
+    line. Without context, the model keeps re-rolling the same mistake
+    because it has no idea *what* on line 252 is unbalanced."""
+    m = _ERROR_LINE_RE.search(error_msg)
+    if not m:
+        return error_msg
+    try:
+        line_no = int(m.group(1))
+    except (TypeError, ValueError):
+        return error_msg
+    lines = code.splitlines()
+    if line_no < 1 or line_no > len(lines):
+        return error_msg
+    start = max(1, line_no - window)
+    end = min(len(lines), line_no + window)
+    snippet = "\n".join(
+        f"{'>' if i == line_no else ' '} {i:>4} | {lines[i - 1]}"
+        for i in range(start, end + 1)
+    )
+    return (
+        f"{error_msg}\n\n"
+        f"Source around line {line_no} (offending line marked with `>`):\n"
+        f"{snippet}"
+    )
 
 
 def _extract_json(text: str) -> dict:
@@ -142,13 +186,32 @@ async def _transform_single_page(
     # retry can fix the *specific* syntax problem rather than re-rolling
     # blindly.
     previous_syntax_error = ""
+    # Raw (non-augmented) last validator error — used purely to detect
+    # "model is stuck in a loop" and bail early. Snippets differ between
+    # attempts, so we compare the underlying reason/line, not the prompt.
+    last_raw_validator_error = ""
     # Track the best attempt across all retries so we never throw away a
     # genuine improvement just because the model couldn't beat the validator
     # on the last try.
     best_attempt: dict | None = None
     best_score = -1.0
 
+    start_time = time.monotonic()
+
     for attempt in range(1 + MAX_TRANSFORM_RETRIES):
+        # Wall-clock safety. One pathological page shouldn't starve the
+        # whole pipeline — on big files, one Claude call alone can be ~3
+        # min, so 5 attempts = ~15 min, which is longer than any reasonable
+        # SSE / proxy timeout allows.
+        elapsed = time.monotonic() - start_time
+        if elapsed > _TRANSFORM_WALL_CLOCK_BUDGET_SECONDS:
+            logger.warning(
+                "Transform of %s exceeded %ds budget after %d attempt(s) — "
+                "stopping retries so the pipeline can move on",
+                page_path, _TRANSFORM_WALL_CLOCK_BUDGET_SECONDS, attempt,
+            )
+            break
+
         is_retry = attempt > 0
 
         prompt = build_structural_transform_prompt(
@@ -200,7 +263,20 @@ async def _transform_single_page(
                 page_path, attempt + 1, syntax_error,
             )
             last_error = f"Syntax error in generated code: {syntax_error}"
-            previous_syntax_error = syntax_error
+            # Same validator error twice in a row → the model is stuck.
+            # Retrying with the same bare error message just burns Claude
+            # calls. Bail so the pipeline can return best_attempt (if any)
+            # or fall through to a clean error.
+            if syntax_error == last_raw_validator_error:
+                logger.warning(
+                    "Transform of %s hit identical syntax error twice — "
+                    "bailing out of retry loop",
+                    page_path,
+                )
+                retries_used = attempt + 1
+                break
+            last_raw_validator_error = syntax_error
+            previous_syntax_error = _augment_error_with_context(syntax_error, updated_code)
             retries_used = attempt + 1
             if attempt < MAX_TRANSFORM_RETRIES:
                 continue
@@ -220,7 +296,16 @@ async def _transform_single_page(
                 page_path, attempt + 1, parse_error,
             )
             last_error = f"JSX/TSX parse error: {parse_error}"
-            previous_syntax_error = parse_error
+            if parse_error == last_raw_validator_error:
+                logger.warning(
+                    "Transform of %s hit identical parser error twice — "
+                    "bailing out of retry loop",
+                    page_path,
+                )
+                retries_used = attempt + 1
+                break
+            last_raw_validator_error = parse_error
+            previous_syntax_error = _augment_error_with_context(parse_error, updated_code)
             retries_used = attempt + 1
             if attempt < MAX_TRANSFORM_RETRIES:
                 continue
@@ -229,6 +314,7 @@ async def _transform_single_page(
         # Clear the feedback once we get a parseable attempt — future retries
         # (if any) are about structural validation, not syntax.
         previous_syntax_error = ""
+        last_raw_validator_error = ""
 
         # Validate: is this a structural change or just cosmetic?
         validation = validate_transformation(page_code, updated_code)
