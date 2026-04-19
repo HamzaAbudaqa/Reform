@@ -102,7 +102,7 @@ export default function HeatmapSetup({ githubUserId, projectId, initialSite, onS
             type="url"
             value={domain}
             onChange={e => setDomain(e.target.value)}
-            placeholder="https://my-app.vercel.app"
+            placeholder="https://www.mywebsite.com"
             disabled={status === 'creating'}
             className="flex-1 rounded-full border border-black/[0.08] bg-neutral-50 px-4 py-2.5 text-[13px] text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-black/[0.25] focus:bg-white disabled:opacity-50"
             onKeyDown={e => { if (e.key === 'Enter') createSite() }}
