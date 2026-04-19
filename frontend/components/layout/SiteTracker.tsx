@@ -24,6 +24,7 @@ export default function SiteTracker() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        credentials: 'omit',
       }).catch(() => {})
     }
 
@@ -48,8 +49,10 @@ export default function SiteTracker() {
       }
 
       // fetch+keepalive (not sendBeacon) so we can set credentials: 'omit'.
-      // sendBeacon forces credentials mode 'include', which triggers a CORS
-      // preflight that the backend (allow_credentials=False) rejects.
+      // sendBeacon would force credentials mode 'include', and the backend
+      // answers /analytics/track-visit with Allow-Origin: * — the `*` +
+      // credentials:true combo is invalid per CORS spec and browsers reject
+      // it. Explicit omit keeps the request spec-compliant.
       fetch(apiUrl('/analytics/track-visit'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

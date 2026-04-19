@@ -1,12 +1,22 @@
 """Custom ASGI middleware for Reform.
 
-`PublicHeatmapCORSBypass` exists because Starlette's `CORSMiddleware` is
-configured for the dashboard's fixed allowlist (with credentials), but the
-public tracker endpoints — served to every customer site that pastes the
-snippet — must be reachable from ANY origin. Without this middleware, the
-browser preflight for `POST /api/heatmap/collect` from a customer site
-gets a 400 "Disallowed CORS origin" from CORSMiddleware before the
-FastAPI router ever runs, and no events ever ingest.
+`PublicCORSBypass` exists because Starlette's `CORSMiddleware` is configured
+for the dashboard's fixed allowlist, but a handful of endpoints must be
+reachable from ANY origin:
+
+  • Heatmap tracker — loaded by every customer site that pastes the snippet.
+  • Analytics session endpoints — fired from the dashboard *and* potentially
+    embedded flows; they must never 400 on a preflight and must never combine
+    `Allow-Origin: *` with `Allow-Credentials: true` (the browser-reject combo).
+
+Without this bypass, the browser preflight for a POST from an origin we
+haven't explicitly allowlisted gets a 400 "Disallowed CORS origin" from
+CORSMiddleware before the FastAPI router ever runs.
+
+The bypass is the single source of truth for CORS on the paths it owns:
+it short-circuits OPTIONS with a fixed permissive response, and rewrites
+response headers on non-OPTIONS to force `Allow-Origin: *` +
+`Allow-Credentials: false` regardless of what CORSMiddleware did upstream.
 """
 
 from __future__ import annotations
@@ -27,7 +37,7 @@ _PREFLIGHT_HEADERS: list[tuple[bytes, bytes]] = [
 ]
 
 # Headers we always want stripped from upstream responses on public paths,
-# because CORSMiddleware (which sits inside us in the stack) appends
+# because CORSMiddleware (which sits inside us in the stack) may append
 # `Allow-Credentials: true` based on the dashboard config and that breaks
 # CORS when combined with `Allow-Origin: *`.
 _STRIP_HEADERS: set[bytes] = {
@@ -36,8 +46,8 @@ _STRIP_HEADERS: set[bytes] = {
 }
 
 
-class PublicHeatmapCORSBypass:
-    """Override CORS handling for the public heatmap endpoints.
+class PublicCORSBypass:
+    """Override CORS handling for endpoints that must work from any origin.
 
     Stack contract: this middleware MUST be added AFTER CORSMiddleware so
     that it sits outside it (Starlette's `add_middleware` prepends to the
@@ -53,12 +63,19 @@ class PublicHeatmapCORSBypass:
         `Allow-Credentials: false`. Vary: Origin is preserved.
 
     For all other paths, the request passes through unchanged and
-    CORSMiddleware applies its dashboard policy.
+    CORSMiddleware applies its dashboard allowlist policy.
     """
 
     PUBLIC_PATHS: tuple[str, ...] = (
+        # Heatmap tracker — loaded by every customer site.
         "/api/heatmap/collect",
         "/api/heatmap/h.js",
+        # Analytics session endpoints — fired by SiteTracker. Treated as
+        # public so a stale preflight cache, a CDN edge, or an unexpected
+        # origin can never produce the invalid `*` + credentials=true combo
+        # that browsers silently reject.
+        "/analytics/track-visit",
+        "/analytics/heartbeat",
     )
 
     def __init__(self, app):
@@ -114,4 +131,5 @@ class PublicHeatmapCORSBypass:
 
 def public_paths_for_logging() -> Iterable[str]:
     """Exposed so main.py can log the active bypass list at startup."""
-    return PublicHeatmapCORSBypass.PUBLIC_PATHS
+    return PublicCORSBypass.PUBLIC_PATHS
+
