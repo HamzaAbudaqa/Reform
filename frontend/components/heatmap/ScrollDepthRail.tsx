@@ -34,16 +34,10 @@ export default function ScrollDepthRail({ buckets }: Props) {
       className="relative h-full flex flex-col"
       style={{ width: 56 }}
     >
-      <div className="text-[10px] font-medium mb-2 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>
+      <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
         Scroll
       </div>
-      <div
-        className="relative flex-1 rounded-xl overflow-hidden"
-        style={{
-          background: 'rgba(8,10,18,0.6)',
-          border: '1px solid rgba(255,255,255,0.06)',
-        }}
-      >
+      <div className="relative flex-1 overflow-hidden rounded-[14px] border border-black/[0.07] bg-white">
         {retention.map((r, y) => (
           <div
             key={y}
@@ -66,13 +60,13 @@ export default function ScrollDepthRail({ buckets }: Props) {
               right: 0,
               top: `${frac * 100}%`,
               height: 1,
-              background: 'rgba(255,255,255,0.14)',
+              background: 'rgba(0,0,0,0.08)',
             }}
           />
         ))}
       </div>
       {total === 0 && (
-        <div className="mt-2 text-[10px] text-center" style={{ color: 'rgba(255,255,255,0.28)' }}>
+        <div className="mt-2 text-center text-[10px] text-neutral-400">
           No data
         </div>
       )}
@@ -81,10 +75,12 @@ export default function ScrollDepthRail({ buckets }: Props) {
 }
 
 function gradient(retention: number): string {
-  // Retention 1.0 → saturated purple; 0.0 → near-black.
-  const r = Math.round(40 + retention * 100)
-  const g = Math.round(50 + retention * 60)
-  const b = Math.round(90 + retention * 160)
-  const a = 0.25 + retention * 0.55
+  // Retention 1.0 → saturated ink; 0.0 → near-white. On a light background we
+  // want higher retention to read as darker, so opacity rises with retention
+  // and the hue shifts slightly toward neutral ink.
+  const r = Math.round(10 + (1 - retention) * 140)
+  const g = Math.round(10 + (1 - retention) * 140)
+  const b = Math.round(20 + (1 - retention) * 130)
+  const a = 0.08 + retention * 0.62
   return `rgba(${r}, ${g}, ${b}, ${a.toFixed(2)})`
 }

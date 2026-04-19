@@ -9,26 +9,22 @@ interface Props {
 
 export default function StatsHeader({ sessions, events, avgScrollDepthPct, rageClickRate }: Props) {
   const stats = [
-    { label: 'Sessions', value: formatInteger(sessions), color: '#ffffff' },
-    { label: 'Events', value: formatInteger(events), color: 'rgba(255,255,255,0.85)' },
-    { label: 'Avg scroll', value: `${avgScrollDepthPct.toFixed(0)}%`, color: '#7c8cff' },
-    { label: 'Rage rate', value: `${(rageClickRate * 100).toFixed(1)}%`, color: rageClickRate > 0.05 ? '#ef4444' : '#22c55e' },
+    { label: 'Sessions', value: formatInteger(sessions), color: '#0a0a0a' },
+    { label: 'Events', value: formatInteger(events), color: '#262626' },
+    { label: 'Avg scroll', value: `${avgScrollDepthPct.toFixed(0)}%`, color: '#0a0a0a' },
+    { label: 'Rage rate', value: `${(rageClickRate * 100).toFixed(1)}%`, color: rageClickRate > 0.05 ? '#dc2626' : '#16a34a' },
   ]
   return (
     <div className="flex flex-wrap gap-3">
       {stats.map(s => (
         <div
           key={s.label}
-          className="flex items-baseline gap-2 px-3 py-2 rounded-xl"
-          style={{
-            background: 'rgba(8,10,18,0.6)',
-            border: '1px solid rgba(255,255,255,0.06)',
-          }}
+          className="flex items-baseline gap-2 rounded-[14px] border border-black/[0.07] bg-white px-3 py-2"
         >
           <div className="text-[18px] font-semibold tabular-nums" style={{ color: s.color }}>
             {s.value}
           </div>
-          <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-neutral-400">
             {s.label}
           </div>
         </div>

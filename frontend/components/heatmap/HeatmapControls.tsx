@@ -40,11 +40,11 @@ export default function HeatmapControls({ layer, device, days, onLayerChange, on
           <button
             key={l.id}
             onClick={() => onLayerChange(l.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors"
             style={{
-              background: layer === l.id ? 'rgba(124,140,255,0.18)' : 'rgba(255,255,255,0.03)',
-              border: '1px solid ' + (layer === l.id ? 'rgba(124,140,255,0.45)' : 'rgba(255,255,255,0.06)'),
-              color: layer === l.id ? '#ffffff' : 'rgba(255,255,255,0.6)',
+              background: layer === l.id ? '#0a0a0a' : '#ffffff',
+              border: '1px solid ' + (layer === l.id ? '#0a0a0a' : 'rgba(0,0,0,0.08)'),
+              color: layer === l.id ? '#ffffff' : '#525252',
             }}
           >
             <span
@@ -54,7 +54,7 @@ export default function HeatmapControls({ layer, device, days, onLayerChange, on
                 height: 8,
                 borderRadius: 4,
                 background: l.swatch,
-                opacity: layer === l.id ? 1 : 0.6,
+                opacity: layer === l.id ? 1 : 0.75,
               }}
             />
             {l.label}
@@ -84,7 +84,7 @@ export default function HeatmapControls({ layer, device, days, onLayerChange, on
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">{label}</span>
       <div className="flex items-center gap-1.5">{children}</div>
     </div>
   )
@@ -94,11 +94,12 @@ function Chip({ active, children, onClick }: { active: boolean; children: React.
   return (
     <button
       onClick={onClick}
-      className="px-2.5 py-1 rounded-lg transition-colors"
+      className="rounded-full px-2.5 py-1 transition-colors"
       style={{
-        background: active ? 'rgba(124,140,255,0.18)' : 'rgba(255,255,255,0.03)',
-        border: '1px solid ' + (active ? 'rgba(124,140,255,0.45)' : 'rgba(255,255,255,0.06)'),
-        color: active ? '#ffffff' : 'rgba(255,255,255,0.6)',
+        background: active ? '#0a0a0a' : '#ffffff',
+        border: '1px solid ' + (active ? '#0a0a0a' : 'rgba(0,0,0,0.08)'),
+        color: active ? '#ffffff' : '#525252',
+        fontWeight: active ? 600 : 500,
       }}
     >
       {children}
@@ -107,5 +108,5 @@ function Chip({ active, children, onClick }: { active: boolean; children: React.
 }
 
 function Divider() {
-  return <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)' }} />
+  return <div style={{ width: 1, height: 20, background: 'rgba(0,0,0,0.08)' }} />
 }

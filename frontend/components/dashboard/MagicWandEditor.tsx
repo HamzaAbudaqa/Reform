@@ -85,6 +85,26 @@ function overlapArea(a: Rect, b: Rect) {
   return (right - x) * (bottom - y)
 }
 
+function rectArea(r: Rect) {
+  return Math.max(0, r.width) * Math.max(0, r.height)
+}
+
+// IoU rewards "user's rect ≈ element bbox". A tight rect on a button gets
+// a high score against the button (~0.9) but a low one against the parent
+// panel (~0.1), so the button wins. A big rect over the whole panel
+// inverts that — exactly what the user expects.
+function iou(a: Rect, b: Rect): number {
+  const inter = overlapArea(a, b)
+  if (inter <= 0) return 0
+  const union = rectArea(a) + rectArea(b) - inter
+  return union > 0 ? inter / union : 0
+}
+
+const INTERACTIVE_TAGS = new Set(['button', 'a', 'input'])
+function isInteractive(s: Section): boolean {
+  return INTERACTIVE_TAGS.has(s.tag) || s.role === 'button' || s.role === 'link'
+}
+
 export default function MagicWandEditor({
   screenshot,
   pageName,
@@ -242,11 +262,23 @@ export default function MagicWandEditor({
   }
 
   const bestMatchingSection = (rect: Rect): Section | null => {
-    const overlapping = sections
+    // Score by IoU so a tight rect over a button beats its parent panel,
+    // and a big rect over the whole panel beats any single child. Without
+    // this, both children and parents tie on overlap area whenever the
+    // user's rect sits fully inside the parent — and the parent (pushed
+    // first by the detector) always wins, sending the wrong text to Claude.
+    // Interactive elements get a small bonus so a button still wins over
+    // a same-size wrapper card. Tie-breaker: smaller bbox = more specific.
+    const ranked = sections
       .filter(s => rectsOverlap(rect, s.rect))
-      .map(s => ({ section: s, area: overlapArea(rect, s.rect) }))
-      .sort((a, b) => b.area - a.area)
-    return overlapping[0]?.section ?? null
+      .map(s => {
+        const score = iou(rect, s.rect)
+        const bonus = isInteractive(s) && score > 0.2 ? 0.15 : 0
+        return { section: s, score: score + bonus, area: rectArea(s.rect) }
+      })
+      .filter(r => r.score > 0)
+      .sort((a, b) => b.score - a.score || a.area - b.area)
+    return ranked[0]?.section ?? null
   }
 
   const handleApply = async () => {

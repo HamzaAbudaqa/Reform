@@ -38,11 +38,7 @@ export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackA
   return (
     <div
       ref={containerRef}
-      className="relative w-full rounded-2xl overflow-hidden"
-      style={{
-        background: 'rgba(8,10,18,0.6)',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
+      className="relative w-full overflow-hidden rounded-[22px] border border-black/[0.07] bg-white"
     >
       {screenshotUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -62,8 +58,8 @@ export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackA
         />
       ) : (
         <div
-          className="w-full flex items-center justify-center"
-          style={{ aspectRatio: String(1 / fallbackAspect), color: 'rgba(255,255,255,0.28)' }}
+          className="flex w-full items-center justify-center text-neutral-400"
+          style={{ aspectRatio: String(1 / fallbackAspect), background: '#fafafa' }}
         >
           No screenshot yet
         </div>
@@ -71,7 +67,7 @@ export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackA
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
-        style={{ mixBlendMode: 'screen', opacity: 0.72 }}
+        style={{ mixBlendMode: 'multiply', opacity: 0.82 }}
       />
     </div>
   )

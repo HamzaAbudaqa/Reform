@@ -12,12 +12,7 @@ export default function PageList({ pages, selectedId, onSelect }: Props) {
   if (pages.length === 0) {
     return (
       <div
-        className="rounded-2xl p-4 text-[11px]"
-        style={{
-          background: 'rgba(8,10,18,0.6)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          color: 'rgba(255,255,255,0.4)',
-        }}
+        className="rounded-[22px] border border-black/[0.07] bg-white p-4 text-[11px] text-neutral-500"
       >
         Waiting for the first pageview — the tab flips automatically once data arrives.
       </div>
@@ -25,14 +20,8 @@ export default function PageList({ pages, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: 'rgba(8,10,18,0.6)',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      <div className="px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="overflow-hidden rounded-[22px] border border-black/[0.07] bg-white">
+      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
         Tracked pages
       </div>
       <ul>
@@ -42,21 +31,22 @@ export default function PageList({ pages, selectedId, onSelect }: Props) {
             <li key={page.id}>
               <button
                 onClick={() => onSelect(page.id)}
-                className="w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between gap-3"
+                className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-neutral-50"
                 style={{
-                  background: active ? 'rgba(124,140,255,0.12)' : 'transparent',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  background: active ? '#fafafa' : 'transparent',
+                  borderBottom: '1px solid rgba(0,0,0,0.04)',
+                  borderLeft: active ? '2px solid #0a0a0a' : '2px solid transparent',
                 }}
               >
                 <div className="min-w-0">
-                  <div className="text-[12px] font-medium truncate" style={{ color: active ? '#ffffff' : 'rgba(255,255,255,0.85)' }}>
+                  <div className="truncate text-[12px] font-medium" style={{ color: active ? '#0a0a0a' : '#262626' }}>
                     {page.path || '/'}
                   </div>
-                  <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  <div className="mt-0.5 text-[10px] text-neutral-400">
                     {page.viewportClass} · {formatRelativeTime(page.lastSeenAt)}
                   </div>
                 </div>
-                <div className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.6)' }}>
+                <div className="rounded-full border border-black/[0.06] bg-neutral-50 px-2 py-0.5 font-mono text-[10px] text-neutral-500">
                   {page.sessionCount} {page.sessionCount === 1 ? 'sess' : 'sess'}
                 </div>
               </button>

@@ -248,8 +248,8 @@ function HeatmapPageInner() {
     <div className="max-w-6xl mx-auto px-6 pb-16">
       <header className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white" style={{ letterSpacing: '-0.02em' }}>Heatmap</h1>
-          <div className="text-[11px] mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <h1 className="text-2xl font-bold text-neutral-950" style={{ letterSpacing: '-0.02em' }}>Heatmap</h1>
+          <div className="text-[11px] mt-1 text-neutral-500">
             {site.domain}
           </div>
         </div>
@@ -284,34 +284,24 @@ function HeatmapPageInner() {
                 buckets={heatmap?.buckets ?? []}
                 layer={layer}
               />
-              <div className="flex items-center gap-2 mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <div className="flex items-center gap-2 mt-3 text-[11px] text-neutral-500">
                 <span>Page screenshot</span>
-                {!selectedPage.screenshotUrl && <span style={{ color: '#f59e0b' }}>— not captured yet</span>}
+                {!selectedPage.screenshotUrl && <span style={{ color: '#b45309' }}>— not captured yet</span>}
                 <button
                   onClick={captureScreenshot}
                   disabled={capturingScreenshot}
-                  className="ml-auto px-2.5 py-1 rounded-lg disabled:opacity-50"
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: 'rgba(255,255,255,0.8)',
-                  }}
+                  className="ml-auto rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11px] font-medium text-neutral-950 transition hover:bg-neutral-50 disabled:opacity-50"
                 >
                   {capturingScreenshot ? 'Capturing…' : selectedPage.screenshotUrl ? 'Recapture' : 'Capture screenshot'}
                 </button>
               </div>
               {loadingHeatmap && (
-                <div className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Updating heatmap…</div>
+                <div className="mt-3 text-[11px] text-neutral-400">Updating heatmap…</div>
               )}
             </>
           ) : (
             <div
-              className="rounded-2xl p-8 text-[12px]"
-              style={{
-                background: 'rgba(8,10,18,0.6)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                color: 'rgba(255,255,255,0.5)',
-              }}
+              className="rounded-[22px] border border-black/[0.07] bg-white p-8 text-[12px] text-neutral-500"
             >
               Waiting for the first pageview. Open your deployed site in another tab and interact — events stream here within a few seconds.
             </div>
@@ -335,7 +325,7 @@ function parseRepoName(url: string): string | null {
 
 function LoadingShell({ label = 'Loading…' }: { label?: string } = {}) {
   return (
-    <div className="max-w-6xl mx-auto px-6 py-24 text-center" style={{ color: 'rgba(255,255,255,0.5)' }}>
+    <div className="max-w-6xl mx-auto px-6 py-24 text-center text-neutral-500">
       {label}
     </div>
   )
@@ -344,17 +334,12 @@ function LoadingShell({ label = 'Loading…' }: { label?: string } = {}) {
 function ErrorShell({ title, message, action }: { title: string; message: string; action?: { label: string; onClick: () => void } }) {
   return (
     <div className="max-w-xl mx-auto px-6 py-24 text-center">
-      <h2 className="text-xl font-semibold text-white mb-2">{title}</h2>
-      <p className="text-[13px] mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{message}</p>
+      <h2 className="text-xl font-semibold text-neutral-950 mb-2">{title}</h2>
+      <p className="text-[13px] mb-6 text-neutral-500">{message}</p>
       {action && (
         <button
           onClick={action.onClick}
-          className="px-4 py-2 rounded-xl text-[12px] font-medium"
-          style={{
-            background: 'linear-gradient(180deg, rgba(124,140,255,0.25), rgba(124,140,255,0.12))',
-            border: '1px solid rgba(124,140,255,0.45)',
-            color: '#ffffff',
-          }}
+          className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-medium text-white transition hover:bg-neutral-800"
         >
           {action.label}
         </button>
