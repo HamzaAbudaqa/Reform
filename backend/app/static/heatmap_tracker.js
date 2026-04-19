@@ -158,6 +158,13 @@
     }
 
     // ── Flushing ──────────────────────────────────────────────────────
+    // fetch+keepalive only — navigator.sendBeacon is intentionally NOT
+    // used. sendBeacon has no way to opt out of credentials and fires a
+    // CORS request the browser treats as credentialed; paired with our
+    // public endpoint's `Allow-Origin: *` + `Allow-Credentials: false`
+    // response, every flush would be rejected. `fetch` with `keepalive:
+    // true` + `credentials: "omit"` gives us the same unload-safe
+    // delivery without the credentials problem.
     function flush() {
       if (queue.length === 0) return;
       try {
@@ -173,16 +180,14 @@
           user_agent: (navigator.userAgent || "").slice(0, 256),
           events: queue.splice(0, MAX_EVENTS_PER_FLUSH),
         };
-        var body = JSON.stringify(payload);
-        var blob = new Blob([body], { type: "application/json" });
-        var sent = false;
-        if (navigator.sendBeacon) {
-          try { sent = navigator.sendBeacon(COLLECT_URL, blob); } catch (_) { sent = false; }
-        }
-        if (!sent) {
-          fetch(COLLECT_URL, { method: "POST", body: body, headers: { "Content-Type": "application/json" }, keepalive: true, credentials: "omit" })
-            .catch(function () {});
-        }
+        fetch(COLLECT_URL, {
+          method: "POST",
+          body: JSON.stringify(payload),
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          credentials: "omit",
+          mode: "cors",
+        }).catch(function () {});
       } catch (err) { warnOnce(err); }
     }
 
