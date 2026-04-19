@@ -150,6 +150,12 @@ async def collect(request: Request, db: AsyncSession = Depends(get_db)) -> Respo
         await db.execute(select(HeatmapSite).where(HeatmapSite.site_key == payload.site_key))
     ).scalar_one_or_none()
     if site is None:
+        # Logged at warning so an avalanche from a stale snippet on a site
+        # whose key was rotated is visible. Truncated to avoid log spam.
+        logger.warning(
+            "collect: unknown site_key=%s path=%s ua=%s",
+            payload.site_key[:12], (payload.path or "/")[:80], (payload.user_agent or "")[:80],
+        )
         return Response(
             status_code=403,
             content='{"detail":"Unknown site_key"}',
@@ -168,6 +174,12 @@ async def collect(request: Request, db: AsyncSession = Depends(get_db)) -> Respo
         viewport_height=payload.viewport_height,
         user_agent=payload.user_agent,
         events=payload.events,
+    )
+    # Quiet info log so a working ingest is visible at INFO without flooding —
+    # one line per flush (≤ once per 5s per session client-side).
+    logger.info(
+        "collect: site=%s path=%s accepted=%d rage=%d",
+        str(site.id)[:8], payload.path or "/", accepted, rage,
     )
     body = CollectResponse(accepted=accepted, rage_detected=rage).model_dump_json()
     return Response(content=body, media_type="application/json", headers=_PUBLIC_CORS)
