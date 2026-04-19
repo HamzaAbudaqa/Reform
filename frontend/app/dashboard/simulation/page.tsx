@@ -888,7 +888,7 @@ export default function SimulationPage() {
         design_intelligence: designIntelligence,
         user_intent: '',
         max_pages: 50,
-        github_user_id: (session?.user as { id?: string } | null | undefined)?.id ?? '',
+        github_user_id: session?.githubId ?? '',
         ux_lab_findings: queuedFindings.length > 0 ? queuedFindings : null,
       }),
     })

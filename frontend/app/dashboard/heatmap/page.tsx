@@ -40,8 +40,8 @@ function HeatmapPageInner() {
   const [loadingHeatmap, setLoadingHeatmap] = useState(false)
   const [capturingScreenshot, setCapturingScreenshot] = useState(false)
 
-  const githubUserId = (session?.user as { id?: string } | null | undefined)?.id ?? ''
-  const githubUsername = session?.user?.name ?? ''
+  const githubUserId = session?.githubId ?? ''
+  const githubUsername = session?.githubUsername ?? ''
 
   // Resolve the currently-selected repo → project.
   useEffect(() => {
