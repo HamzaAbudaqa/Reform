@@ -63,7 +63,7 @@ from app.services.heatmap_insights import (
 from app.services.heatmap_installer import install_tracking_via_github
 from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
 from app.services.s3_client import presign_screenshot_url, upload_screenshot
-from app.services.screenshot import take_screenshot_b64
+from app.services.screenshot import take_screenshot_b64_if_live
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/heatmap", tags=["heatmap"])
@@ -552,9 +552,17 @@ async def capture_screenshot(
     page, site = await _load_page_scoped(db, page_id, req.github_user_id)
     url = site.domain + (page.path if page.path.startswith("/") else f"/{page.path}")
 
-    b64 = await take_screenshot_b64(url)
+    b64, status = await take_screenshot_b64_if_live(url)
     if not b64:
-        raise HTTPException(status_code=500, detail="Screenshot capture failed")
+        # Surface the status code so the dashboard/UI can show something
+        # better than a generic "capture failed" when the live URL itself
+        # is broken (404, auth wall, etc.).
+        detail = (
+            f"Live URL returned HTTP {status} — nothing to capture"
+            if status
+            else "Browser could not reach the live URL"
+        )
+        raise HTTPException(status_code=502, detail=detail)
 
     key = upload_screenshot(str(site.id), _slug(page.path), "heatmap", b64)
     if not key:
@@ -564,6 +572,27 @@ async def capture_screenshot(
         screenshot_url=presign_screenshot_url(key),
         page_height_px=page.page_height_px or 0,
     )
+
+
+@router.post("/pages/{page_id}/reset-screenshot")
+async def reset_screenshot(
+    page_id: str,
+    req: CaptureScreenshotRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear a stale/broken screenshot so auto-capture re-runs on next ingest.
+
+    Needed after a migration from the old capture code (which happily stored
+    404 pages) and as a general recovery hook for any page whose stored
+    screenshot no longer reflects the live site. The auto-capture claim
+    condition is `screenshot_key IS NULL`, so nulling the key is enough to
+    re-eligible the row — the next `/collect` for this path schedules a
+    fresh background capture.
+    """
+    page, _site = await _load_page_scoped(db, page_id, req.github_user_id)
+    page.screenshot_key = None
+    page.screenshot_capture_started_at = None
+    return {"ok": True}
 
 
 # ─── Dashboard: auto-install via GitHub PR ─────────────────────────────

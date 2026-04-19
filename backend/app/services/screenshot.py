@@ -61,6 +61,41 @@ async def take_screenshot_b64(url: str) -> str:
             await browser.close()
 
 
+async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
+    """Screenshot `url` only when the server answered with a 2xx/3xx status.
+
+    Returns `(b64, status)` on success, `("", status)` when the page exists
+    but didn't render cleanly, and `("", 0)` when the browser never got a
+    response at all (DNS, timeout, refused connection). Callers should
+    treat any status outside 200-399 as "skip this capture" — otherwise a
+    Next.js 404 or Vercel password-protection page gets stored as the
+    heatmap's "live screenshot", which is what prompted this helper.
+
+    The 2s settle + domcontentloaded strategy is copied from
+    `take_screenshot_b64` — rationale in that function's body comment.
+    """
+    logger.info("Taking live-URL screenshot of %s", url)
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            try:
+                resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as exc:  # noqa: BLE001 — playwright raises many shapes
+                logger.warning("Screenshot skipped — navigation failed url=%s err=%s", url, exc)
+                return "", 0
+            status = resp.status if resp is not None else 0
+            if status == 0 or status >= 400:
+                logger.warning("Screenshot skipped — HTTP %s from %s", status, url)
+                return "", status
+            await page.wait_for_timeout(2000)
+            screenshot = await page.screenshot(type="png", full_page=True)
+            return base64.b64encode(screenshot).decode("utf-8"), status
+        finally:
+            await browser.close()
+
+
 _ERROR_SIGNALS = (
     "Build Error",
     "Failed to compile",

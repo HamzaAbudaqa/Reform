@@ -8,7 +8,6 @@ import HeatmapCanvas from '@/components/heatmap/HeatmapCanvas'
 import HeatmapControls from '@/components/heatmap/HeatmapControls'
 import HeatmapSetup from '@/components/heatmap/HeatmapSetup'
 import PageList from '@/components/heatmap/PageList'
-import ScrollDepthRail from '@/components/heatmap/ScrollDepthRail'
 import StatsHeader from '@/components/heatmap/StatsHeader'
 import VersionComparison from '@/components/heatmap/VersionComparison'
 import { apiUrl } from '@/lib/api'
@@ -162,29 +161,6 @@ function HeatmapPageInner() {
     return () => { cancelled = true }
   }, [selectedPageId, layer, device, days, githubUserId])
 
-  // Scroll-layer buckets always fetched separately so the scroll rail shows
-  // retention regardless of the currently-viewed layer.
-  const [scrollBuckets, setScrollBuckets] = useState<HeatmapData['buckets']>([])
-  useEffect(() => {
-    if (!selectedPageId || !githubUserId) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(apiUrl(
-          `/api/heatmap/pages/${selectedPageId}/heatmap` +
-          `?github_user_id=${encodeURIComponent(githubUserId)}` +
-          `&layer=scroll&device=${device}&days=${days}`,
-        ))
-        if (!res.ok) return
-        const raw = await res.json()
-        if (!cancelled) setScrollBuckets(mapHeatmapData(raw).buckets)
-      } catch {
-        /* noop */
-      }
-    })()
-    return () => { cancelled = true }
-  }, [selectedPageId, device, days, githubUserId])
-
   const selectedPage = useMemo(
     () => pages.find(p => p.id === selectedPageId) ?? null,
     [pages, selectedPageId],
@@ -254,7 +230,7 @@ function HeatmapPageInner() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_80px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
         <aside>
           <PageList pages={pages} selectedId={selectedPageId} onSelect={setSelectedPageId} />
         </aside>
@@ -287,9 +263,6 @@ function HeatmapPageInner() {
             </div>
           )}
         </main>
-        <aside className="hidden lg:block">
-          <ScrollDepthRail buckets={scrollBuckets} />
-        </aside>
       </div>
 
       <VersionComparison siteId={site.id} githubUserId={githubUserId} />

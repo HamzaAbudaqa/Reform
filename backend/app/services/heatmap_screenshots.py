@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import async_session
 from app.models import HeatmapPage
 from app.services.s3_client import upload_screenshot
-from app.services.screenshot import take_screenshot_b64
+from app.services.screenshot import take_screenshot_b64_if_live
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +97,16 @@ async def _record_failure(db: AsyncSession, page_id: UUID) -> None:
 
 
 async def _attempt(url: str) -> str:
-    """One Playwright capture. Returns base64 PNG; raises on failure."""
-    b64 = await take_screenshot_b64(url)
+    """One Playwright capture. Returns base64 PNG; raises on non-live status.
+
+    A non-2xx/3xx status (or a navigation error) raises so the caller can
+    decide between "retry in-process" and "give up this attempt". The
+    alternative — returning the error page as bytes — is what landed a
+    Next.js 404 in the heatmap card in the first place.
+    """
+    b64, status = await take_screenshot_b64_if_live(url)
     if not b64:
-        raise RuntimeError("screenshot returned empty payload")
+        raise RuntimeError(f"no renderable page at {url} (HTTP {status})")
     return b64
 
 
