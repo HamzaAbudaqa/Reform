@@ -106,3 +106,31 @@ export function mapVerify(raw: Record<string, unknown>): VerifyResult {
     error: raw.error ? String(raw.error) : null,
   }
 }
+
+// ── Auto-install (GitHub PR) ────────────────────────────────────────────
+
+export interface AutoInstallResult {
+  success: boolean
+  prUrl: string
+  prNumber: number
+  branchName: string
+  branchUrl: string
+  targetFile: string
+  framework: string
+  error: string | null
+  errorKind: string | null
+}
+
+export function mapAutoInstall(raw: Record<string, unknown>): AutoInstallResult {
+  return {
+    success: Boolean(raw.success),
+    prUrl: String(raw.pr_url ?? ''),
+    prNumber: Number(raw.pr_number ?? 0),
+    branchName: String(raw.branch_name ?? ''),
+    branchUrl: String(raw.branch_url ?? ''),
+    targetFile: String(raw.target_file ?? ''),
+    framework: String(raw.framework ?? ''),
+    error: raw.error ? String(raw.error) : null,
+    errorKind: raw.error_kind ? String(raw.error_kind) : null,
+  }
+}

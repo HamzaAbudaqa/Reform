@@ -121,3 +121,23 @@ class CaptureScreenshotRequest(BaseModel):
 class CaptureScreenshotResponse(BaseModel):
     screenshot_url: str
     page_height_px: int
+
+
+# ─── Auto-install (GitHub PR) ──────────────────────────────────────────
+
+
+class AutoInstallRequest(BaseModel):
+    github_user_id: str
+    access_token: str
+
+
+class AutoInstallResponse(BaseModel):
+    success: bool
+    pr_url: str = ""
+    pr_number: int = 0
+    branch_name: str = ""
+    branch_url: str = ""
+    target_file: str = ""
+    framework: str = ""
+    error: str | None = None
+    error_kind: str | None = None

@@ -295,3 +295,51 @@ def _build_commit_message(pages: list[str]) -> str:
     if len(pages) == 1:
         return f"reform: improve UI for {pages[0]}"
     return f"reform: improve UI for {len(pages)} pages"
+
+
+# ─── Pull Requests ──────────────────────────────────────────────────────────
+
+
+async def open_pull_request(
+    owner: str,
+    repo: str,
+    access_token: str,
+    head: str,
+    base: str,
+    title: str,
+    body: str = "",
+) -> dict:
+    """Open a PR from `head` into `base`. Returns {url, number}.
+
+    Idempotent: if an open PR already exists for this head→base pair, returns
+    the existing one rather than failing with a 422.
+    """
+    headers = _github_headers(access_token)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Check for an existing open PR — GitHub returns 422 on duplicates,
+        # which would surface as a confusing error to the user.
+        list_res = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/pulls",
+            headers=headers,
+            params={"head": f"{owner}:{head}", "base": base, "state": "open"},
+        )
+        if list_res.status_code == 200:
+            existing = list_res.json()
+            if existing:
+                pr = existing[0]
+                return {"url": pr["html_url"], "number": pr["number"]}
+
+        res = await client.post(
+            f"{GITHUB_API}/repos/{owner}/{repo}/pulls",
+            headers=headers,
+            json={"title": title, "head": head, "base": base, "body": body},
+        )
+        if res.status_code == 401:
+            raise PermissionError("GitHub token is invalid or expired")
+        if res.status_code == 403:
+            raise PermissionError(f"Access denied to {owner}/{repo}")
+        if res.status_code in (200, 201):
+            pr = res.json()
+            return {"url": pr["html_url"], "number": pr["number"]}
+        detail = res.text[:300]
+        raise RuntimeError(f"Failed to open PR: {res.status_code} {detail}")

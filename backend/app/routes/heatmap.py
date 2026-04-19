@@ -36,6 +36,8 @@ from app.models import (
     Project,
 )
 from app.schemas.heatmap import (
+    AutoInstallRequest,
+    AutoInstallResponse,
     CaptureScreenshotRequest,
     CaptureScreenshotResponse,
     CollectRequest,
@@ -49,6 +51,7 @@ from app.schemas.heatmap import (
     VerifySiteResponse,
 )
 from app.services.heatmap_ingest import process_events, viewport_class
+from app.services.heatmap_installer import install_tracking_via_github
 from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
 from app.services.s3_client import presign_screenshot_url, upload_screenshot
 from app.services.screenshot import take_screenshot_b64
@@ -467,4 +470,52 @@ async def capture_screenshot(
     return CaptureScreenshotResponse(
         screenshot_url=presign_screenshot_url(key),
         page_height_px=page.page_height_px or 0,
+    )
+
+
+# ─── Dashboard: auto-install via GitHub PR ─────────────────────────────
+
+
+@router.post("/sites/{site_id}/auto-install", response_model=AutoInstallResponse)
+async def auto_install(
+    site_id: str,
+    req: AutoInstallRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AutoInstallResponse:
+    """Inject the tracking script into the project's GitHub repo via a PR.
+
+    Resolves the site → project → repo_url, derives the snippet URL from the
+    incoming request (so the served PR contains a real prod URL, not
+    localhost), then delegates to `install_tracking_via_github`.
+    """
+    site = await _load_site(db, site_id, req.github_user_id)
+    project = (
+        await db.execute(select(Project).where(Project.id == site.project_id))
+    ).scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found for this site")
+    if not project.repo_url:
+        raise HTTPException(status_code=400, detail="Project has no repo URL set")
+
+    api_base = api_base_from_request(request)
+    snippet_url = f"{api_base}/api/heatmap/h.js?site={site.site_key}"
+
+    result = await install_tracking_via_github(
+        repo_url=project.repo_url,
+        branch=project.branch or "main",
+        access_token=req.access_token,
+        snippet_url=snippet_url,
+    )
+
+    return AutoInstallResponse(
+        success=result.success,
+        pr_url=result.pr_url,
+        pr_number=result.pr_number,
+        branch_name=result.branch_name,
+        branch_url=result.branch_url,
+        target_file=result.target_file,
+        framework=result.framework,
+        error=result.error,
+        error_kind=result.error_kind,
     )
