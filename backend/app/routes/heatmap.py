@@ -33,6 +33,7 @@ from app.models import (
     HeatmapPage,
     HeatmapSession,
     HeatmapSite,
+    HeatmapSuggestionStatus,
     PageResult,
     Project,
     TransformRun,
@@ -49,7 +50,9 @@ from app.schemas.heatmap import (
     HeatmapDataResponse,
     InstallModeRequest,
     PageOut,
+    RegenerateSuggestionRequest,
     SiteOut,
+    SuggestionStatusRequest,
     VerifySiteRequest,
     VerifySiteResponse,
 )
@@ -59,6 +62,7 @@ from app.services.heatmap_insights import (
     gather_page_evidence,
     generate_insights,
     is_cache_fresh,
+    regenerate_single_suggestion,
 )
 from app.services.heatmap_installer import install_tracking_via_github
 from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
@@ -993,6 +997,7 @@ async def page_insights(
     # Cache hit — save a Claude call.
     if not regenerate and is_cache_fresh(page.latest_insights_at) and page.latest_insights_json:
         cached = page.latest_insights_json
+        suggestions = await _hydrate_suggestion_status(db, page.id, cached.get("suggestions", []))
         return {
             "has_data": True,
             "still_collecting": False,
@@ -1002,9 +1007,19 @@ async def page_insights(
             "generated_at": page.latest_insights_at.isoformat() if page.latest_insights_at else None,
             "cached": True,
             "insights": cached.get("insights", []),
-            "suggestions": cached.get("suggestions", []),
+            "suggestions": suggestions,
             "note": cached.get("note", ""),
         }
+
+    # Whole-panel regenerate: the IDs we're about to mint are new, so every
+    # existing status row on this page is an orphan. Drop them so stale
+    # "staged" badges don't bleed across regenerations.
+    if regenerate:
+        await db.execute(
+            HeatmapSuggestionStatus.__table__.delete().where(
+                HeatmapSuggestionStatus.page_id == page.id
+            )
+        )
 
     screenshot_url = (
         presign_screenshot_url(page.screenshot_key) if page.screenshot_key else None
@@ -1020,6 +1035,11 @@ async def page_insights(
     }
     page.latest_insights_at = now
 
+    # Freshly generated suggestions have no stored status — _hydrate is a
+    # no-op here but we route through it anyway so the shape is identical
+    # between cache-hit and fresh paths.
+    suggestions = await _hydrate_suggestion_status(db, page.id, result.get("suggestions", []))
+
     return {
         "has_data": True,
         "still_collecting": False,
@@ -1029,8 +1049,167 @@ async def page_insights(
         "generated_at": now.isoformat(),
         "cached": False,
         "insights": result.get("insights", []),
-        "suggestions": result.get("suggestions", []),
+        "suggestions": suggestions,
         "note": result.get("note", ""),
+    }
+
+
+async def _hydrate_suggestion_status(
+    db: AsyncSession,
+    page_id,
+    suggestions: list[dict],
+) -> list[dict]:
+    """Merge persisted status rows into the suggestions list.
+
+    Mutates a shallow copy of each dict — the cached JSON on HeatmapPage
+    intentionally doesn't store status, so we overlay it on every read.
+    Unknown suggestion IDs default to "none".
+    """
+    if not suggestions:
+        return suggestions
+    ids = [s.get("id") for s in suggestions if s.get("id")]
+    if not ids:
+        return [dict(s, status="none") for s in suggestions]
+    rows = (
+        await db.execute(
+            select(HeatmapSuggestionStatus.suggestion_id, HeatmapSuggestionStatus.status)
+            .where(
+                HeatmapSuggestionStatus.page_id == page_id,
+                HeatmapSuggestionStatus.suggestion_id.in_(ids),
+            )
+        )
+    ).all()
+    status_by_id = {r.suggestion_id: r.status for r in rows}
+    return [
+        dict(s, status=status_by_id.get(s.get("id"), "none"))
+        for s in suggestions
+    ]
+
+
+@router.post("/pages/{page_id}/suggestions/{suggestion_id}/status")
+async def set_suggestion_status(
+    page_id: str,
+    suggestion_id: str,
+    req: SuggestionStatusRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist stage/reject for a single suggestion.
+
+    Idempotent upsert keyed on (page_id, suggestion_id). "none" deletes the
+    row so a user can revert a rejection without accumulating empty
+    overlay records.
+    """
+    page, _site = await _load_page_scoped(db, page_id, req.github_user_id)
+
+    # Sanity: ensure the suggestion_id actually appears in the latest cache.
+    # Prevents status-for-orphans getting written, which would waste rows
+    # and subtly mislead the hydrator on the next regenerate.
+    cached = page.latest_insights_json or {}
+    cached_ids = {s.get("id") for s in cached.get("suggestions", []) if s.get("id")}
+    if suggestion_id not in cached_ids:
+        raise HTTPException(status_code=404, detail="Unknown suggestion id for this page")
+
+    if req.status == "none":
+        await db.execute(
+            HeatmapSuggestionStatus.__table__.delete().where(
+                HeatmapSuggestionStatus.page_id == page.id,
+                HeatmapSuggestionStatus.suggestion_id == suggestion_id,
+            )
+        )
+        return {"ok": True, "status": "none"}
+
+    now = datetime.now(timezone.utc)
+    existing = (
+        await db.execute(
+            select(HeatmapSuggestionStatus).where(
+                HeatmapSuggestionStatus.page_id == page.id,
+                HeatmapSuggestionStatus.suggestion_id == suggestion_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(HeatmapSuggestionStatus(
+            page_id=page.id,
+            suggestion_id=suggestion_id,
+            status=req.status,
+            created_at=now,
+            updated_at=now,
+        ))
+    else:
+        existing.status = req.status
+        existing.updated_at = now
+    return {"ok": True, "status": req.status}
+
+
+@router.post("/pages/{page_id}/insights/{suggestion_id}/regenerate")
+async def regenerate_suggestion(
+    page_id: str,
+    suggestion_id: str,
+    req: RegenerateSuggestionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-card magic wand: ask Claude for an alternative strategy for one
+    suggestion while leaving the rest of the cached panel intact.
+
+    Evidence is re-gathered (same site/page) and fed to Claude alongside
+    the previous suggestion so the model can diverge from it explicitly.
+    The returned card gets a fresh `id` — any existing status row for the
+    old id is dropped (the user never chose *this* suggestion; they chose
+    the one that used to live here). Cache TTL is not reset; the panel as
+    a whole stays whatever age it was.
+    """
+    page, site = await _load_page_scoped(db, page_id, req.github_user_id)
+
+    cached = page.latest_insights_json or {}
+    suggestions = list(cached.get("suggestions", []))
+    idx = next(
+        (i for i, s in enumerate(suggestions) if s.get("id") == suggestion_id),
+        -1,
+    )
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Unknown suggestion id for this page")
+
+    previous = suggestions[idx]
+
+    screenshot_url = (
+        presign_screenshot_url(page.screenshot_key) if page.screenshot_key else None
+    )
+    evidence = await gather_page_evidence(db, page, site.id, screenshot_url=screenshot_url)
+    new_sug = await regenerate_single_suggestion(evidence, previous)
+    if new_sug is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't generate an alternative right now — try again in a moment.",
+        )
+
+    suggestions[idx] = new_sug
+    # Persist the swapped panel. Not resetting latest_insights_at — the
+    # rest of the panel hasn't changed, and refreshing TTL here would
+    # silently extend the cache lifetime of stale insights.
+    page.latest_insights_json = {
+        **cached,
+        "suggestions": suggestions,
+    }
+
+    # Old id is gone — drop its status row so it doesn't become an orphan.
+    await db.execute(
+        HeatmapSuggestionStatus.__table__.delete().where(
+            HeatmapSuggestionStatus.page_id == page.id,
+            HeatmapSuggestionStatus.suggestion_id == suggestion_id,
+        )
+    )
+
+    # Return the fresh panel so the client can drop it in without a second
+    # round-trip to /insights.
+    hydrated = await _hydrate_suggestion_status(db, page.id, suggestions)
+    return {
+        "suggestion": next((s for s in hydrated if s.get("id") == new_sug["id"]), new_sug),
+        "insights": cached.get("insights", []),
+        "suggestions": hydrated,
+        "note": cached.get("note", ""),
+        "page_path": page.path,
+        "generated_at": page.latest_insights_at.isoformat() if page.latest_insights_at else None,
+        "cached": False,
     }
 
 

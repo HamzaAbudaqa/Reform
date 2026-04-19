@@ -265,3 +265,24 @@ class HeatmapSession(Base):
     started_at = Column(DateTime(timezone=True), default=_utcnow)
     ended_at = Column(DateTime(timezone=True), default=_utcnow)
     rage_click_count = Column(Integer, nullable=False, default=0)
+
+
+class HeatmapSuggestionStatus(Base):
+    """Overlay on the cached insights JSON: which suggestions the user has
+    staged or rejected. Deliberately thin — never mirrors the suggestion
+    itself. Rows are keyed by (page_id, suggestion_id) where suggestion_id
+    is the short hex minted in generate_insights. When the cache is fully
+    regenerated, IDs change and orphan rows here are garbage-collected.
+    """
+    __tablename__ = "heatmap_suggestion_status"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    page_id = Column(UUID(as_uuid=True), ForeignKey("heatmap_pages.id"), nullable=False, index=True)
+    suggestion_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="none")   # staged | rejected | none
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("page_id", "suggestion_id", name="uq_heatmap_suggestion_status_page_sid"),
+    )

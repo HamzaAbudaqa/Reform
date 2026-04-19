@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import type { HeatmapBucket, HeatmapLayer } from '@/types/heatmap'
+import type { HeatmapBucket, HeatmapLayer, TargetRegion } from '@/types/heatmap'
 import { HEATMAP_GRID } from '@/types/heatmap'
 
 interface Props {
@@ -10,6 +10,12 @@ interface Props {
   layer: HeatmapLayer
   /** Aspect ratio hint when we don't yet know the image dims. */
   fallbackAspect?: number
+  /**
+   * Normalised bounding box (each coord in [0,1]) to outline on top of
+   * the heatmap. Used when a suggestion card is hovered to point the
+   * user at the page region the suggestion refers to. Null = no overlay.
+   */
+  highlightRegion?: TargetRegion | null
 }
 
 const LAYER_BLEND: Record<HeatmapLayer, GlobalCompositeOperation> = {
@@ -24,7 +30,13 @@ const LAYER_BLEND: Record<HeatmapLayer, GlobalCompositeOperation> = {
  * screenshot. Handles all four layers via the same code path; only the
  * colour ramp differs. `buckets` are 50×50 grid counts.
  */
-export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackAspect = 0.5625 }: Props) {
+export default function HeatmapCanvas({
+  screenshotUrl,
+  buckets,
+  layer,
+  fallbackAspect = 0.5625,
+  highlightRegion = null,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
@@ -34,6 +46,19 @@ export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackA
     if (!canvas) return
     draw(canvas, buckets, layer)
   }, [buckets, layer])
+
+  // The overlay is a positioned div rather than part of the canvas
+  // compositing step — it sits OUTSIDE the `mixBlendMode: multiply`
+  // layer so the highlight stays readable regardless of heatmap colour
+  // underneath.
+  const overlayStyle = highlightRegion
+    ? {
+        left:   `${clamp01(highlightRegion.x) * 100}%`,
+        top:    `${clamp01(highlightRegion.y) * 100}%`,
+        width:  `${clamp01(highlightRegion.width) * 100}%`,
+        height: `${clamp01(highlightRegion.height) * 100}%`,
+      }
+    : null
 
   return (
     <div
@@ -69,8 +94,20 @@ export default function HeatmapCanvas({ screenshotUrl, buckets, layer, fallbackA
         className="absolute inset-0 w-full h-full pointer-events-none"
         style={{ mixBlendMode: 'multiply', opacity: 0.82 }}
       />
+      {overlayStyle && (
+        <div
+          className="pointer-events-none absolute rounded-md ring-2 ring-neutral-950 ring-offset-2 ring-offset-white/70 shadow-[0_0_0_9999px_rgba(255,255,255,0.4)] transition-all duration-150"
+          style={overlayStyle}
+          aria-hidden
+        />
+      )}
     </div>
   )
+}
+
+function clamp01(v: number): number {
+  if (!Number.isFinite(v)) return 0
+  return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────

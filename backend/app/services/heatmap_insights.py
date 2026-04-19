@@ -264,11 +264,39 @@ CONSTRAINTS
 1. Each `evidence` field must cite a specific number, percentage, or location from the data above.
 2. Each `transform_instruction` must be a single self-contained sentence an AI code transformer can act on without seeing this page — name the element ("the pricing cards in the lower-middle of the page"), the change ("make the entire card clickable so it navigates to the plan detail"), and any constraint ("preserve current styling").
 3. Cap: at most {max_insights} insights and {max_suggestions} suggestions. Quality over quantity.
-4. Confidence: "high" requires both rage/click data AND a clear screenshot affordance you can point to. "medium" requires a clear pattern in one of those. "low" otherwise.
-5. If the evidence genuinely doesn't support a category, omit it — do NOT fabricate.
+4. `confidence` = how sure you are the pattern is real. "high" requires both rage/click data AND a clear screenshot affordance you can point to. "medium" requires a clear pattern in one of those. "low" otherwise.
+5. `severity` = how harmful the issue is IF the pattern is real. "high" = users are likely bouncing, blocked, or failing a primary goal. "medium" = friction on an important flow but not a blocker. "low" = polish / nice-to-have. Confidence and severity are orthogonal — do NOT assume they move together.
+6. `target_region` (optional, suggestions only): if the screenshot makes the target area visually obvious, emit normalized [0,1] coordinates ({{x, y, width, height}}) where (0,0) is the top-left of the full page. Omit for page-wide or non-spatial changes.
+7. If the evidence genuinely doesn't support a category, omit it — do NOT fabricate.
 
 Return your output by calling the `report_recommendations` tool exactly once."""
 
+
+# Two axes on every insight + suggestion:
+#   confidence — how sure the model is that the pattern is real
+#   severity   — how harmful the underlying issue is if true
+# These are orthogonal: high-confidence + low-severity ("we're sure nobody
+# reads the footer — that's probably fine") is a real shape and deserves
+# different UI treatment than high-confidence + high-severity.
+_SEVERITY_ENUM = {"type": "string", "enum": ["low", "medium", "high"]}
+_CONFIDENCE_ENUM = {"type": "string", "enum": ["low", "medium", "high"]}
+
+_TARGET_REGION_SCHEMA = {
+    "type": "object",
+    "description": (
+        "Optional normalized bounding box identifying the page area this "
+        "suggestion applies to. Use when the screenshot makes the target "
+        "region visually obvious (a CTA, a nav bar, a card). Omit when the "
+        "change is page-wide or the target can't be pinned spatially."
+    ),
+    "properties": {
+        "x":      {"type": "number", "minimum": 0, "maximum": 1},
+        "y":      {"type": "number", "minimum": 0, "maximum": 1},
+        "width":  {"type": "number", "minimum": 0, "maximum": 1},
+        "height": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["x", "y", "width", "height"],
+}
 
 _TOOL_DEFINITION = {
     "name": "report_recommendations",
@@ -291,9 +319,10 @@ _TOOL_DEFINITION = {
                         "title": {"type": "string", "maxLength": 80},
                         "summary": {"type": "string", "maxLength": 240},
                         "evidence": {"type": "string", "maxLength": 240},
-                        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+                        "confidence": _CONFIDENCE_ENUM,
+                        "severity": _SEVERITY_ENUM,
                     },
-                    "required": ["type", "title", "summary", "evidence", "confidence"],
+                    "required": ["type", "title", "summary", "evidence", "confidence", "severity"],
                 },
             },
             "suggestions": {
@@ -305,8 +334,10 @@ _TOOL_DEFINITION = {
                         "title": {"type": "string", "maxLength": 80},
                         "description": {"type": "string", "maxLength": 200},
                         "rationale": {"type": "string", "maxLength": 240},
-                        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+                        "confidence": _CONFIDENCE_ENUM,
+                        "severity": _SEVERITY_ENUM,
                         "target_area": {"type": "string", "maxLength": 60},
+                        "target_region": _TARGET_REGION_SCHEMA,
                         "suggested_change_type": {"type": "string", "enum": [
                             "make_clickable", "move_higher", "increase_contrast",
                             "enlarge", "reposition", "simplify", "clarify_label",
@@ -315,7 +346,7 @@ _TOOL_DEFINITION = {
                         "transform_instruction": {"type": "string", "maxLength": 280},
                     },
                     "required": [
-                        "title", "description", "rationale", "confidence",
+                        "title", "description", "rationale", "confidence", "severity",
                         "target_area", "suggested_change_type", "transform_instruction",
                     ],
                 },
@@ -417,3 +448,115 @@ def is_cache_fresh(generated_at: Optional[datetime]) -> bool:
         return False
     age = datetime.now(timezone.utc) - generated_at
     return age.total_seconds() < INSIGHTS_TTL_SECONDS
+
+
+# ── Single-suggestion regenerate (per-card magic wand) ────────────────
+
+
+_ALT_SYSTEM_PROMPT = (
+    "You are a senior UX designer. The user has asked you to propose an "
+    "ALTERNATIVE UI improvement for the same observed behavior — the "
+    "underlying evidence is unchanged, but the previous suggestion wasn't "
+    "what they wanted. Generate a genuinely different approach: a new "
+    "mechanism, a different element, or a different change type. Do not "
+    "paraphrase the previous suggestion."
+)
+
+
+_ALT_USER_PROMPT_TEMPLATE = """Same behavioral evidence as before. Propose ONE alternative UI improvement that is materially different from the previous suggestion.
+
+PREVIOUS SUGGESTION (do not repeat this — diverge from it)
+Title: {prev_title}
+Description: {prev_description}
+Change type: {prev_change_type}
+Transform instruction: {prev_transform_instruction}
+
+EVIDENCE
+--------
+{evidence}
+
+CONSTRAINTS
+-----------
+1. `evidence` field cites a specific number, percentage, or location from above.
+2. `transform_instruction` is a single self-contained sentence the transformer can act on.
+3. `confidence` = how sure you are the pattern is real; `severity` = how harmful the issue is if true (orthogonal).
+4. `suggested_change_type` must be different from `{prev_change_type}` unless a different variant in the same category is materially distinct.
+5. `target_region` (optional): normalized [0,1] coords if the screenshot makes it visually obvious.
+6. Return exactly ONE suggestion — not a list, not multiple variants.
+
+Return your output by calling the `report_alternative_suggestion` tool exactly once."""
+
+
+_ALT_TOOL_DEFINITION = {
+    "name": "report_alternative_suggestion",
+    "description": (
+        "Report a single alternative UX suggestion for evidence the user "
+        "has already seen one suggestion for. Call this tool exactly once."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "suggestion": _TOOL_DEFINITION["input_schema"]["properties"]["suggestions"]["items"],
+        },
+        "required": ["suggestion"],
+    },
+}
+
+
+async def regenerate_single_suggestion(
+    ev: PageEvidence,
+    previous: dict,
+) -> dict | None:
+    """Ask Claude for one alternative to `previous` using the same evidence.
+
+    Returns the new suggestion dict (with a freshly minted `id`) or None on
+    model/transport failure. The caller is responsible for swapping the
+    returned dict into the cached insights JSON and cleaning up the old
+    status row.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+
+    client = anthropic.Anthropic(api_key=api_key)
+    prompt_text = _ALT_USER_PROMPT_TEMPLATE.format(
+        evidence=_evidence_to_text(ev),
+        prev_title=previous.get("title", ""),
+        prev_description=previous.get("description", ""),
+        prev_change_type=previous.get("suggested_change_type", ""),
+        prev_transform_instruction=previous.get("transform_instruction", ""),
+    )
+    content: list[dict] = []
+    if ev.screenshot_url:
+        content.append({"type": "image", "source": {"type": "url", "url": ev.screenshot_url}})
+    content.append({"type": "text", "text": prompt_text})
+
+    try:
+        import asyncio
+        message = await asyncio.to_thread(
+            client.messages.create,
+            model="claude-sonnet-4-6",
+            max_tokens=800,
+            system=_ALT_SYSTEM_PROMPT,
+            tools=[_ALT_TOOL_DEFINITION],
+            tool_choice={"type": "tool", "name": "report_alternative_suggestion"},
+            messages=[{"role": "user", "content": content}],
+        )
+    except Exception as exc:  # noqa: BLE001
+        if is_anthropic_exception(exc):
+            log_and_classify(exc)
+        else:
+            logger.error("regenerate_single_suggestion: model call failed: %s", exc, exc_info=True)
+        return None
+
+    for block in message.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "report_alternative_suggestion":
+            payload = block.input or {}
+            if isinstance(payload, dict) and isinstance(payload.get("suggestion"), dict):
+                new_sug = dict(payload["suggestion"])
+                new_sug["id"] = "sug_" + secrets.token_hex(4)
+                return new_sug
+            break
+
+    logger.warning("regenerate_single_suggestion: model returned no tool_use block")
+    return None

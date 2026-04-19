@@ -161,6 +161,19 @@ class InstallModeRequest(BaseModel):
     mode: str  # "manual" | "automatic" | "not_started"
 
 
+class SuggestionStatusRequest(BaseModel):
+    """Body for `POST /pages/{id}/suggestions/{sid}/status` — persists which
+    suggestions the user has staged or rejected across refreshes."""
+    github_user_id: str
+    status: SuggestionStatus
+
+
+class RegenerateSuggestionRequest(BaseModel):
+    """Body for `POST /pages/{id}/insights/{sid}/regenerate` — per-card
+    magic wand. Same evidence, different strategy."""
+    github_user_id: str
+
+
 # ─── First-event signal ────────────────────────────────────────────────
 
 
@@ -183,6 +196,17 @@ SuggestionChangeType = Literal[
     "shorten", "add_cta", "add_affordance",
 ]
 ConfidenceLevel = Literal["low", "medium", "high"]
+SeverityLevel = Literal["low", "medium", "high"]
+SuggestionStatus = Literal["none", "staged", "rejected"]
+
+
+class TargetRegion(BaseModel):
+    """Optional normalized bounding box on the page screenshot.
+    (0,0) = top-left, all values in [0,1]."""
+    x: float
+    y: float
+    width: float
+    height: float
 
 
 class Insight(BaseModel):
@@ -193,6 +217,9 @@ class Insight(BaseModel):
     summary: str
     evidence: str
     confidence: ConfidenceLevel
+    # Defaults to medium so cached insights written before severity shipped
+    # still parse. Next regeneration fills this in authoritatively.
+    severity: SeverityLevel = "medium"
 
 
 class Suggestion(BaseModel):
@@ -202,12 +229,20 @@ class Suggestion(BaseModel):
     description: str
     rationale: str
     confidence: ConfidenceLevel
+    severity: SeverityLevel = "medium"
     target_area: str
     suggested_change_type: SuggestionChangeType
     # Compact instruction for the transformation engine — written so it
     # makes sense without further context, e.g. "Make the pricing cards
     # clickable so the entire card area navigates to /pricing/<plan>".
     transform_instruction: str
+    # Optional when the model can point the suggestion at a specific area
+    # of the page — used by the frontend to draw an overlay on the
+    # screenshot. Null/absent means the change isn't spatially scoped.
+    target_region: TargetRegion | None = None
+    # Persistent selection state. Populated by the /insights route from
+    # the HeatmapSuggestionStatus overlay, not by the model.
+    status: SuggestionStatus = "none"
 
 
 class InsightsResponse(BaseModel):

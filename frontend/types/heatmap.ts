@@ -210,10 +210,19 @@ export function mapVersionComparison(raw: Record<string, unknown>): VersionCompa
 
 export type InsightType = 'rage_click' | 'scroll_depth' | 'cta_prominence' | 'navigation'
 export type ConfidenceLevel = 'low' | 'medium' | 'high'
+export type SeverityLevel = 'low' | 'medium' | 'high'
+export type SuggestionStatus = 'none' | 'staged' | 'rejected'
 export type SuggestionChangeType =
   | 'make_clickable' | 'move_higher' | 'increase_contrast'
   | 'enlarge' | 'reposition' | 'simplify' | 'clarify_label'
   | 'shorten' | 'add_cta' | 'add_affordance'
+
+export interface TargetRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 export interface Insight {
   id: string
@@ -222,6 +231,7 @@ export interface Insight {
   summary: string
   evidence: string
   confidence: ConfidenceLevel
+  severity: SeverityLevel
 }
 
 export interface Suggestion {
@@ -230,9 +240,12 @@ export interface Suggestion {
   description: string
   rationale: string
   confidence: ConfidenceLevel
+  severity: SeverityLevel
   targetArea: string
   suggestedChangeType: SuggestionChangeType
   transformInstruction: string
+  targetRegion: TargetRegion | null
+  status: SuggestionStatus
 }
 
 export interface InsightsResponse {
@@ -248,7 +261,27 @@ export interface InsightsResponse {
   note: string
 }
 
-function mapInsight(raw: Record<string, unknown>): Insight {
+function mapSeverity(raw: unknown): SeverityLevel {
+  const v = typeof raw === 'string' ? raw : ''
+  return v === 'low' || v === 'high' ? v : 'medium'
+}
+
+function mapTargetRegion(raw: unknown): TargetRegion | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const x = Number(r.x)
+  const y = Number(r.y)
+  const width = Number(r.width)
+  const height = Number(r.height)
+  if (![x, y, width, height].every(Number.isFinite)) return null
+  return { x, y, width, height }
+}
+
+function mapStatus(raw: unknown): SuggestionStatus {
+  return raw === 'staged' || raw === 'rejected' ? raw : 'none'
+}
+
+export function mapInsight(raw: Record<string, unknown>): Insight {
   return {
     id: String(raw.id ?? ''),
     type: (raw.type as InsightType) ?? 'rage_click',
@@ -256,19 +289,23 @@ function mapInsight(raw: Record<string, unknown>): Insight {
     summary: String(raw.summary ?? ''),
     evidence: String(raw.evidence ?? ''),
     confidence: (raw.confidence as ConfidenceLevel) ?? 'low',
+    severity: mapSeverity(raw.severity),
   }
 }
 
-function mapSuggestion(raw: Record<string, unknown>): Suggestion {
+export function mapSuggestion(raw: Record<string, unknown>): Suggestion {
   return {
     id: String(raw.id ?? ''),
     title: String(raw.title ?? ''),
     description: String(raw.description ?? ''),
     rationale: String(raw.rationale ?? ''),
     confidence: (raw.confidence as ConfidenceLevel) ?? 'low',
+    severity: mapSeverity(raw.severity),
     targetArea: String(raw.target_area ?? ''),
     suggestedChangeType: (raw.suggested_change_type as SuggestionChangeType) ?? 'simplify',
     transformInstruction: String(raw.transform_instruction ?? ''),
+    targetRegion: mapTargetRegion(raw.target_region),
+    status: mapStatus(raw.status),
   }
 }
 

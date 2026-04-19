@@ -13,14 +13,17 @@ import type {
   ConfidenceLevel,
   Insight,
   InsightsResponse,
+  SeverityLevel,
   Suggestion,
+  SuggestionStatus,
 } from '@/types/heatmap'
-import { mapInsightsResponse } from '@/types/heatmap'
+import { mapInsightsResponse, mapSuggestion } from '@/types/heatmap'
 
 interface Props {
   pageId: string
   pagePath: string
   githubUserId: string
+  onHoverRegion?: (sug: Suggestion | null) => void
 }
 
 const TYPE_LABEL: Record<Insight['type'], string> = {
@@ -36,19 +39,31 @@ const CONFIDENCE_TONE: Record<ConfidenceLevel, { dot: string; text: string; labe
   low:    { dot: 'bg-neutral-400', text: 'text-neutral-500', label: 'Low confidence' },
 }
 
+// Severity is visually stronger than confidence because it drives the
+// "how urgently should the user care" decision. Confidence is a
+// qualifier on the observation; severity is the stakes.
+const SEVERITY_STYLE: Record<SeverityLevel, { pill: string; label: string }> = {
+  high:   { pill: 'bg-red-100 text-red-700 border-red-200',       label: 'High severity' },
+  medium: { pill: 'bg-amber-100 text-amber-800 border-amber-200', label: 'Medium severity' },
+  low:    { pill: 'bg-neutral-100 text-neutral-700 border-neutral-200', label: 'Low severity' },
+}
+
 /**
  * Heatmap → AI insights → Apply changes.
  *
- * Generates evidence-based UX recommendations from the page's behavioral
- * data. The user picks which to apply, then we hand the chosen ones off
- * to the existing UI Transformation flow via sessionStorage.
+ * Selection is persisted per-suggestion via
+ * POST /api/heatmap/pages/{pageId}/suggestions/{sid}/status, so a page
+ * refresh restores the user's staged picks. Each card also has a
+ * regenerate button that calls the per-card magic wand endpoint —
+ * useful when a single suggestion isn't compelling but the rest are.
  */
-export default function AIRecommendations({ pageId, pagePath, githubUserId }: Props) {
+export default function AIRecommendations({ pageId, pagePath, githubUserId, onHoverRegion }: Props) {
   const router = useRouter()
   const [data, setData] = useState<InsightsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // One in-flight regenerate per card at most. Keyed by suggestion id.
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
 
   const fetchInsights = useCallback(async (regenerate: boolean) => {
     setLoading(true)
@@ -63,9 +78,6 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
       if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't load recommendations."))
       const next = mapInsightsResponse(await res.json())
       setData(next)
-      // Reset selection when we regenerate — the IDs changed, so old
-      // selections wouldn't map onto the new suggestions anyway.
-      setSelected(new Set())
     } catch (e) {
       setError(humanizeError(e, "We couldn't load recommendations."))
     } finally {
@@ -73,30 +85,87 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
     }
   }, [pageId, githubUserId])
 
-  // Initial load when the selected page changes. We DON'T auto-regenerate
-  // — the backend serves cached results unless ?regenerate=true, so this
-  // is cheap and idempotent.
+  // Initial load when the selected page changes. Cached unless ?regenerate=true.
   useEffect(() => {
     fetchInsights(false)
   }, [fetchInsights])
 
-  const toggle = useCallback((id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  // Optimistic status mutation. Updates local state first, then POSTs — on
+  // failure we surface the error but don't hard-revert, because the typical
+  // cause is a transient network blip and the next load will reconcile.
+  const setStatus = useCallback(async (sugId: string, next: SuggestionStatus) => {
+    setData(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s =>
+          s.id === sugId ? { ...s, status: next } : s
+        ),
+      }
     })
-  }, [])
+    try {
+      const res = await fetch(
+        apiUrl(`/api/heatmap/pages/${pageId}/suggestions/${sugId}/status`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ github_user_id: githubUserId, status: next }),
+        },
+      )
+      if (!res.ok) {
+        setError(await humanizeResponse(res, "We couldn't save that change."))
+      } else {
+        setError(null)
+      }
+    } catch (e) {
+      setError(humanizeError(e, "We couldn't save that change."))
+    }
+  }, [pageId, githubUserId])
 
-  const selectedSuggestions = useMemo<Suggestion[]>(() => {
+  const regenerateOne = useCallback(async (sugId: string) => {
+    setRegeneratingId(sugId)
+    setError(null)
+    try {
+      const res = await fetch(
+        apiUrl(`/api/heatmap/pages/${pageId}/insights/${sugId}/regenerate`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ github_user_id: githubUserId }),
+        },
+      )
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't regenerate that suggestion."))
+      const raw = await res.json() as { suggestions?: Array<Record<string, unknown>> }
+      const nextSuggestions = Array.isArray(raw.suggestions) ? raw.suggestions.map(mapSuggestion) : []
+      setData(prev => (prev ? { ...prev, suggestions: nextSuggestions } : prev))
+    } catch (e) {
+      setError(humanizeError(e, "We couldn't regenerate that suggestion."))
+    } finally {
+      setRegeneratingId(null)
+    }
+  }, [pageId, githubUserId])
+
+  const visibleSuggestions = useMemo(() => {
+    // Rejected cards are filtered out of the main list — they're still in
+    // state (so "Restore rejected" could unhide them) but don't clutter
+    // the panel.
     if (!data) return []
-    return data.suggestions.filter(s => selected.has(s.id))
-  }, [data, selected])
+    return data.suggestions.filter(s => s.status !== 'rejected')
+  }, [data])
+
+  const rejectedCount = useMemo(
+    () => (data?.suggestions ?? []).filter(s => s.status === 'rejected').length,
+    [data],
+  )
+
+  const stagedSuggestions = useMemo<Suggestion[]>(
+    () => visibleSuggestions.filter(s => s.status === 'staged'),
+    [visibleSuggestions],
+  )
 
   const apply = useCallback(() => {
-    if (!selectedSuggestions.length) return
-    const handoff: HandoffSuggestion[] = selectedSuggestions.map(s => ({
+    if (!stagedSuggestions.length) return
+    const handoff: HandoffSuggestion[] = stagedSuggestions.map(s => ({
       id: s.id,
       title: s.title,
       transformInstruction: s.transformInstruction,
@@ -109,7 +178,17 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
       suggestions: handoff,
     })
     router.push('/dashboard/transform')
-  }, [selectedSuggestions, pagePath, router])
+  }, [stagedSuggestions, pagePath, router])
+
+  const restoreRejected = useCallback(() => {
+    if (!data) return
+    // Reset every rejected card back to "none" in parallel. We don't
+    // batch into one API call — the overlay endpoint is one row at a
+    // time and the common case is 0-2 rejected cards.
+    data.suggestions
+      .filter(s => s.status === 'rejected')
+      .forEach(s => { void setStatus(s.id, 'none') })
+  }, [data, setStatus])
 
   // ── Render branches ─────────────────────────────────────────────────
 
@@ -160,20 +239,32 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
     )
   }
 
-  if (data.suggestions.length === 0 && data.insights.length === 0) {
+  if (visibleSuggestions.length === 0 && data.insights.length === 0) {
     return (
       <Section title="AI recommendations" subtitle="Based on how visitors are using this page">
         <div className="rounded-xl border border-black/[0.06] bg-neutral-50 p-4 flex items-center justify-between gap-3">
           <p className="text-[12.5px] text-neutral-600">
-            {data.note || "No high-confidence recommendations yet — the patterns we see don't yet point to a specific issue."}
+            {rejectedCount > 0
+              ? `All ${rejectedCount} suggestion${rejectedCount === 1 ? '' : 's'} rejected.`
+              : data.note || "No high-confidence recommendations yet — the patterns we see don't yet point to a specific issue."}
           </p>
-          <button
-            onClick={() => fetchInsights(true)}
-            disabled={loading}
-            className="rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
-          >
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <div className="flex gap-2">
+            {rejectedCount > 0 && (
+              <button
+                onClick={restoreRejected}
+                className="rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-950 hover:bg-neutral-50"
+              >
+                Restore rejected
+              </button>
+            )}
+            <button
+              onClick={() => fetchInsights(true)}
+              disabled={loading}
+              className="rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
         </div>
       </Section>
     )
@@ -184,13 +275,23 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
       title="AI recommendations"
       subtitle="Based on how visitors are using this page"
       action={(
-        <button
-          onClick={() => fetchInsights(true)}
-          disabled={loading}
-          className="text-[11.5px] font-medium text-neutral-500 transition hover:text-neutral-950 disabled:opacity-50"
-        >
-          {loading ? 'Refreshing…' : data.cached ? 'Regenerate' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-3">
+          {rejectedCount > 0 && (
+            <button
+              onClick={restoreRejected}
+              className="text-[11.5px] font-medium text-neutral-500 transition hover:text-neutral-950"
+            >
+              Restore {rejectedCount} rejected
+            </button>
+          )}
+          <button
+            onClick={() => fetchInsights(true)}
+            disabled={loading}
+            className="text-[11.5px] font-medium text-neutral-500 transition hover:text-neutral-950 disabled:opacity-50"
+          >
+            {loading ? 'Refreshing…' : data.cached ? 'Regenerate all' : 'Refresh'}
+          </button>
+        </div>
       )}
     >
       {data.insights.length > 0 && (
@@ -201,34 +302,37 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
         </div>
       )}
 
-      {data.suggestions.length > 0 && (
+      {visibleSuggestions.length > 0 && (
         <>
           <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
-            Suggested changes ({data.suggestions.length})
+            Suggested changes ({visibleSuggestions.length})
           </p>
           <div className="flex flex-col gap-2.5">
-            {data.suggestions.map(s => (
+            {visibleSuggestions.map(s => (
               <SuggestionCard
                 key={s.id}
                 suggestion={s}
-                selected={selected.has(s.id)}
-                onToggle={() => toggle(s.id)}
+                regenerating={regeneratingId === s.id}
+                onStage={() => setStatus(s.id, s.status === 'staged' ? 'none' : 'staged')}
+                onReject={() => setStatus(s.id, 'rejected')}
+                onRegenerate={() => regenerateOne(s.id)}
+                onHover={(hover) => onHoverRegion?.(hover ? s : null)}
               />
             ))}
           </div>
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-black/[0.06] pt-4">
             <p className="text-[12px] text-neutral-500">
-              {selectedSuggestions.length === 0
-                ? 'Select one or more changes to apply.'
-                : `${selectedSuggestions.length} change${selectedSuggestions.length === 1 ? '' : 's'} ready to apply.`}
+              {stagedSuggestions.length === 0
+                ? 'Stage one or more changes to apply.'
+                : `${stagedSuggestions.length} change${stagedSuggestions.length === 1 ? '' : 's'} staged.`}
             </p>
             <button
               onClick={apply}
-              disabled={selectedSuggestions.length === 0}
+              disabled={stagedSuggestions.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-neutral-950 px-5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
             >
-              Apply selected changes
+              Apply staged changes
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
@@ -236,6 +340,10 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId }: Pr
             </button>
           </div>
         </>
+      )}
+
+      {error && (
+        <p className="mt-3 text-[11.5px] text-amber-700">{error}</p>
       )}
 
       {data.note && (
@@ -276,17 +384,32 @@ function Section({
   )
 }
 
+function SeverityBadge({ severity }: { severity: SeverityLevel }) {
+  const tone = SEVERITY_STYLE[severity]
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone.pill}`}
+      title={tone.label}
+    >
+      {severity} severity
+    </span>
+  )
+}
+
 function InsightRow({ insight }: { insight: Insight }) {
-  const tone = CONFIDENCE_TONE[insight.confidence]
+  const conf = CONFIDENCE_TONE[insight.confidence]
   return (
     <div className="rounded-xl border border-black/[0.06] bg-neutral-50 px-4 py-3">
       <div className="flex items-center gap-2">
-        <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${conf.dot}`} />
         <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
           {TYPE_LABEL[insight.type]}
         </span>
-        <span className={`ml-auto text-[10px] font-medium ${tone.text}`} title={tone.label}>
-          {insight.confidence}
+        <span className="ml-auto flex items-center gap-2">
+          <SeverityBadge severity={insight.severity} />
+          <span className={`text-[10px] font-medium ${conf.text}`} title={conf.label}>
+            {insight.confidence}
+          </span>
         </span>
       </div>
       <p className="mt-1.5 text-[13px] font-semibold text-neutral-950">{insight.title}</p>
@@ -300,49 +423,98 @@ function InsightRow({ insight }: { insight: Insight }) {
 
 function SuggestionCard({
   suggestion,
-  selected,
-  onToggle,
+  regenerating,
+  onStage,
+  onReject,
+  onRegenerate,
+  onHover,
 }: {
   suggestion: Suggestion
-  selected: boolean
-  onToggle: () => void
+  regenerating: boolean
+  onStage: () => void
+  onReject: () => void
+  onRegenerate: () => void
+  onHover: (hover: boolean) => void
 }) {
-  const tone = CONFIDENCE_TONE[suggestion.confidence]
+  const conf = CONFIDENCE_TONE[suggestion.confidence]
+  const staged = suggestion.status === 'staged'
   return (
-    <label
-      className={`flex cursor-pointer items-start gap-3 rounded-xl border bg-white p-4 transition hover:border-black/[0.18] ${
-        selected ? 'border-neutral-950 bg-neutral-50/60 shadow-sm' : 'border-black/[0.07]'
+    <div
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`rounded-xl border bg-white p-4 transition ${
+        staged ? 'border-neutral-950 bg-neutral-50/60 shadow-sm' : 'border-black/[0.07] hover:border-black/[0.18]'
       }`}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggle}
-        className="mt-0.5 h-4 w-4 cursor-pointer accent-neutral-950"
-        aria-label={`Select: ${suggestion.title}`}
-      />
-      <div className="flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[13.5px] font-semibold text-neutral-950">{suggestion.title}</h3>
-          <span className={`flex items-center gap-1 text-[10px] font-medium ${tone.text}`} title={tone.label}>
-            <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-            {suggestion.confidence}
-          </span>
-        </div>
-        <p className="mt-1 text-[12px] text-neutral-600">{suggestion.description}</p>
-        <p className="mt-2 text-[11.5px] text-neutral-500">
-          <span className="font-semibold text-neutral-700">Why:</span> {suggestion.rationale}
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-700">
-            {suggestion.targetArea}
-          </span>
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
-            {suggestion.suggestedChangeType.replace(/_/g, ' ')}
-          </span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <SeverityBadge severity={suggestion.severity} />
+            <span className={`flex items-center gap-1 text-[10px] font-medium ${conf.text}`} title={conf.label}>
+              <span className={`h-1.5 w-1.5 rounded-full ${conf.dot}`} />
+              {suggestion.confidence} confidence
+            </span>
+          </div>
+          <h3 className="mt-1.5 text-[13.5px] font-semibold text-neutral-950">{suggestion.title}</h3>
+          <p className="mt-1 text-[12px] text-neutral-600">{suggestion.description}</p>
+          <p className="mt-2 text-[11.5px] text-neutral-500">
+            <span className="font-semibold text-neutral-700">Why:</span> {suggestion.rationale}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-700">
+              {suggestion.targetArea}
+            </span>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
+              {suggestion.suggestedChangeType.replace(/_/g, ' ')}
+            </span>
+          </div>
         </div>
       </div>
-    </label>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-black/[0.04] pt-3">
+        <button
+          onClick={onStage}
+          className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-[11.5px] font-semibold transition ${
+            staged
+              ? 'bg-neutral-950 text-white hover:bg-neutral-800'
+              : 'border border-black/[0.12] bg-white text-neutral-950 hover:bg-neutral-50'
+          }`}
+        >
+          {staged ? 'Staged' : 'Stage'}
+        </button>
+        <button
+          onClick={onReject}
+          className="inline-flex items-center justify-center rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-600 transition hover:text-neutral-950 hover:bg-neutral-50"
+        >
+          Reject
+        </button>
+        <button
+          onClick={onRegenerate}
+          disabled={regenerating}
+          title="Ask for an alternative strategy"
+          className="ml-auto inline-flex items-center justify-center gap-1 rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-600 transition hover:text-neutral-950 hover:bg-neutral-50 disabled:opacity-50"
+        >
+          {regenerating ? <Spinner /> : <WandIcon />}
+          {regenerating ? 'Rethinking…' : 'Magic wand'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WandIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M15 4V2" />
+      <path d="M15 16v-2" />
+      <path d="M8 9h2" />
+      <path d="M20 9h2" />
+      <path d="M17.8 11.8 19 13" />
+      <path d="M15 9h0" />
+      <path d="M17.8 6.2 19 5" />
+      <path d="m3 21 9-9" />
+      <path d="M12.2 6.2 11 5" />
+    </svg>
   )
 }
 

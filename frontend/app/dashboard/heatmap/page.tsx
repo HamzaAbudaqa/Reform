@@ -12,7 +12,7 @@ import StatsHeader from '@/components/heatmap/StatsHeader'
 import VersionComparison from '@/components/heatmap/VersionComparison'
 import { apiUrl } from '@/lib/api'
 import { getSelectedRepo } from '@/lib/selectedRepo'
-import type { HeatmapData, HeatmapDevice, HeatmapLayer, HeatmapPage, HeatmapSite } from '@/types/heatmap'
+import type { HeatmapData, HeatmapDevice, HeatmapLayer, HeatmapPage, HeatmapSite, Suggestion } from '@/types/heatmap'
 import { mapHeatmapData, mapPage, mapSite } from '@/types/heatmap'
 
 const POLL_INTERVAL_MS = 10_000
@@ -39,6 +39,7 @@ function HeatmapPageInner() {
   const [device, setDevice] = useState<HeatmapDevice>('all')
   const [days, setDays] = useState<number>(7)
   const [loadingHeatmap, setLoadingHeatmap] = useState(false)
+  const [hoveredSuggestion, setHoveredSuggestion] = useState<Suggestion | null>(null)
 
   const githubUserId = session?.githubId ?? ''
   const githubUsername = session?.githubUsername ?? ''
@@ -241,6 +242,7 @@ function HeatmapPageInner() {
                 screenshotUrl={selectedPage.screenshotUrl}
                 buckets={heatmap?.buckets ?? []}
                 layer={layer}
+                highlightRegion={hoveredSuggestion?.targetRegion ?? null}
               />
               <div className="flex items-center gap-2 mt-3 text-[11px] text-neutral-500">
                 <span>Page screenshot</span>
@@ -272,6 +274,7 @@ function HeatmapPageInner() {
           pageId={selectedPage.id}
           pagePath={selectedPage.path}
           githubUserId={githubUserId}
+          onHoverRegion={setHoveredSuggestion}
         />
       )}
     </div>
