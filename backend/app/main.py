@@ -90,7 +90,15 @@ if not os.environ.get("ALLOWED_ORIGINS"):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _allowed_origins],
-    allow_credentials=True,
+    # Dashboard auth uses NextAuth tokens passed in request bodies/headers,
+    # not cookies — `credentials: 'include'` is never used anywhere in the
+    # frontend. Keeping this `True` would make Starlette inject
+    # `Access-Control-Allow-Credentials: true` into every response, and on
+    # the public tracker endpoints (which legitimately send Allow-Origin: *)
+    # that combination is invalid per CORS spec — browsers reject the POST
+    # even though the preflight succeeded. Setting False eliminates the
+    # conflict at the source.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -115,7 +123,10 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
     headers = {}
     if origin in [o.strip() for o in _allowed_origins]:
         headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
+        # Match the global CORSMiddleware setting — credentials are not used
+        # in this app, and `true` here would re-introduce the same conflict
+        # the global config was just fixed to avoid.
+        headers["Access-Control-Allow-Credentials"] = "false"
     _logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
