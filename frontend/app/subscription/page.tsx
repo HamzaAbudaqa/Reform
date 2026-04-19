@@ -6,17 +6,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
-import InteractiveBackground from '@/components/landing/InteractiveBackground'
 import { apiUrl } from '@/lib/api'
 import { useSubscription } from '@/lib/useSubscription'
 import { parseResponseError } from '@/components/dashboard/GateError'
 import { BILLING_ENABLED } from '@/lib/billing'
-
-const CHECK_ICON = (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#aab4ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-)
 
 interface Plan {
   name: string
@@ -113,70 +106,54 @@ function PlanCard({ plan, onCheckout, loading, currentPlan }: { plan: Plan; onCh
 
   return (
     <div
-      className="relative flex flex-col rounded-[30px] p-6 sm:p-7"
-      style={{
-        background: isHighlighted
-          ? 'linear-gradient(180deg, rgba(124,140,255,0.16) 0%, rgba(124,140,255,0.05) 100%)'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
-        border: isHighlighted
-          ? '1px solid rgba(170,180,255,0.24)'
-          : '1px solid rgba(255,255,255,0.08)',
-        boxShadow: isHighlighted
-          ? '0 24px 70px rgba(86,102,245,0.18)'
-          : '0 18px 50px rgba(0,0,0,0.24)',
-      }}
+      className={`relative flex flex-col rounded-[24px] p-6 sm:p-7 bg-white transition ${
+        isHighlighted ? 'border-neutral-950 shadow-[0_8px_28px_rgba(0,0,0,0.06)]' : 'border-black/[0.07]'
+      }`}
+      style={{ borderWidth: 1, borderStyle: 'solid' }}
     >
       {plan.badge && (
-        <div
-          className="absolute -top-3 left-6 text-[10px] font-semibold uppercase tracking-[0.22em] px-3 py-1 rounded-full"
-          style={{
-            background: 'linear-gradient(135deg, #aab4ff, #7c8cff)',
-            color: '#09111d',
-          }}
-        >
+        <div className="absolute -top-3 left-6 rounded-full bg-neutral-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
           {plan.badge}
         </div>
       )}
 
-      <div className="mb-7">
-        <div className="mono text-[11px] mb-3" style={{ color: isHighlighted ? 'rgba(232,236,255,0.78)' : 'rgba(255,255,255,0.34)' }}>
+      <div className="mb-6">
+        <p className="mono text-[11px] mb-3 uppercase tracking-wider font-semibold text-neutral-400">
           {plan.name}
-        </div>
+        </p>
         <div className="flex items-end gap-1 mb-3">
           <span
-            className="font-bold text-white"
+            className="font-bold text-neutral-950"
             style={{
               fontSize: plan.price === 'Custom' ? '30px' : '42px',
-              letterSpacing: '-0.05em',
+              letterSpacing: '-0.04em',
               lineHeight: 1,
             }}
           >
             {plan.price}
           </span>
           {plan.period && (
-            <span style={{ color: 'rgba(255,255,255,0.34)', fontSize: '14px' }}>
-              {plan.period}
-            </span>
+            <span className="text-neutral-400 text-[14px]">{plan.period}</span>
           )}
         </div>
-        <p style={{ color: 'rgba(255,255,255,0.46)', fontSize: '14px', lineHeight: '1.75' }}>
+        <p className="text-[13.5px] leading-relaxed text-neutral-600">
           {plan.description}
         </p>
       </div>
 
-      <div className="mb-7 border-t pt-6" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <ul className="flex flex-col gap-3.5">
+      <div className="mb-6 border-t border-black/[0.06] pt-5">
+        <ul className="flex flex-col gap-3">
           {plan.features.map((feature, index) => (
-            <li key={feature} className="flex items-start gap-3">
-              <span className="flex-shrink-0 mt-0.5">{CHECK_ICON}</span>
+            <li key={feature} className="flex items-start gap-2.5">
+              <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
               <div>
-                <span style={{ color: 'rgba(255,255,255,0.68)', fontSize: '13px', lineHeight: '1.55' }}>
-                  {feature}
-                </span>
+                <span className="text-[13px] leading-snug text-neutral-700">{feature}</span>
                 {index === 0 && (
-                  <div className="mono text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.24)' }}>
-                    included in plan baseline
-                  </div>
+                  <p className="mono text-[10px] mt-0.5 text-neutral-400">included in plan baseline</p>
                 )}
               </div>
             </li>
@@ -185,17 +162,24 @@ function PlanCard({ plan, onCheckout, loading, currentPlan }: { plan: Plan; onCh
       </div>
 
       <button
-        className={`w-full py-3 rounded-2xl text-sm font-semibold transition-all duration-200 ${
-          isCurrentPlan ? 'btn-ghost opacity-60 cursor-default' : isHighlighted ? 'btn-primary' : 'btn-ghost'
-        }`}
+        type="button"
         disabled={loading || isCurrentPlan}
         onClick={() => {
           if (plan.stripe_price_id && !isCurrentPlan) {
             onCheckout(plan.stripe_price_id)
+          } else if (!plan.stripe_price_id && plan.cta === 'Contact Sales') {
+            window.location.href = 'mailto:hamza.daqa@gmail.com?subject=Reform%20Enterprise'
           }
         }}
+        className={
+          isCurrentPlan
+            ? 'mt-auto w-full rounded-full border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-semibold text-emerald-700 cursor-default'
+            : isHighlighted
+              ? 'mt-auto w-full rounded-full bg-neutral-950 px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50'
+              : 'mt-auto w-full rounded-full border border-black/[0.12] bg-white px-4 py-3 text-[13px] font-semibold text-neutral-950 transition hover:bg-neutral-50 disabled:opacity-50'
+        }
       >
-        {isCurrentPlan ? 'Current Plan' : loading ? 'Redirecting...' : plan.cta}
+        {isCurrentPlan ? 'Current Plan' : loading ? 'Redirecting…' : plan.cta}
       </button>
     </div>
   )
@@ -211,7 +195,7 @@ export default function SubscriptionPage() {
   // Note: this page used to hard-redirect to /dashboard whenever
   // BILLING_ENABLED was false, which broke every "View Plans" link in
   // the dashboard. Now we always render the plans so users can see what
-  // tiers exist; the checkout buttons themselves will surface a friendly
+  // tiers exist; the checkout buttons themselves surface a friendly
   // "billing isn't enabled yet" message when the env flag is off.
 
   async function startCheckout(priceId: string) {
@@ -273,72 +257,95 @@ export default function SubscriptionPage() {
   }
 
   return (
-    <main className="app-shell min-h-screen overflow-x-hidden">
-      <InteractiveBackground />
-      <div className="relative" style={{ zIndex: 1 }}>
-        <Navbar />
+    <div className="min-h-screen flex flex-col bg-white text-neutral-900">
+      <Navbar />
 
-        <section className="pt-28 sm:pt-36 pb-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="surface-panel rounded-[34px] overflow-hidden">
-              <div className="grid lg:grid-cols-[0.9fr_1.1fr] border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                <div className="p-8 sm:p-10 lg:p-12">
-                  <div className="eyebrow mb-5">Pricing</div>
-                  <h1 className="section-title text-[clamp(40px,7vw,72px)] font-extrabold text-white mb-6">
-                    Choose the plan that matches your redesign pace.
-                  </h1>
-                  <p className="max-w-lg" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.85, fontSize: '16px' }}>
-                    Start free, then scale up when you need more scans, more repositories, and deeper collaboration.
-                    Every plan keeps the same core promise: better frontend quality without rewriting your product.
-                  </p>
-                </div>
-
-                <div className="p-8 sm:p-10 lg:p-12 flex flex-col justify-center" style={{ background: 'rgba(124,140,255,0.05)' }}>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {[
-                      ['Included', 'Competitor analysis, UX scoring, and frontend transformation workflows'],
-                      ['Deployment style', 'Built for developers who want a faster path from critique to polish'],
-                    ].map(([label, body]) => (
-                      <div key={label} className="surface-interactive rounded-[28px] p-5">
-                        <div className="mono text-[11px] mb-2" style={{ color: 'rgba(255,255,255,0.28)' }}>{label}</div>
-                        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.62)', lineHeight: 1.75 }}>{body}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 sm:p-8 lg:p-10">
-                {error && (
-                  <div className="mb-5 p-4 rounded-2xl text-sm" style={{ background: 'rgba(255,80,80,0.12)', color: '#ff8080', border: '1px solid rgba(255,80,80,0.2)' }}>
-                    {error}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                  {plans.map((plan) => (
-                    <PlanCard key={plan.name} plan={plan} onCheckout={handleCheckout} loading={loading} currentPlan={subscription.plan} />
-                  ))}
-                </div>
-
-                <div className="mt-10 rounded-[28px] p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div>
-                    <div className="eyebrow mb-2">Security and access</div>
-                    <p className="text-sm" style={{ color: 'rgba(255,255,255,0.46)', lineHeight: 1.8 }}>
-                      All plans include HTTPS encryption and secure GitHub OAuth. You can cancel anytime.
-                    </p>
-                  </div>
-                  <Link href="/" className="btn-ghost inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-medium">
-                    Back to home
-                  </Link>
-                </div>
-              </div>
+      <main className="flex-1 pt-24 sm:pt-28 pb-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          {/* Hero */}
+          <header className="mb-12 lg:mb-16 grid lg:grid-cols-[1fr_auto] gap-8 items-end">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.16em] font-semibold text-neutral-400 mb-3">
+                Pricing
+              </p>
+              <h1
+                className="text-[clamp(36px,6vw,60px)] font-bold text-neutral-950 leading-[1.05]"
+                style={{ letterSpacing: '-0.03em' }}
+              >
+                Choose the plan that matches your redesign pace.
+              </h1>
+              <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-neutral-600">
+                Start free, then scale up when you need more scans, more repositories, and deeper
+                collaboration. Every plan keeps the same core promise: better frontend quality
+                without rewriting your product.
+              </p>
             </div>
-          </div>
-        </section>
 
-        <Footer />
-      </div>
-    </main>
+            <div className="grid sm:grid-cols-2 gap-3 lg:max-w-md">
+              <InfoCard label="Included">
+                Competitor analysis, UX scoring, and frontend transformation workflows.
+              </InfoCard>
+              <InfoCard label="Deployment style">
+                Built for developers who want a faster path from critique to polish.
+              </InfoCard>
+            </div>
+          </header>
+
+          {/* Error banner */}
+          {error && (
+            <div
+              className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+
+          {/* Plan grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {plans.map((plan) => (
+              <PlanCard
+                key={plan.name}
+                plan={plan}
+                onCheckout={handleCheckout}
+                loading={loading}
+                currentPlan={subscription.plan}
+              />
+            ))}
+          </div>
+
+          {/* Footer note */}
+          <div className="mt-10 flex flex-col gap-4 rounded-[24px] border border-black/[0.07] bg-neutral-50 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-neutral-400 mb-1.5">
+                Security and access
+              </p>
+              <p className="text-[13px] text-neutral-600 leading-relaxed">
+                All plans include HTTPS encryption and secure GitHub OAuth. You can cancel anytime.
+              </p>
+            </div>
+            <Link
+              href="/"
+              className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-full border border-black/[0.12] bg-white px-4 py-2 text-[12.5px] font-medium text-neutral-950 transition hover:bg-neutral-50"
+            >
+              Back to home
+            </Link>
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}
+
+function InfoCard({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-black/[0.07] bg-neutral-50 p-4">
+      <p className="mono text-[10.5px] mb-1.5 uppercase tracking-wider font-semibold text-neutral-400">
+        {label}
+      </p>
+      <p className="text-[12.5px] leading-relaxed text-neutral-700">{children}</p>
+    </div>
   )
 }

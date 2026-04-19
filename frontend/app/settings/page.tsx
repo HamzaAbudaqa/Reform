@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
-import InteractiveBackground from '@/components/landing/InteractiveBackground'
 import { useSubscription } from '@/lib/useSubscription'
 import { apiUrl } from '@/lib/api'
 import { BILLING_ENABLED } from '@/lib/billing'
@@ -43,182 +42,179 @@ export default function SettingsPage() {
 
   if (status !== 'authenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#05070c' }}>
-        <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid rgba(168,85,247,0.2)', borderTopColor: '#a855f7' }} />
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div
+          className="h-5 w-5 rounded-full"
+          style={{
+            border: '2px solid rgba(0,0,0,0.12)',
+            borderTopColor: '#0a0a0a',
+            animation: 'spin 0.9s linear infinite',
+          }}
+        />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
   return (
-    <main className="app-shell min-h-screen overflow-x-hidden">
-      <InteractiveBackground />
-      <div className="relative" style={{ zIndex: 1 }}>
-        <Navbar />
+    <div className="min-h-screen flex flex-col bg-white text-neutral-900">
+      <Navbar />
 
-        <section className="pt-28 sm:pt-36 pb-24">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            <div className="mb-10">
-              <div className="eyebrow mb-3">Settings</div>
-              <h1 className="text-[clamp(28px,5vw,40px)] font-bold text-white" style={{ letterSpacing: '-0.03em' }}>
-                Preferences
-              </h1>
-            </div>
+      <main className="flex-1 pt-24 sm:pt-28 pb-20">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6">
+          <div className="mb-10">
+            <p className="text-[11px] uppercase tracking-[0.16em] font-semibold text-neutral-400 mb-2">
+              Settings
+            </p>
+            <h1 className="text-[clamp(28px,5vw,40px)] font-bold text-neutral-950" style={{ letterSpacing: '-0.03em' }}>
+              Preferences
+            </h1>
+          </div>
 
-            {/* Subscription & Billing */}
-            {BILLING_ENABLED && (
-              <SettingsSection title="Subscription & Billing">
+          {/* Subscription & Billing */}
+          {BILLING_ENABLED && (
+            <SettingsSection title="Subscription & Billing">
+              <SettingsRow
+                label="Current Plan"
+                value={
+                  <span
+                    className="text-[12px] font-semibold px-2.5 py-1 rounded-lg"
+                    style={
+                      isFree
+                        ? { background: 'rgba(0,0,0,0.05)', color: '#525252', border: '1px solid rgba(0,0,0,0.08)' }
+                        : { background: 'rgba(34,197,94,0.1)', color: '#15803d', border: '1px solid rgba(34,197,94,0.25)' }
+                    }
+                  >
+                    {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
+                  </span>
+                }
+                action={
+                  <button
+                    onClick={() => router.push('/subscription')}
+                    className="text-[12px] font-medium text-neutral-500 transition hover:text-neutral-950"
+                  >
+                    {isFree ? 'Upgrade' : 'Change plan'}
+                  </button>
+                }
+              />
+              {!isFree && (
                 <SettingsRow
-                  label="Current Plan"
+                  label="Billing"
                   value={
-                    <span
-                      className="text-[12px] font-semibold px-2.5 py-1 rounded-lg"
-                      style={{
-                        background: isFree ? 'rgba(255,255,255,0.06)' : 'rgba(124,140,255,0.15)',
-                        color: isFree ? 'rgba(255,255,255,0.5)' : '#aab4ff',
-                        border: isFree ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(170,180,255,0.2)',
-                      }}
-                    >
-                      {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)}
-                    </span>
+                    <span className="text-[13px] text-neutral-500">Managed via Stripe</span>
                   }
                   action={
                     <button
-                      onClick={() => router.push('/subscription')}
-                      className="text-[12px] font-medium transition-colors"
-                      style={{ color: '#aab4ff' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = '#c4cbff')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = '#aab4ff')}
+                      onClick={openBillingPortal}
+                      disabled={portalLoading}
+                      className="text-[12px] font-medium text-neutral-500 transition hover:text-neutral-950 disabled:opacity-50"
                     >
-                      {isFree ? 'Upgrade' : 'Change plan'}
+                      {portalLoading ? 'Opening…' : 'Manage'}
                     </button>
                   }
                 />
-                {!isFree && (
-                  <SettingsRow
-                    label="Billing"
-                    value={
-                      <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                        Managed via Stripe
-                      </span>
-                    }
-                    action={
-                      <button
-                        onClick={openBillingPortal}
-                        disabled={portalLoading}
-                        className="text-[12px] font-medium transition-colors disabled:opacity-50"
-                        style={{ color: '#aab4ff' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = '#c4cbff')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = '#aab4ff')}
-                      >
-                        {portalLoading ? 'Opening...' : 'Manage'}
-                      </button>
-                    }
-                  />
-                )}
-                {subscription.current_period_end && (
-                  <SettingsRow
-                    label="Next billing date"
-                    value={
-                      <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                        {new Date(subscription.current_period_end).toLocaleDateString('en-US', {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </span>
-                    }
-                  />
-                )}
-              </SettingsSection>
-            )}
-
-            {/* Connected Account */}
-            <SettingsSection title="Connected Account">
-              <SettingsRow
-                label="GitHub"
-                value={
-                  <div className="flex items-center gap-2">
-                    {session.user?.image && (
-                      <img src={session.user.image} alt="" className="w-5 h-5 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.1)' }} />
-                    )}
-                    <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                      {session.githubUsername ? `@${session.githubUsername}` : session.user?.name || 'Connected'}
-                    </span>
-                  </div>
-                }
-              />
-              {session.user?.email && (
+              )}
+              {subscription.current_period_end && (
                 <SettingsRow
-                  label="Email"
+                  label="Next billing date"
                   value={
-                    <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      {session.user.email}
+                    <span className="text-[13px] text-neutral-500">
+                      {new Date(subscription.current_period_end).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
                     </span>
                   }
                 />
               )}
             </SettingsSection>
+          )}
 
-            {/* Danger Zone */}
-            <SettingsSection title="Session">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    Sign out
-                  </div>
-                  <div className="text-[12px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    End your current session on this device.
-                  </div>
+          {/* Connected Account */}
+          <SettingsSection title="Connected Account">
+            <SettingsRow
+              label="GitHub"
+              value={
+                <div className="flex items-center gap-2">
+                  {session.user?.image && (
+                    <img
+                      src={session.user.image}
+                      alt=""
+                      className="w-5 h-5 rounded-full border border-black/[0.08]"
+                    />
+                  )}
+                  <span className="text-[13px] text-neutral-700">
+                    {session.githubUsername ? `@${session.githubUsername}` : session.user?.name || 'Connected'}
+                  </span>
                 </div>
-                <button
-                  onClick={() => signOut({ callbackUrl: '/' })}
-                  className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all duration-150"
-                  style={{
-                    color: 'rgba(255,100,100,0.8)',
-                    background: 'rgba(255,80,80,0.06)',
-                    border: '1px solid rgba(255,80,80,0.12)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,80,80,0.12)'
-                    e.currentTarget.style.borderColor = 'rgba(255,80,80,0.2)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,80,80,0.06)'
-                    e.currentTarget.style.borderColor = 'rgba(255,80,80,0.12)'
-                  }}
-                >
-                  Sign Out
-                </button>
-              </div>
-            </SettingsSection>
-          </div>
-        </section>
+              }
+            />
+            {session.user?.email && (
+              <SettingsRow
+                label="Email"
+                value={
+                  <span className="text-[13px] text-neutral-500">
+                    {session.user.email}
+                  </span>
+                }
+              />
+            )}
+          </SettingsSection>
 
-        <Footer />
-      </div>
-    </main>
+          {/* Session */}
+          <SettingsSection title="Session">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[13px] font-medium text-neutral-900">Sign out</div>
+                <div className="text-[12px] mt-0.5 text-neutral-500">
+                  End your current session on this device.
+                </div>
+              </div>
+              <button
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="rounded-full px-4 py-2 text-[12px] font-medium transition"
+                style={{
+                  color: '#dc2626',
+                  background: 'rgba(220,38,38,0.06)',
+                  border: '1px solid rgba(220,38,38,0.18)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(220,38,38,0.12)'
+                  e.currentTarget.style.borderColor = 'rgba(220,38,38,0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(220,38,38,0.06)'
+                  e.currentTarget.style.borderColor = 'rgba(220,38,38,0.18)'
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
+          </SettingsSection>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
   )
 }
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="surface-panel rounded-[24px] p-6 sm:p-8 mb-5">
-      <div className="mono text-[11px] mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+    <section className="mb-5 rounded-[24px] border border-black/[0.07] bg-white p-6 sm:p-8 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+      <p className="mono text-[11px] mb-5 text-neutral-400 uppercase tracking-wider font-semibold">
         {title}
-      </div>
-      <div className="space-y-4">
-        {children}
-      </div>
-    </div>
+      </p>
+      <div className="space-y-4">{children}</div>
+    </section>
   )
 }
 
 function SettingsRow({ label, value, action }: { label: string; value: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <div className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        {label}
-      </div>
+    <div className="flex items-center justify-between gap-4 py-1">
+      <div className="text-[13px] font-medium text-neutral-700">{label}</div>
       <div className="flex items-center gap-4">
         {value}
         {action}
