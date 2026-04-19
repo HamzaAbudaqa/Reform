@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import AIRecommendations from '@/components/heatmap/AIRecommendations'
 import HeatmapCanvas from '@/components/heatmap/HeatmapCanvas'
 import HeatmapControls from '@/components/heatmap/HeatmapControls'
 import HeatmapSetup from '@/components/heatmap/HeatmapSetup'
@@ -314,6 +315,14 @@ function HeatmapPageInner() {
       </div>
 
       <VersionComparison siteId={site.id} githubUserId={githubUserId} />
+
+      {selectedPage && (
+        <AIRecommendations
+          pageId={selectedPage.id}
+          pagePath={selectedPage.path}
+          githubUserId={githubUserId}
+        />
+      )}
     </div>
   )
 }

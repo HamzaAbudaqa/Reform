@@ -172,3 +172,52 @@ class EventSummary(BaseModel):
     latest_event_at: str | None = None
     latest_viewport_class: str | None = None       # "desktop" | "tablet" | "mobile"
     latest_browser_label: str | None = None        # "Chrome on macOS", best-effort UA parse
+
+
+# ─── AI insights & suggestions ─────────────────────────────────────────
+
+InsightType = Literal["rage_click", "scroll_depth", "cta_prominence", "navigation"]
+SuggestionChangeType = Literal[
+    "make_clickable", "move_higher", "increase_contrast",
+    "enlarge", "reposition", "simplify", "clarify_label",
+    "shorten", "add_cta", "add_affordance",
+]
+ConfidenceLevel = Literal["low", "medium", "high"]
+
+
+class Insight(BaseModel):
+    """A single observation about user behavior on the page."""
+    id: str
+    type: InsightType
+    title: str
+    summary: str
+    evidence: str
+    confidence: ConfidenceLevel
+
+
+class Suggestion(BaseModel):
+    """A concrete UI change the user can apply."""
+    id: str
+    title: str
+    description: str
+    rationale: str
+    confidence: ConfidenceLevel
+    target_area: str
+    suggested_change_type: SuggestionChangeType
+    # Compact instruction for the transformation engine — written so it
+    # makes sense without further context, e.g. "Make the pricing cards
+    # clickable so the entire card area navigates to /pricing/<plan>".
+    transform_instruction: str
+
+
+class InsightsResponse(BaseModel):
+    has_data: bool = True
+    still_collecting: bool = False
+    session_count: int = 0
+    threshold: int = 10
+    page_path: str = ""
+    generated_at: str | None = None
+    cached: bool = False
+    insights: list[Insight] = Field(default_factory=list)
+    suggestions: list[Suggestion] = Field(default_factory=list)
+    note: str = ""

@@ -133,3 +133,16 @@ async def create_tables():
                 f"ALTER TABLE heatmap_sites ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
             ))
             _log.info("Ensured column heatmap_sites.%s (%s)", col_name, col_type)
+
+        # Heatmap page insights cache — added when the AI recommendations
+        # surface shipped. Existing rows pick up NULL which the service
+        # treats as "no cached result, generate fresh".
+        _heatmap_page_migrations = [
+            ("latest_insights_json", "JSONB"),
+            ("latest_insights_at", "TIMESTAMPTZ"),
+        ]
+        for col_name, col_type in _heatmap_page_migrations:
+            await conn.execute(text(
+                f"ALTER TABLE heatmap_pages ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+            ))
+            _log.info("Ensured column heatmap_pages.%s (%s)", col_name, col_type)

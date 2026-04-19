@@ -54,6 +54,12 @@ from app.schemas.heatmap import (
     VerifySiteResponse,
 )
 from app.services.heatmap_ingest import process_events, viewport_class
+from app.services.heatmap_insights import (
+    MIN_SESSIONS_FOR_INSIGHTS,
+    gather_page_evidence,
+    generate_insights,
+    is_cache_fresh,
+)
 from app.services.heatmap_installer import install_tracking_via_github
 from app.services.heatmap_snippet import api_base_from_request, build_snippet, default_api_base, serve_tracker
 from app.services.s3_client import presign_screenshot_url, upload_screenshot
@@ -885,6 +891,101 @@ async def version_comparison(
 
 
 # ─── Debug / triangulation endpoint ────────────────────────────────────
+
+
+# ─── AI insights ───────────────────────────────────────────────────────
+
+
+@router.post("/pages/{page_id}/insights")
+async def page_insights(
+    page_id: str,
+    github_user_id: str,
+    regenerate: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate (or return cached) AI UX recommendations for a page.
+
+    Cache: results are persisted on the HeatmapPage row and returned
+    without an AI call when fresher than `INSIGHTS_TTL_SECONDS`. Pass
+    `?regenerate=true` to force a fresh call.
+
+    Low-data gate: if the site has fewer than `MIN_SESSIONS_FOR_INSIGHTS`
+    sessions, returns `{still_collecting: true}` immediately — no AI
+    call, no fabricated suggestions.
+    """
+    page, site = await _load_page_scoped(db, page_id, github_user_id)
+
+    # Site-wide session count — used as the gate. A page with zero
+    # sessions of its own can still be analyzed if the site overall has
+    # traffic, but if NOTHING is happening anywhere, don't bother.
+    sess_count = (
+        await db.execute(
+            select(func.count()).select_from(HeatmapSession).where(
+                HeatmapSession.site_id == site.id,
+            )
+        )
+    ).scalar() or 0
+
+    if sess_count < MIN_SESSIONS_FOR_INSIGHTS:
+        return {
+            "has_data": False,
+            "still_collecting": True,
+            "session_count": int(sess_count),
+            "threshold": MIN_SESSIONS_FOR_INSIGHTS,
+            "page_path": page.path,
+            "generated_at": None,
+            "cached": False,
+            "insights": [],
+            "suggestions": [],
+            "note": (
+                "We're still collecting enough visitor data to generate "
+                "confident recommendations. Come back once a few more "
+                "sessions have hit your site."
+            ),
+        }
+
+    # Cache hit — save a Claude call.
+    if not regenerate and is_cache_fresh(page.latest_insights_at) and page.latest_insights_json:
+        cached = page.latest_insights_json
+        return {
+            "has_data": True,
+            "still_collecting": False,
+            "session_count": int(sess_count),
+            "threshold": MIN_SESSIONS_FOR_INSIGHTS,
+            "page_path": page.path,
+            "generated_at": page.latest_insights_at.isoformat() if page.latest_insights_at else None,
+            "cached": True,
+            "insights": cached.get("insights", []),
+            "suggestions": cached.get("suggestions", []),
+            "note": cached.get("note", ""),
+        }
+
+    screenshot_url = (
+        presign_screenshot_url(page.screenshot_key) if page.screenshot_key else None
+    )
+    evidence = await gather_page_evidence(db, page, site.id, screenshot_url=screenshot_url)
+    result = await generate_insights(evidence)
+
+    now = datetime.now(timezone.utc)
+    page.latest_insights_json = {
+        "insights": result.get("insights", []),
+        "suggestions": result.get("suggestions", []),
+        "note": result.get("note", ""),
+    }
+    page.latest_insights_at = now
+
+    return {
+        "has_data": True,
+        "still_collecting": False,
+        "session_count": int(sess_count),
+        "threshold": MIN_SESSIONS_FOR_INSIGHTS,
+        "page_path": page.path,
+        "generated_at": now.isoformat(),
+        "cached": False,
+        "insights": result.get("insights", []),
+        "suggestions": result.get("suggestions", []),
+        "note": result.get("note", ""),
+    }
 
 
 @router.get("/sites/{site_id}/debug")

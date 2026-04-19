@@ -206,6 +206,91 @@ export function mapVersionComparison(raw: Record<string, unknown>): VersionCompa
   }
 }
 
+// ── AI insights & suggestions ───────────────────────────────────────────
+
+export type InsightType = 'rage_click' | 'scroll_depth' | 'cta_prominence' | 'navigation'
+export type ConfidenceLevel = 'low' | 'medium' | 'high'
+export type SuggestionChangeType =
+  | 'make_clickable' | 'move_higher' | 'increase_contrast'
+  | 'enlarge' | 'reposition' | 'simplify' | 'clarify_label'
+  | 'shorten' | 'add_cta' | 'add_affordance'
+
+export interface Insight {
+  id: string
+  type: InsightType
+  title: string
+  summary: string
+  evidence: string
+  confidence: ConfidenceLevel
+}
+
+export interface Suggestion {
+  id: string
+  title: string
+  description: string
+  rationale: string
+  confidence: ConfidenceLevel
+  targetArea: string
+  suggestedChangeType: SuggestionChangeType
+  transformInstruction: string
+}
+
+export interface InsightsResponse {
+  hasData: boolean
+  stillCollecting: boolean
+  sessionCount: number
+  threshold: number
+  pagePath: string
+  generatedAt: string | null
+  cached: boolean
+  insights: Insight[]
+  suggestions: Suggestion[]
+  note: string
+}
+
+function mapInsight(raw: Record<string, unknown>): Insight {
+  return {
+    id: String(raw.id ?? ''),
+    type: (raw.type as InsightType) ?? 'rage_click',
+    title: String(raw.title ?? ''),
+    summary: String(raw.summary ?? ''),
+    evidence: String(raw.evidence ?? ''),
+    confidence: (raw.confidence as ConfidenceLevel) ?? 'low',
+  }
+}
+
+function mapSuggestion(raw: Record<string, unknown>): Suggestion {
+  return {
+    id: String(raw.id ?? ''),
+    title: String(raw.title ?? ''),
+    description: String(raw.description ?? ''),
+    rationale: String(raw.rationale ?? ''),
+    confidence: (raw.confidence as ConfidenceLevel) ?? 'low',
+    targetArea: String(raw.target_area ?? ''),
+    suggestedChangeType: (raw.suggested_change_type as SuggestionChangeType) ?? 'simplify',
+    transformInstruction: String(raw.transform_instruction ?? ''),
+  }
+}
+
+export function mapInsightsResponse(raw: Record<string, unknown>): InsightsResponse {
+  return {
+    hasData: Boolean(raw.has_data),
+    stillCollecting: Boolean(raw.still_collecting),
+    sessionCount: Number(raw.session_count ?? 0),
+    threshold: Number(raw.threshold ?? 10),
+    pagePath: String(raw.page_path ?? ''),
+    generatedAt: raw.generated_at ? String(raw.generated_at) : null,
+    cached: Boolean(raw.cached),
+    insights: Array.isArray(raw.insights)
+      ? (raw.insights as Array<Record<string, unknown>>).map(mapInsight)
+      : [],
+    suggestions: Array.isArray(raw.suggestions)
+      ? (raw.suggestions as Array<Record<string, unknown>>).map(mapSuggestion)
+      : [],
+    note: String(raw.note ?? ''),
+  }
+}
+
 // ── Auto-install (GitHub PR) ────────────────────────────────────────────
 
 export interface AutoInstallResult {

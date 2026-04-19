@@ -216,6 +216,11 @@ class HeatmapPage(Base):
     first_seen_at = Column(DateTime(timezone=True), default=_utcnow)
     last_seen_at = Column(DateTime(timezone=True), default=_utcnow)
     session_count = Column(Integer, nullable=False, default=0)
+    # Cached AI insights — populated by POST /api/heatmap/pages/{id}/insights.
+    # Persisted so a refresh / page reopen doesn't re-bill Claude. Bypassed
+    # by `?regenerate=true` and considered stale after INSIGHTS_TTL_SECONDS.
+    latest_insights_json = Column(JSON, nullable=True)
+    latest_insights_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("site_id", "path", "viewport_class", name="uq_heatmap_pages_site_path_vp"),

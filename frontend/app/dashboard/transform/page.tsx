@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 // Editor import removed — Code Editor tab eliminated in favor of no-code flow
 import { apiUrl } from '@/lib/api'
+import {
+  clearHeatmapHandoff,
+  readHeatmapHandoff,
+  suggestionsToIntent,
+  type HeatmapHandoff,
+} from '@/lib/heatmapHandoff'
 import { getSelectedRepo, setSelectedRepo } from '@/lib/selectedRepo'
 import { useSubscription } from '@/lib/useSubscription'
 import UpgradeBanner from '@/components/dashboard/UpgradeBanner'
@@ -904,6 +910,10 @@ function TransformPage() {
   const [codeAnalysis, setCodeAnalysis] = useState<CodeAnalysis | null>(null)
   const [selectedTarget, setSelectedTarget] = useState('')
   const [userIntent, setUserIntent] = useState('')
+  // Heatmap → Transform handoff. When the user clicked "Apply selected
+  // changes" on the heatmap page we pre-fill userIntent with the chosen
+  // suggestions and surface a banner explaining where they came from.
+  const [heatmapHandoff, setHeatmapHandoff] = useState<HeatmapHandoff | null>(null)
   const [transformResult, setTransformResult] = useState<TransformResult | null>(null)
   const [repoName, setRepoName] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
@@ -968,6 +978,21 @@ function TransformPage() {
     setPipelineStartedAt(null)
     try { localStorage.removeItem('refineui_pipeline_started_at') } catch { /* */ }
   }, [pipelineStep])
+
+  // Heatmap → Transform handoff. Read once on mount; if the user just
+  // clicked "Apply selected changes" on the Heatmap page, pre-fill the
+  // intent input and surface a banner. We DON'T clear sessionStorage
+  // here — the user can dismiss the banner explicitly via the X, which
+  // clears it. That way a refresh during pipeline doesn't wipe the
+  // context they just set up.
+  useEffect(() => {
+    const handoff = readHeatmapHandoff()
+    if (!handoff) return
+    setHeatmapHandoff(handoff)
+    // Only pre-fill if the user hasn't already typed something — don't
+    // clobber their input if they navigated back here mid-edit.
+    setUserIntent(prev => prev.trim() ? prev : suggestionsToIntent(handoff.suggestions))
+  }, [])
 
   useEffect(() => {
     if (session?.accessToken && repos.length === 0 && pipelineStep === 'idle') {
@@ -1854,6 +1879,37 @@ function TransformPage() {
         {/* ── REPO PICKER ── */}
         {pipelineStep === 'idle' && (
           <div className="max-w-2xl mx-auto">
+            {heatmapHandoff && (
+              <div
+                className="mb-4 rounded-xl px-4 py-3"
+                style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.18)' }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5"><path d="M3 3v18h18" /><path d="m7 14 4-4 4 4 6-6" /></svg>
+                    <div>
+                      <p className="text-[12px] font-semibold text-neutral-950">
+                        From your heatmap analysis
+                      </p>
+                      <p className="mt-0.5 text-[11.5px] text-neutral-600">
+                        {heatmapHandoff.suggestions.length} change{heatmapHandoff.suggestions.length === 1 ? '' : 's'} pre-loaded from <span className="font-mono">{heatmapHandoff.pagePath}</span> — pick a repo and run.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      clearHeatmapHandoff()
+                      setHeatmapHandoff(null)
+                      setUserIntent('')
+                    }}
+                    className="flex-shrink-0 text-[11px] font-medium text-neutral-500 hover:text-neutral-950"
+                    title="Clear and start over"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex items-center gap-3 px-5 pt-5 pb-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.12)' }}>
