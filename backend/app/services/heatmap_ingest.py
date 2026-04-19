@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -26,6 +27,32 @@ GRID = 50                       # 50x50 buckets
 RAGE_WINDOW_MS = 1000
 RAGE_RADIUS_PX = 50
 MAX_EVENTS_PER_REQUEST = 100
+
+
+@dataclass
+class CaptureTask:
+    """Signal from ingest that a page needs a background screenshot.
+
+    Held to a minimum — the background worker reloads the row to make the
+    capture-claim atomic, so we only need the identity and the URL to hit.
+    """
+    page_id: UUID
+    url: str
+
+
+def normalize_path(p: str | None) -> str:
+    """Collapse a tracker-reported path to its canonical form.
+
+    Rule: strip trailing slash except on the root, leave query strings
+    alone. Without this, `/dashboard` and `/dashboard/` create two
+    HeatmapPage rows that would otherwise be the same page.
+    """
+    if not p:
+        return "/"
+    if len(p) > 1 and p.endswith("/"):
+        trimmed = p.rstrip("/")
+        return trimmed or "/"
+    return p
 
 
 @dataclass
@@ -198,12 +225,19 @@ async def process_events(
     viewport_height: int,
     user_agent: str,
     events: Iterable[dict],
-) -> tuple[int, int]:
-    """Ingest one batch. Returns (accepted_count, rage_count)."""
+) -> tuple[int, int, CaptureTask | None]:
+    """Ingest one batch. Returns (accepted_count, rage_count, capture_task).
+
+    `capture_task` is non-None when the page this batch targets has no
+    screenshot yet — the route schedules a BackgroundTask to capture one.
+    Scheduling is idempotent: the worker's UPDATE ... RETURNING claim
+    deduplicates concurrent ingests for the same new page.
+    """
     raw = list(events)[:MAX_EVENTS_PER_REQUEST]
     if not raw:
-        return 0, 0
+        return 0, 0, None
 
+    path = normalize_path(path)
     viewport_cls = viewport_class(viewport_width)
     page = await _get_or_create_page(db, site.id, path, viewport_cls, page_height_px)
 
@@ -304,4 +338,13 @@ async def process_events(
         str(site.id)[:8], str(page.id)[:8], path, viewport_cls,
         len(clicks), len(moves), len(scrolls), len(agg_rows), first_time,
     )
-    return accepted, len(rage)
+
+    capture_task: CaptureTask | None = None
+    if page.screenshot_key is None:
+        # Build the live URL the worker will load. site.domain is stored
+        # without a trailing slash (see create_site), and path always
+        # starts with a leading /.
+        capture_url = site.domain.rstrip("/") + path
+        capture_task = CaptureTask(page_id=page.id, url=capture_url)
+
+    return accepted, len(rage), capture_task

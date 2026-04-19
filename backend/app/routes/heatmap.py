@@ -23,7 +23,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,7 +122,11 @@ async def tracker_js(request: Request, site: str = Query(..., min_length=8, max_
 # ─── Public: ingestion ─────────────────────────────────────────────────
 
 @router.post("/collect", response_model=CollectResponse)
-async def collect(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+async def collect(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
     # Body cap — check raw length before pydantic parsing so we reject cheaply.
     raw = await request.body()
     if len(raw) > _MAX_BODY_BYTES:
@@ -171,7 +175,7 @@ async def collect(request: Request, db: AsyncSession = Depends(get_db)) -> Respo
             headers=_PUBLIC_CORS,
         )
 
-    accepted, rage = await process_events(
+    accepted, rage, capture_task = await process_events(
         db,
         site,
         session_id=payload.session_id,
@@ -183,11 +187,20 @@ async def collect(request: Request, db: AsyncSession = Depends(get_db)) -> Respo
         user_agent=payload.user_agent,
         events=payload.events,
     )
+    # Kick off auto-capture for a page we've never screenshotted. The
+    # worker's UPDATE ... RETURNING claim is the concurrency gate, so
+    # scheduling unconditionally here is safe even if two tabs land on
+    # the same new page in the same 5-second flush window.
+    if capture_task is not None:
+        from app.services.heatmap_screenshots import run_capture
+        background_tasks.add_task(run_capture, capture_task.page_id, capture_task.url)
+
     # Quiet info log so a working ingest is visible at INFO without flooding —
     # one line per flush (≤ once per 5s per session client-side).
     logger.info(
-        "collect: site=%s path=%s accepted=%d rage=%d",
+        "collect: site=%s path=%s accepted=%d rage=%d capture=%s",
         str(site.id)[:8], payload.path or "/", accepted, rage,
+        bool(capture_task),
     )
     body = CollectResponse(accepted=accepted, rage_detected=rage).model_dump_json()
     return Response(content=body, media_type="application/json", headers=_PUBLIC_CORS)

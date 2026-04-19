@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import AIRecommendations from '@/components/heatmap/AIRecommendations'
@@ -40,7 +40,6 @@ function HeatmapPageInner() {
   const [device, setDevice] = useState<HeatmapDevice>('all')
   const [days, setDays] = useState<number>(7)
   const [loadingHeatmap, setLoadingHeatmap] = useState(false)
-  const [capturingScreenshot, setCapturingScreenshot] = useState(false)
 
   const githubUserId = session?.githubId ?? ''
   const githubUsername = session?.githubUsername ?? ''
@@ -191,25 +190,6 @@ function HeatmapPageInner() {
     [pages, selectedPageId],
   )
 
-  const captureScreenshot = useCallback(async () => {
-    if (!selectedPage || !githubUserId) return
-    setCapturingScreenshot(true)
-    try {
-      const res = await fetch(apiUrl(`/api/heatmap/pages/${selectedPage.id}/screenshot`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ github_user_id: githubUserId, path: selectedPage.path }),
-      })
-      if (!res.ok) throw new Error(`Screenshot failed (${res.status})`)
-      const json = await res.json() as { screenshot_url?: string }
-      setPages(prev => prev.map(p => p.id === selectedPage.id ? { ...p, screenshotUrl: json.screenshot_url ?? p.screenshotUrl } : p))
-    } catch {
-      /* surfaced via UI below */
-    } finally {
-      setCapturingScreenshot(false)
-    }
-  }, [selectedPage, githubUserId])
-
   // ── Render branches ────────────────────────────────────────────────
 
   if (authStatus === 'loading') return <LoadingShell />
@@ -288,14 +268,12 @@ function HeatmapPageInner() {
               />
               <div className="flex items-center gap-2 mt-3 text-[11px] text-neutral-500">
                 <span>Page screenshot</span>
-                {!selectedPage.screenshotUrl && <span style={{ color: '#b45309' }}>— not captured yet</span>}
-                <button
-                  onClick={captureScreenshot}
-                  disabled={capturingScreenshot}
-                  className="ml-auto rounded-full border border-black/[0.12] bg-white px-3 py-1 text-[11px] font-medium text-neutral-950 transition hover:bg-neutral-50 disabled:opacity-50"
-                >
-                  {capturingScreenshot ? 'Capturing…' : selectedPage.screenshotUrl ? 'Recapture' : 'Capture screenshot'}
-                </button>
+                {!selectedPage.screenshotUrl && (
+                  <span className="inline-flex items-center gap-1.5 text-neutral-400">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
+                    Capturing…
+                  </span>
+                )}
               </div>
               {loadingHeatmap && (
                 <div className="mt-3 text-[11px] text-neutral-400">Updating heatmap…</div>

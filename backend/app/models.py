@@ -212,6 +212,12 @@ class HeatmapPage(Base):
     path = Column(String, nullable=False)
     viewport_class = Column(String, nullable=False, default="desktop")  # desktop|tablet|mobile
     screenshot_key = Column(String, nullable=True)                       # S3 key for live-URL screenshot
+    # Timestamp of the in-flight auto-capture attempt. Used as a lock so two
+    # concurrent ingests for the same new page don't each launch Playwright.
+    # Cleared on success (along with setting screenshot_key) or on failure;
+    # a non-null value older than the staleness window is treated as a dead
+    # attempt and can be reclaimed by the next ingest.
+    screenshot_capture_started_at = Column(DateTime(timezone=True), nullable=True)
     page_height_px = Column(Integer, nullable=False, default=0)
     first_seen_at = Column(DateTime(timezone=True), default=_utcnow)
     last_seen_at = Column(DateTime(timezone=True), default=_utcnow)

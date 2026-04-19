@@ -140,6 +140,11 @@ async def create_tables():
         _heatmap_page_migrations = [
             ("latest_insights_json", "JSONB"),
             ("latest_insights_at", "TIMESTAMPTZ"),
+            # Concurrency lock for the auto-capture background task. Null =
+            # no capture in flight; the service's UPDATE ... RETURNING
+            # treats a non-null value older than the staleness window as
+            # a dead attempt that can be reclaimed.
+            ("screenshot_capture_started_at", "TIMESTAMPTZ"),
         ]
         for col_name, col_type in _heatmap_page_migrations:
             await conn.execute(text(
