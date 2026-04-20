@@ -21,8 +21,11 @@ from app.services.model_params import get_profile, STABLE
 
 logger = logging.getLogger(__name__)
 
-# Max concurrent Claude calls for evaluation
-MAX_CONCURRENT_EVALUATIONS = 3
+# Max concurrent Claude calls for evaluation. Bumped 3 → 8: Anthropic's
+# per-key concurrency limit is well above this for Sonnet, and evaluation
+# was the second-biggest serial chokepoint after the transform loop.
+# A 20-page run drops from ~7 batches (70s) to ~3 batches (~30s).
+MAX_CONCURRENT_EVALUATIONS = 8
 
 # Truncation limits
 MAX_PAGE_CHARS = 15_000

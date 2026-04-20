@@ -238,8 +238,12 @@ async def render_multi_page_previews(
                     f.write(updated_code)
                 patched = True
 
-                # Wait for HMR
-                await asyncio.sleep(4)
+                # Wait for HMR. 2s is enough for Next.js fast refresh
+                # in practice — we had 4s here as paranoid padding, but
+                # the subsequent screenshot call has its own 2s settle
+                # wait inside Playwright so the extra 2s was pure overhead
+                # paid once per page. On a 10-page run this saves 20s.
+                await asyncio.sleep(2)
 
                 # Screenshot AFTER (with error detection). We probe the URL
                 # first to catch build errors embedded in the raw HTML, then
@@ -308,7 +312,10 @@ async def render_multi_page_previews(
                     try:
                         with open(target_full_path, "w", encoding="utf-8") as f:
                             f.write(original_content)
-                        await asyncio.sleep(2)
+                        # 1s instead of 2s: we're about to goto() the
+                        # next page's route — Playwright's own load-wait
+                        # covers HMR reconciliation of the restored file.
+                        await asyncio.sleep(1)
                     except Exception as restore_err:
                         logger.warning("Failed to restore %s: %s", target_full_path, restore_err)
 

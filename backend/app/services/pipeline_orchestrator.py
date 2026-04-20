@@ -37,16 +37,23 @@ logger = logging.getLogger(__name__)
 # Maximum retries when a transform is detected as cosmetic-only or
 # produces code that fails syntax / parser validation. Total attempts =
 # 1 + MAX_TRANSFORM_RETRIES. Each retry escalates the pressure on the
-# model (see structural_transform_prompt.is_retry). Bumped from 2 → 4
-# to give the parser-validator feedback loop room to converge.
-MAX_TRANSFORM_RETRIES = 4
+# model (see structural_transform_prompt.is_retry).
+#
+# Dropped from 4 → 2: real-world data showed that attempts 4/5 almost
+# never salvaged a run — by that point the model was looping on the
+# same failure mode. Cutting the budget in half saves ~5-8 minutes of
+# wall clock on the tail-latency pages that used to monopolise gather().
+MAX_TRANSFORM_RETRIES = 2
 
 # Per-page wall-clock budget. Large files (~30KB+) can take ~3 min per
-# Claude call; a 5-attempt retry loop on one bad page blocks the whole
-# pipeline (gather() waits for all pages) and the HTTP layer eventually
-# drops the SSE stream. This cap lets one bad page fall out cleanly and
-# the pipeline keeps moving with whatever good pages it has.
-_TRANSFORM_WALL_CLOCK_BUDGET_SECONDS = 240
+# Claude call; a retry loop on one bad page blocks the whole pipeline
+# (gather() waits for all pages) and the HTTP layer eventually drops the
+# SSE stream. This cap lets one bad page fall out cleanly and the
+# pipeline keeps moving with whatever good pages it has.
+#
+# Dropped from 240s → 150s alongside the retry budget cut — the old
+# ceiling was sized for 5 attempts, not 3.
+_TRANSFORM_WALL_CLOCK_BUDGET_SECONDS = 150
 
 # Extract a line number from a syntax/parse error message. Works for both
 # the regex validator ("... opened at line 252") and esbuild's
