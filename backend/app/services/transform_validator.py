@@ -117,12 +117,20 @@ def validate_transformation(original_code: str, transformed_code: str) -> dict:
     meaningful_changes = _count_meaningful_line_changes(original_code, transformed_code)
 
     # Scale thresholds with original page size. A rebuild should change at
-    # least 35% of the tag structure and 50% of non-style lines. These are
-    # high bars — that's intentional. The prompt tells the model to rebuild
-    # from scratch, so anything less than this is a failed rebuild.
+    # least 45% of the tag structure and 60% of non-style lines. These are
+    # intentionally high bars — the prompt tells the model to rebuild from
+    # scratch, and we'd rather reject a timid attempt and retry with
+    # escalation than silently accept a "polish" that looks identical.
+    #
+    # Also flag unchanged top-level tag sequence as a separate failure
+    # mode: if the first ~15 opening tags are byte-identical in order,
+    # the rebuild is a wrapper-rename job regardless of later churn.
     orig_tag_count = max(len(orig_tags), 1)
-    required_tag_changes = max(15, int(orig_tag_count * 0.35))
-    required_line_changes = max(25, int(orig_tag_count * 0.5))
+    required_tag_changes = max(20, int(orig_tag_count * 0.45))
+    required_line_changes = max(35, int(orig_tag_count * 0.60))
+
+    head_len = min(15, len(orig_tags), len(trans_tags))
+    top_sequence_preserved = head_len >= 8 and orig_tags[:head_len] == trans_tags[:head_len]
 
     # Decision logic
     if skeletons_identical and tags_identical:
@@ -134,6 +142,22 @@ def validate_transformation(original_code: str, transformed_code: str) -> dict:
                 f"Tag sequence unchanged. Only {meaningful_changes} non-style lines differ. "
                 f"This is a cosmetic-only change — the transformation engine produced "
                 f"className tweaks instead of structural improvements."
+            ),
+        }
+
+    # Top-of-tree sequence preserved + low churn → the model polished the
+    # original instead of rebuilding it. Reject even if the later body has
+    # some churn (adding one card at the end of a page doesn't count as
+    # "rebuilt the structure").
+    if top_sequence_preserved and tag_changes < required_tag_changes:
+        return {
+            "is_structural": False,
+            "confidence": 0.92,
+            "reasoning": (
+                f"The top of the JSX tree is unchanged — the first {head_len} opening "
+                f"tags appear in the same order as the original. A rebuild changes the "
+                f"overall structure, not just trailing sections. Only {tag_changes} tag "
+                f"changes vs {required_tag_changes} required."
             ),
         }
 

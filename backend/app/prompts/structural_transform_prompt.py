@@ -66,13 +66,23 @@ def build_transform_system_prompt() -> str:
 
 CORE PRINCIPLE — two layers, one rebuilt, one preserved:
 
-1. STRUCTURE — REBUILD from scratch.
-   The JSX tree, element hierarchy, how content is grouped, where things sit on the page, section boundaries, wrapper elements, nesting. Discard the original layout and build a new one.
+1. STRUCTURE — REBUILD from scratch. This is the job.
+   The JSX tree, element hierarchy, how content is grouped, where things sit on the page, section boundaries, wrapper elements, nesting. Discard the original layout and build a new one. The new tree must be visibly different on first glance — a teammate scrolling the before/after side-by-side should see two different pages, not the same page with tighter margins.
 
 2. VISUAL IDENTITY — INHERIT from the original.
    The color palette, typography scale, border radii, shadow style, spacing primitives, iconography, dark/light mode. Whatever Tailwind classes the original uses for colors, fonts, and surface treatments — REUSE them. Do not swap the palette. Do not change the type feel. Do not redesign the brand.
 
+DO NOT CONFUSE "inherit visual identity" WITH "leave structure alone". Inheriting the palette does not mean leaving wrappers, hierarchy, grids, or section boundaries untouched — those ALL change in a rebuild. Keeping the brand colors while rebuilding the skeleton is the whole point.
+
 The result is the same product, shipped by a more experienced team. A user should recognize their app immediately — but the layout should be dramatically better organized. Not a redesign. Not a re-brand. A structural rebuild wearing the original's skin.
+
+MINIMUM BAR FOR A VALID REBUILD (every rebuild must hit all of these):
+- At least 2 wrapper or section elements exist in the output that did NOT exist in the input (new `<header>`, `<section>`, `<aside>`, card `<div>`s, grid `<div>`s, etc).
+- The top-level child ordering of the main content region is visibly rearranged — not the original order with different spacing.
+- At least one formerly single-column region becomes a grid, OR one formerly flat list becomes grouped bordered cards, OR one formerly cramped region becomes multiple sections with clear boundaries.
+- The JSX tag sequence, when read top-to-bottom, is fundamentally different from the original. If you can diff them and see >70% of the lines preserved in order, the rebuild is too timid — rebuild harder.
+
+A rebuild that only changes `className` strings and leaves the tag skeleton intact will be rejected and you'll be asked to do it again. The structural skeleton MUST change.
 
 REBUILD PROCESS:
 1. Read the original and extract three things:
@@ -234,13 +244,39 @@ Fix the specific error above, keep the rebuild quality high, and re-balance brac
 before returning.
 """
         else:
-            retry_block = f"""
+            # Escalation copy scales with attempt number — attempt 2 nudges,
+            # attempt 3+ demands a genuinely different skeleton because by
+            # then we know the model is stuck in a "polish the original"
+            # local optimum and needs to be kicked out of it.
+            if attempt_number <= 2:
+                retry_block = f"""
 ATTEMPT {attempt_number}. The previous attempt was structurally too close to the original —
 the JSX tag sequence barely changed. This time, rebuild MORE of the tree:
 - Add new wrapper elements (header / main / section / aside) that did not exist before.
 - Regroup content into new card containers with clear boundaries.
 - Change how top-level children are nested and ordered.
 Visual identity stays the same (same colors, same fonts, same radii). Only the STRUCTURE changes.
+"""
+            else:
+                retry_block = f"""
+ATTEMPT {attempt_number}. YOUR PREVIOUS ATTEMPTS FAILED VALIDATION — the rebuild was too timid
+and got rejected as "basically the same layout with different class names". Stop polishing
+the original. Start from a blank page.
+
+Do this instead of whatever you did last time:
+- BEFORE writing any JSX, write a one-paragraph plan: "Section order will be A, B, C. A
+  will be a grid. B will be bordered cards with divide-y. C will be a two-column layout
+  with a sticky aside." Then build to that plan — do not mirror the original's flow.
+- Delete at least 50% of the original's wrapper `<div>`s and replace them with semantic
+  elements (`<header>`, `<main>`, `<section>`, `<aside>`, `<article>`).
+- If the original is flat, add grouping. If the original is grouped, regroup differently.
+  The goal is that the tag sequence looks different from the top.
+- Change the dominant layout direction somewhere: a single column becomes a grid, a
+  horizontal stack becomes vertical, or vice versa.
+- The result should be unambiguously a different page structure. If it looks "similar
+  but cleaner", that's still a fail — similar is what gets rejected.
+
+Keep the same colors, fonts, radii, handlers, imports, and data. Change everything else.
 """
 
     return f"""{retry_block}Rebuild this page. Current score: {score}/100.
