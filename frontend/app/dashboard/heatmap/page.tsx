@@ -17,6 +17,13 @@ import { mapHeatmapData, mapPage, mapSite } from '@/types/heatmap'
 const POLL_INTERVAL_MS = 10_000
 const STORAGE_SITE_ID = 'refineui_heatmap_site_id'
 
+// Matches backend/app/services/heatmap_insights.py:MIN_SESSIONS_FOR_INSIGHTS.
+// Below this we hide the heatmap panel and show a friendly collecting state
+// rather than rendering a stale pre-merge screenshot with a half-empty
+// overlay — the map isn't meaningful yet and the screenshot is probably
+// from before the user's most recent deploy.
+const MIN_SESSIONS_FOR_HEATMAP = 10
+
 export default function HeatmapRoute() {
   return (
     <Suspense fallback={<LoadingShell />}>
@@ -179,6 +186,32 @@ function HeatmapPageInner() {
     setSite({ ...next, verifiedAt: new Date().toISOString() })
   }, [])
 
+  const [refreshingShots, setRefreshingShots] = useState(false)
+  // Kick every page's screenshot back to "unset" and schedule fresh
+  // Playwright captures server-side. Used after a deploy — the stored
+  // image can be days stale, but the dashboard couldn't previously
+  // surface that to the user.
+  const refreshScreenshots = useCallback(async () => {
+    if (!site || !githubUserId) return
+    setRefreshingShots(true)
+    try {
+      await fetch(apiUrl(`/api/heatmap/sites/${site.id}/refresh-screenshots`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_user_id: githubUserId }),
+      })
+      // Optimistically blank the local screenshot URLs so the "Capturing…"
+      // affordance kicks in immediately — the poll loop below will refetch
+      // the pages once the background Playwright capture finishes.
+      setPages(prev => prev.map(p => ({ ...p, screenshotUrl: '' })))
+    } catch { /* non-fatal — user can retry */ } finally {
+      setRefreshingShots(false)
+    }
+  }, [site, githubUserId])
+
+  const totalSessions = heatmap?.totalSessions ?? 0
+  const hasEnoughData = totalSessions >= MIN_SESSIONS_FOR_HEATMAP
+
   // ── Render branches ────────────────────────────────────────────────
 
   if (authStatus === 'loading') return <LoadingShell />
@@ -243,7 +276,15 @@ function HeatmapPageInner() {
           <PageList pages={pages} selectedId={selectedPageId} onSelect={setSelectedPageId} />
         </aside>
         <main>
-          {selectedPage ? (
+          {!hasEnoughData ? (
+            <CollectingCard
+              sessions={totalSessions}
+              threshold={MIN_SESSIONS_FOR_HEATMAP}
+              onRefreshScreenshots={refreshScreenshots}
+              refreshing={refreshingShots}
+              siteDomain={site.domain}
+            />
+          ) : selectedPage ? (
             <>
               <HeatmapCanvas
                 screenshotUrl={selectedPage.screenshotUrl}
@@ -251,14 +292,28 @@ function HeatmapPageInner() {
                 layer={layer}
                 highlightRegion={hoveredSuggestion?.targetRegion ?? null}
               />
-              <div className="flex items-center gap-2 mt-3 text-[11px] text-neutral-500">
-                <span>Page screenshot</span>
-                {!selectedPage.screenshotUrl && (
-                  <span className="inline-flex items-center gap-1.5 text-neutral-400">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
-                    Capturing…
-                  </span>
-                )}
+              <div className="flex items-center justify-between gap-2 mt-3 text-[11px] text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <span>Page screenshot</span>
+                  {!selectedPage.screenshotUrl && (
+                    <span className="inline-flex items-center gap-1.5 text-neutral-400">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
+                      Capturing…
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={refreshScreenshots}
+                  disabled={refreshingShots}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[10.5px] font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-wait disabled:opacity-60"
+                  title="Re-capture from the latest deployed version of your site"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                  {refreshingShots ? 'Refreshing…' : 'Refresh from live site'}
+                </button>
               </div>
               {loadingHeatmap && (
                 <div className="mt-3 text-[11px] text-neutral-400">Updating heatmap…</div>
@@ -274,7 +329,7 @@ function HeatmapPageInner() {
         </main>
       </div>
 
-      {selectedPage && (
+      {selectedPage && hasEnoughData && (
         <AIRecommendations
           pageId={selectedPage.id}
           pagePath={selectedPage.path}
@@ -282,6 +337,89 @@ function HeatmapPageInner() {
           onHoverRegion={setHoveredSuggestion}
         />
       )}
+    </div>
+  )
+}
+
+function CollectingCard({
+  sessions,
+  threshold,
+  onRefreshScreenshots,
+  refreshing,
+  siteDomain,
+}: {
+  sessions: number
+  threshold: number
+  onRefreshScreenshots: () => void
+  refreshing: boolean
+  siteDomain: string
+}) {
+  const remaining = Math.max(0, threshold - sessions)
+  const pct = Math.min(100, Math.round((sessions / threshold) * 100))
+  return (
+    <div className="rounded-[22px] border border-black/[0.07] bg-white p-8">
+      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-neutral-50 px-3 py-1">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-400 opacity-60" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-700" />
+        </span>
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-neutral-600">
+          Collecting data
+        </span>
+      </div>
+      <h2 className="text-[20px] font-semibold text-neutral-950" style={{ letterSpacing: '-0.01em' }}>
+        We need at least {threshold} sessions before we can show a heatmap
+      </h2>
+      <p className="mt-2 max-w-xl text-[13px] leading-6 text-neutral-500">
+        Heatmaps built on a handful of sessions are misleading — a couple of
+        outlier clicks dominate the whole map. Come back once more visitors
+        have interacted with {siteDomain || 'your site'} and we&apos;ll have a
+        meaningful picture for you.
+      </p>
+
+      <div className="mt-5 max-w-md">
+        <div className="mb-2 flex items-center justify-between text-[11px] font-medium">
+          <span className="text-neutral-700">
+            {sessions} / {threshold} session{threshold === 1 ? '' : 's'}
+          </span>
+          <span className="text-neutral-400">
+            {remaining === 0 ? 'ready' : `${remaining} to go`}
+          </span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-neutral-100">
+          <div
+            className="h-full rounded-full bg-neutral-900 transition-[width] duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <a
+          href={siteDomain}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full bg-neutral-950 px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-neutral-800"
+        >
+          Open my site ↗
+        </a>
+        <button
+          onClick={onRefreshScreenshots}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-4 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-wait disabled:opacity-60"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          {refreshing ? 'Refreshing…' : 'Refresh screenshot from live site'}
+        </button>
+      </div>
+
+      <p className="mt-5 text-[11px] text-neutral-400">
+        Tip: share the URL with a few teammates or test accounts — once {threshold} real
+        sessions land, this view unlocks automatically.
+      </p>
     </div>
   )
 }

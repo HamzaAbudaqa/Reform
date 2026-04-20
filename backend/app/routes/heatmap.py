@@ -315,11 +315,75 @@ async def _load_site(db: AsyncSession, site_id: str, github_user_id: str) -> Hea
     return site
 
 
+async def _invalidate_page_screenshots(db: AsyncSession, site_id) -> int:
+    """Null out screenshot_key for every page belonging to `site_id`.
+
+    Called when `/verify` transitions a site into `tracking_live`: the
+    user just merged a PR that landed alongside (or inside) a new frontend
+    deploy, and any cached screenshots are now stale — they show the
+    pre-merge version of the site. Nulling the keys re-eligibles the row
+    for auto-capture; the very next `/collect` for that path schedules a
+    fresh Playwright grab against the now-live URL.
+    """
+    from sqlalchemy import update
+    result = await db.execute(
+        update(HeatmapPage)
+        .where(HeatmapPage.site_id == site_id)
+        .values(screenshot_key=None, screenshot_capture_started_at=None)
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+async def _queue_fresh_captures_for_site(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession,
+    site: HeatmapSite,
+) -> None:
+    """Schedule Playwright capture for every page of this site.
+
+    Combined with `_invalidate_page_screenshots`, this gives users a fresh
+    after-merge view of their site even before new traffic arrives. The
+    actual capture runs post-response via BackgroundTask — the request
+    returns immediately.
+    """
+    from app.services.heatmap_screenshots import run_capture
+    rows = (
+        await db.execute(
+            select(HeatmapPage.id, HeatmapPage.path).where(HeatmapPage.site_id == site.id)
+        )
+    ).all()
+    domain = site.domain.rstrip("/")
+    for page_id, path in rows:
+        path_str = path if path.startswith("/") else f"/{path}"
+        background_tasks.add_task(run_capture, page_id, f"{domain}{path_str}")
+
+
 @router.post("/sites/{site_id}/verify", response_model=VerifySiteResponse)
 async def verify_site(
-    site_id: str, req: VerifySiteRequest, db: AsyncSession = Depends(get_db)
+    site_id: str,
+    req: VerifySiteRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
 ) -> VerifySiteResponse:
     site = await _load_site(db, site_id, req.github_user_id)
+    was_live = site.install_status == "tracking_live"
+
+    async def _on_transition_to_live() -> None:
+        """Side effects that should fire the first time a site flips live."""
+        if was_live:
+            return
+        invalidated = await _invalidate_page_screenshots(db, site.id)
+        if invalidated:
+            logger.info(
+                "verify: invalidated %d page screenshot(s) for site=%s after merge",
+                invalidated, str(site.id)[:8],
+            )
+        # Commit the invalidation so the background capture sees
+        # screenshot_key IS NULL when it runs — without this, _claim()
+        # opens a fresh session, queries uncommitted state, and no-ops
+        # with "already done".
+        await db.commit()
+        await _queue_fresh_captures_for_site(background_tasks, db, site)
 
     # Fastest-and-most-reliable proof: we've received a /collect ping with
     # this site_key. That could only happen if the tracker JS ran on a
@@ -333,6 +397,7 @@ async def verify_site(
             site.verified_at = datetime.now(timezone.utc)
             site.install_status = "tracking_live"
             site.install_error = None
+        await _on_transition_to_live()
         return VerifySiteResponse(
             reachable=True,
             snippet_detected=True,
@@ -346,12 +411,35 @@ async def verify_site(
         # Setup is complete — persist so a refresh skips the setup card.
         site.install_status = "tracking_live"
         site.install_error = None
+        await _on_transition_to_live()
     return VerifySiteResponse(
         reachable=reachable,
         snippet_detected=snippet_detected,
         last_event_at=site.last_event_at.isoformat() if site.last_event_at else None,
         error=err,
     )
+
+
+@router.post("/sites/{site_id}/refresh-screenshots")
+async def refresh_site_screenshots(
+    site_id: str,
+    req: VerifySiteRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Explicitly re-capture every page screenshot for a site.
+
+    Backs the dashboard's "screenshots are stale" recovery affordance —
+    users can force a fresh grab without waiting for new traffic to
+    trigger auto-capture.
+    """
+    site = await _load_site(db, site_id, req.github_user_id)
+    invalidated = await _invalidate_page_screenshots(db, site.id)
+    # Commit before scheduling so the background capture session sees
+    # screenshot_key IS NULL (same rationale as verify_site above).
+    await db.commit()
+    await _queue_fresh_captures_for_site(background_tasks, db, site)
+    return {"ok": True, "invalidated": invalidated}
 
 
 async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
