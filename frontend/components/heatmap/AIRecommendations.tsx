@@ -1,14 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { apiUrl } from '@/lib/api'
-import {
-  clearHeatmapHandoff,
-  writeHeatmapHandoff,
-  type HandoffSuggestion,
-} from '@/lib/heatmapHandoff'
 import { humanizeError, humanizeResponse } from '@/lib/humanizeError'
+import TransformPreviewModal, {
+  type StagedSuggestion,
+} from '@/components/heatmap/TransformPreviewModal'
 import type {
   ConfidenceLevel,
   Insight,
@@ -58,12 +55,14 @@ const SEVERITY_STYLE: Record<SeverityLevel, { pill: string; label: string }> = {
  * useful when a single suggestion isn't compelling but the rest are.
  */
 export default function AIRecommendations({ pageId, pagePath, githubUserId, onHoverRegion }: Props) {
-  const router = useRouter()
   const [data, setData] = useState<InsightsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // One in-flight regenerate per card at most. Keyed by suggestion id.
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
+  // Modal that runs the transformation preview in-place. Opened by
+  // "Apply staged changes" instead of routing to /dashboard/transform.
+  const [showPreview, setShowPreview] = useState(false)
 
   const fetchInsights = useCallback(async (regenerate: boolean) => {
     setLoading(true)
@@ -178,20 +177,17 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
 
   const apply = useCallback(() => {
     if (!stagedSuggestions.length) return
-    const handoff: HandoffSuggestion[] = stagedSuggestions.map(s => ({
+    setShowPreview(true)
+  }, [stagedSuggestions])
+
+  const stagedForModal = useMemo<StagedSuggestion[]>(
+    () => stagedSuggestions.map(s => ({
       id: s.id,
       title: s.title,
       transformInstruction: s.transformInstruction,
-      sourcePagePath: pagePath,
-    }))
-    clearHeatmapHandoff()
-    writeHeatmapHandoff({
-      pickedAt: new Date().toISOString(),
-      pagePath,
-      suggestions: handoff,
-    })
-    router.push('/dashboard/transform')
-  }, [stagedSuggestions, pagePath, router])
+    })),
+    [stagedSuggestions],
+  )
 
   const restoreRejected = useCallback(() => {
     if (!data) return
@@ -284,6 +280,15 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
   }
 
   return (
+    <>
+    {showPreview && (
+      <TransformPreviewModal
+        stagedSuggestions={stagedForModal}
+        sourcePagePath={pagePath}
+        githubUserId={githubUserId}
+        onClose={() => setShowPreview(false)}
+      />
+    )}
     <Section
       title="AI recommendations"
       subtitle="Based on how visitors are using this page"
@@ -366,6 +371,7 @@ export default function AIRecommendations({ pageId, pagePath, githubUserId, onHo
         <p className="mt-4 text-[11px] text-neutral-400">{data.note}</p>
       )}
     </Section>
+    </>
   )
 }
 
