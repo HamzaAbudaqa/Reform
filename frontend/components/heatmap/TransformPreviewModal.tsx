@@ -102,7 +102,11 @@ export default function TransformPreviewModal({
     abortRef.current = controller
 
     try {
-      const res = await fetch(apiUrl(`/transform-repo-v2?mode=improve`), {
+      // mode MUST be "stable" | "explore" — the route validates via
+      // Query(pattern="^(stable|explore)$") and 422s anything else.
+      // stable = deterministic, cache-friendly; the right default for a
+      // one-shot apply-staged-changes flow.
+      const res = await fetch(apiUrl(`/transform-repo-v2?mode=stable`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -249,15 +253,45 @@ export default function TransformPreviewModal({
     }
   }, [result, repo, repoFullName, session, githubUserId])
 
+  // Close on Escape — standard modal affordance, and a safety net if the
+  // Close button ever gets obscured by weird zoom / scroll conditions.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Preview changes"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/40 p-4 backdrop-blur-sm"
     >
-      <div className="relative flex h-[min(92vh,900px)] w-[min(96vw,1200px)] flex-col overflow-hidden rounded-[22px] border border-black/[0.08] bg-white shadow-2xl">
-        <header className="flex items-start justify-between gap-4 border-b border-black/[0.06] px-6 py-4">
+      {/* max-h instead of a fixed h — the card sizes to its content
+         (error / complete) but never exceeds the viewport. flex-col +
+         min-h-0 on the body keeps the header/footer pinned while only
+         the middle scrolls. */}
+      <div className="relative flex max-h-[92vh] w-[min(96vw,1200px)] flex-col overflow-hidden rounded-[22px] border border-black/[0.08] bg-white shadow-2xl">
+        {/* Always-visible X in the top-right corner — survives scroll and
+           never depends on the header's layout fitting. The text "Close"
+           button stays in the header for discoverability. */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-neutral-700 shadow-sm ring-1 ring-black/[0.08] transition hover:bg-neutral-50 hover:text-neutral-950"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        <header className="flex flex-none items-start justify-between gap-4 border-b border-black/[0.06] px-6 py-4 pr-14">
           <div>
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
               Preview changes
@@ -272,12 +306,6 @@ export default function TransformPreviewModal({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-full border border-black/[0.1] bg-white px-3 py-1 text-[11.5px] font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Close
-          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -303,7 +331,7 @@ export default function TransformPreviewModal({
         </div>
 
         {stage === 'complete' && result && (
-          <footer className="flex flex-col gap-3 border-t border-black/[0.06] bg-neutral-50/60 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <footer className="flex flex-none flex-col gap-3 border-t border-black/[0.06] bg-neutral-50/60 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-[12px] text-neutral-500">
               {result.total_transformed} page{result.total_transformed === 1 ? '' : 's'} transformed
               {result.total_skipped > 0 && `, ${result.total_skipped} skipped`}
@@ -340,7 +368,7 @@ export default function TransformPreviewModal({
         )}
 
         {error && stage === 'complete' && (
-          <div className="border-t border-amber-200 bg-amber-50 px-6 py-2 text-[11.5px] text-amber-800">
+          <div className="flex-none border-t border-amber-200 bg-amber-50 px-6 py-2 text-[11.5px] text-amber-800">
             {error}
           </div>
         )}
@@ -353,7 +381,7 @@ export default function TransformPreviewModal({
 
 function RunningState({ currentStep }: { currentStep: number }) {
   return (
-    <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-5 p-10">
+    <div className="flex flex-col items-center justify-center gap-5 px-6 py-10">
       <div className="flex flex-col gap-2.5">
         {STAGE_STEPS.map((s, i) => {
           const done = i < currentStep
@@ -377,7 +405,7 @@ function RunningState({ currentStep }: { currentStep: number }) {
           )
         })}
       </div>
-      <p className="mt-4 max-w-md text-center text-[12px] text-neutral-500">
+      <p className="max-w-md text-center text-[12px] text-neutral-500">
         This usually takes 1–3 minutes. We&apos;ll show before/after previews when ready —
         you can keep this tab open or come back later.
       </p>
@@ -387,12 +415,12 @@ function RunningState({ currentStep }: { currentStep: number }) {
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-4 p-10 text-center">
+    <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
       <p className="text-[14px] font-semibold text-neutral-950">We hit a problem.</p>
       <p className="max-w-md text-[12.5px] text-neutral-600">{message}</p>
       <button
         onClick={onRetry}
-        className="mt-2 rounded-full border border-black/[0.12] bg-white px-4 py-2 text-[12.5px] font-semibold text-neutral-950 transition hover:bg-neutral-50"
+        className="mt-1 rounded-full border border-black/[0.12] bg-white px-4 py-2 text-[12.5px] font-semibold text-neutral-950 transition hover:bg-neutral-50"
       >
         Try again
       </button>
