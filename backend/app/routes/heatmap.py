@@ -320,6 +320,26 @@ async def verify_site(
     site_id: str, req: VerifySiteRequest, db: AsyncSession = Depends(get_db)
 ) -> VerifySiteResponse:
     site = await _load_site(db, site_id, req.github_user_id)
+
+    # Fastest-and-most-reliable proof: we've received a /collect ping with
+    # this site_key. That could only happen if the tracker JS ran on a
+    # real pageview — no need to crank up Playwright to confirm what we
+    # already know. This dodges flakiness from Next.js sites whose
+    # afterInteractive script bundle takes >12s to hydrate on a cold
+    # Vercel worker, which was leaving users stuck on "Checking…" even
+    # though the snippet was working fine.
+    if site.last_event_at is not None:
+        if site.install_status != "tracking_live":
+            site.verified_at = datetime.now(timezone.utc)
+            site.install_status = "tracking_live"
+            site.install_error = None
+        return VerifySiteResponse(
+            reachable=True,
+            snippet_detected=True,
+            last_event_at=site.last_event_at.isoformat(),
+            error=None,
+        )
+
     reachable, snippet_detected, err = await _verify_snippet(site.domain)
     if snippet_detected:
         site.verified_at = datetime.now(timezone.utc)
@@ -375,18 +395,30 @@ async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
                 if resp.status >= 400:
                     return False, False, f"HTTP {resp.status}"
                 # Primary check — the tracker sets this once it's bootstrapped.
+                # 20s instead of 12s: Next.js with afterInteractive on cold
+                # Vercel workers routinely takes 10-15s to finish hydrating
+                # and kick off the script download. The extra 8s buys a
+                # dramatic reduction in false negatives without feeling slow
+                # in the UI (the request is already async).
                 try:
                     await page.wait_for_function(
                         "() => !!(window.__reformHeatmap__ && window.__reformHeatmap__.loaded)",
-                        timeout=12000,
+                        timeout=20000,
                     )
                     return True, True, None
                 except Exception:
                     pass
                 # Fallback diagnosis — is the script *tag* present? If yes,
-                # the tag is there but the script didn't run (CSP, network
-                # block, etc.). If no, the injection isn't actually live yet
-                # (deploy stale, wrong file, build pulled an old version).
+                # we accept it as a success. Rationale: the tag is served
+                # via `<Script strategy="afterInteractive">` on Next.js,
+                # which defers execution until after hydration. Headless
+                # Playwright sometimes navigates away before that fires
+                # even with `networkidle` + 20s waits, but on real visitor
+                # browsers the script WILL run — the tag's presence means
+                # the build is deployed correctly. We'd rather a false
+                # positive here (verify passes → user sees dashboard, waits
+                # for events) than a false negative (user stuck on
+                # "Checking…" while real visitors are already sending data).
                 tag_present = False
                 try:
                     tag_present = bool(await page.evaluate(
@@ -395,10 +427,7 @@ async def _verify_snippet(domain: str) -> tuple[bool, bool, str | None]:
                 except Exception:
                     pass
                 if tag_present:
-                    return True, False, (
-                        "Tracking code is on your site but didn't load — your "
-                        "site may be blocking the script (check CSP / ad blocker)."
-                    )
+                    return True, True, None
                 return True, False, (
                     "We don't see the tracking code on your site yet. If you just "
                     "merged on GitHub, give your host a minute to redeploy."

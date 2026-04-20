@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import AIRecommendations from '@/components/heatmap/AIRecommendations'
@@ -166,6 +166,19 @@ function HeatmapPageInner() {
     [pages, selectedPageId],
   )
 
+  // Stable handlers so the HeatmapSetup / AlmostDoneCard children don't
+  // see a new prop reference on every parent render. The AlmostDoneCard's
+  // verify poll loop used to reset on each new reference, which meant
+  // 25-second Playwright-backed verify calls were getting abandoned
+  // before they could resolve.
+  const handleSiteReady = useCallback((next: HeatmapSite) => {
+    setSite(next)
+    try { sessionStorage.setItem(STORAGE_SITE_ID, next.id) } catch { /* ignore */ }
+  }, [])
+  const handleVerified = useCallback((next: HeatmapSite) => {
+    setSite({ ...next, verifiedAt: new Date().toISOString() })
+  }, [])
+
   // ── Render branches ────────────────────────────────────────────────
 
   if (authStatus === 'loading') return <LoadingShell />
@@ -190,13 +203,8 @@ function HeatmapPageInner() {
           githubUserId={githubUserId}
           projectId={projectId}
           initialSite={site}
-          onSiteReady={next => {
-            setSite(next)
-            try { sessionStorage.setItem(STORAGE_SITE_ID, next.id) } catch { /* ignore */ }
-          }}
-          onVerified={next => {
-            setSite({ ...next, verifiedAt: new Date().toISOString() })
-          }}
+          onSiteReady={handleSiteReady}
+          onVerified={handleVerified}
         />
       </div>
     )

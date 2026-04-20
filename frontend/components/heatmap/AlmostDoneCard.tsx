@@ -19,7 +19,7 @@ interface Props {
   resumed?: boolean
 }
 
-const POLL_INTERVAL_MS = 8_000
+const POLL_INTERVAL_MS = 6_000
 const SUCCESS_HOLD_MS = 3_500   // celebrate for 3.5s before continuing
 
 type WaitState = 'idle' | 'waiting' | 'success'
@@ -48,9 +48,22 @@ export default function AlmostDoneCard({
   const [attempts, setAttempts] = useState(0)
   const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  // Manual "Check now" trigger — bumping this re-runs the polling effect
-  // immediately rather than waiting out the interval.
-  const [manualKick, setManualKick] = useState(0)
+  // True while a verify request is in flight. Drives button disabled state
+  // + "Checking…" copy so the user gets immediate feedback when they click
+  // "Check now" instead of wondering if the click registered.
+  const [isChecking, setIsChecking] = useState(false)
+
+  // Refs for values that shouldn't re-trigger the polling effect on every
+  // parent re-render. The parent passes fresh `onVerified` + `site` refs
+  // each render; putting them in useEffect deps was restarting the poll
+  // loop constantly — Playwright-backed verify calls that take 5-25s would
+  // get abandoned before ever resolving.
+  const onVerifiedRef = useRef(onVerified)
+  useEffect(() => { onVerifiedRef.current = onVerified }, [onVerified])
+  const siteIdRef = useRef(site.id)
+  useEffect(() => { siteIdRef.current = site.id }, [site.id])
+  const abortRef = useRef<AbortController | null>(null)
+  const timerRef = useRef<number | null>(null)
   const cancelledRef = useRef(false)
 
   // Tick once a second so the "last checked Xs ago" / "waited Nm" labels
@@ -61,60 +74,103 @@ export default function AlmostDoneCard({
     return () => window.clearInterval(id)
   }, [waitState])
 
-  useEffect(() => {
-    cancelledRef.current = false
-    return () => { cancelledRef.current = true }
-  }, [])
+  // One verify round trip. Shared by the poll loop and the manual Check
+  // now button. Returns true if the snippet was detected (poll should stop).
+  async function runVerify(): Promise<boolean> {
+    if (cancelledRef.current) return false
+    // Cancel any prior in-flight request — manual clicks should feel
+    // instant, not stack behind a 25s Playwright call.
+    abortRef.current?.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    setIsChecking(true)
+    try {
+      const res = await fetch(apiUrl(`/api/heatmap/sites/${siteIdRef.current}/verify`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_user_id: githubUserId }),
+        signal: ctrl.signal,
+      })
+      if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't reach your site."))
+      const result = mapVerify(await res.json())
+      if (cancelledRef.current || ctrl.signal.aborted) return false
+      setLastResult(result)
+      setLastCheckedAt(Date.now())
+      setAttempts(a => a + 1)
+      if (result.snippetDetected) {
+        setWaitState('success')
+        try {
+          const sumRes = await fetch(apiUrl(
+            `/api/heatmap/sites/${siteIdRef.current}/event-summary?github_user_id=${encodeURIComponent(githubUserId)}`
+          ))
+          if (sumRes.ok && !cancelledRef.current) {
+            setEventSummary(mapEventSummary(await sumRes.json()))
+          }
+        } catch { /* non-fatal */ }
+        window.setTimeout(() => onVerifiedRef.current(site), SUCCESS_HOLD_MS)
+        return true
+      }
+      return false
+    } catch (err) {
+      // AbortError is an expected control-flow signal — we cancelled on
+      // purpose when a manual click pre-empted the poll. Don't count it as
+      // a failed attempt, don't bump the retry UI.
+      if ((err as { name?: string })?.name === 'AbortError') return false
+      // Soft-fail still counts as an attempt so the user sees activity.
+      setLastCheckedAt(Date.now())
+      setAttempts(a => a + 1)
+      return false
+    } finally {
+      if (abortRef.current === ctrl) {
+        abortRef.current = null
+        setIsChecking(false)
+      }
+    }
+  }
 
   // Auto-poll once the user has clicked Open GitHub (or when we resumed
   // mid-flow from a persisted state). Before that, polling burns Playwright
   // calls + log noise for nothing.
+  //
+  // Deps are intentionally `[openedGithub]` only — we don't want the poll
+  // loop to reset when the parent passes new `onVerified` / `site` refs
+  // between renders (see ref-ping pattern above).
   useEffect(() => {
     if (!openedGithub) return
+    cancelledRef.current = false
     setWaitState(s => (s === 'success' ? s : 'waiting'))
 
-    let timer: number | null = null
-
-    async function checkOnce() {
-      if (cancelledRef.current) return
-      try {
-        const res = await fetch(apiUrl(`/api/heatmap/sites/${site.id}/verify`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ github_user_id: githubUserId }),
+    async function loop() {
+      while (!cancelledRef.current) {
+        const done = await runVerify()
+        if (done || cancelledRef.current) return
+        await new Promise<void>(resolve => {
+          timerRef.current = window.setTimeout(() => resolve(), POLL_INTERVAL_MS)
         })
-        if (!res.ok) throw new Error(await humanizeResponse(res, "We couldn't reach your site."))
-        const result = mapVerify(await res.json())
-        if (cancelledRef.current) return
-        setLastResult(result)
-        setLastCheckedAt(Date.now())
-        setAttempts(a => a + 1)
-        if (result.snippetDetected) {
-          setWaitState('success')
-          try {
-            const sumRes = await fetch(apiUrl(
-              `/api/heatmap/sites/${site.id}/event-summary?github_user_id=${encodeURIComponent(githubUserId)}`
-            ))
-            if (sumRes.ok && !cancelledRef.current) {
-              setEventSummary(mapEventSummary(await sumRes.json()))
-            }
-          } catch { /* non-fatal */ }
-          window.setTimeout(() => onVerified(site), SUCCESS_HOLD_MS)
-          return
-        }
-      } catch {
-        // Soft-fail still counts as an attempt so the user sees activity.
-        setLastCheckedAt(Date.now())
-        setAttempts(a => a + 1)
       }
-      timer = window.setTimeout(checkOnce, POLL_INTERVAL_MS)
     }
+    void loop()
 
-    checkOnce()
     return () => {
-      if (timer !== null) window.clearTimeout(timer)
+      cancelledRef.current = true
+      abortRef.current?.abort()
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
     }
-  }, [openedGithub, site, githubUserId, onVerified, manualKick])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedGithub])
+
+  async function handleCheckNow() {
+    // Fire an immediate check and short-circuit the poll's sleep — the
+    // current `await setTimeout` resolves as soon as we clearTimeout below.
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    await runVerify()
+  }
 
   function handleOpenGithub() {
     setOpenedGithub(true)
@@ -191,7 +247,8 @@ export default function AlmostDoneCard({
             lastCheckedAt={lastCheckedAt}
             now={now}
             lastResult={lastResult}
-            onCheckNow={() => setManualKick(k => k + 1)}
+            isChecking={isChecking}
+            onCheckNow={handleCheckNow}
           />
         )}
 
@@ -231,6 +288,7 @@ function WaitingState({
   lastCheckedAt,
   now,
   lastResult,
+  isChecking,
   onCheckNow,
 }: {
   site: HeatmapSite
@@ -238,6 +296,7 @@ function WaitingState({
   lastCheckedAt: number | null
   now: number
   lastResult: VerifyResult | null
+  isChecking: boolean
   onCheckNow: () => void
 }) {
   const elapsedSinceCheck = lastCheckedAt ? now - lastCheckedAt : null
@@ -276,9 +335,16 @@ function WaitingState({
       <div className="mt-1 flex items-center gap-2">
         <button
           onClick={onCheckNow}
-          className="rounded-full border border-black/[0.12] bg-white px-3.5 py-1.5 text-[11.5px] font-medium text-neutral-950 transition hover:bg-neutral-50"
+          disabled={isChecking}
+          className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.12] bg-white px-3.5 py-1.5 text-[11.5px] font-medium text-neutral-950 transition hover:bg-neutral-50 disabled:cursor-wait disabled:opacity-60"
         >
-          Check now
+          {isChecking && (
+            <span
+              className="h-2.5 w-2.5 rounded-full border-2 border-neutral-300 border-t-neutral-700"
+              style={{ animation: 'spin 0.9s linear infinite' }}
+            />
+          )}
+          {isChecking ? 'Checking…' : 'Check now'}
         </button>
         <a
           href={site.domain}
