@@ -73,17 +73,20 @@ type PipelineStage = { key: string; label: string; logLine: string; duration: nu
 
 // Hardcoded substage timings that roughly track the backend pipeline.
 // The backend is a single blocking request so we can't poll real progress —
-// these durations are a realistic approximation for a 5-page run.
+// these durations are a realistic approximation for a typical run.
+// Previously these summed to 240s (4 min), but real runs on larger repos
+// routinely take 10-20 minutes. Undersized estimates caused the bar to
+// pin at 95% for the majority of the run, and (worse) when backend stage
+// override events arrived mid-run they'd snap `currentIdx` backwards and
+// the bar would visually regress — looking like the bar had filled twice.
 const PIPELINE_STAGES: PipelineStage[] = [
-  { key: 'clone', label: 'Clone repo', logLine: 'Repository cloned and indexed', duration: 15 },
-  { key: 'discover', label: 'Find pages', logLine: 'Discovered pages to analyze', duration: 20 },
-  { key: 'evaluate', label: 'Score UI', logLine: 'Scored UI quality per page', duration: 35 },
-  { key: 'plan', label: 'Plan rebuild', logLine: 'Built transformation plan', duration: 20 },
-  { key: 'rebuild', label: 'Rebuild layouts', logLine: 'Rebuilt page layouts with Claude', duration: 120 },
-  { key: 'render', label: 'Render preview', logLine: 'Rendered before/after screenshots', duration: 30 },
+  { key: 'clone', label: 'Clone repo', logLine: 'Repository cloned and indexed', duration: 20 },
+  { key: 'discover', label: 'Find pages', logLine: 'Discovered pages to analyze', duration: 30 },
+  { key: 'evaluate', label: 'Score UI', logLine: 'Scored UI quality per page', duration: 90 },
+  { key: 'plan', label: 'Plan rebuild', logLine: 'Built transformation plan', duration: 30 },
+  { key: 'rebuild', label: 'Rebuild layouts', logLine: 'Rebuilt page layouts with Claude', duration: 360 },
+  { key: 'render', label: 'Render preview', logLine: 'Rendered before/after screenshots', duration: 90 },
 ]
-
-const PIPELINE_TOTAL_DURATION = PIPELINE_STAGES.reduce((sum, s) => sum + s.duration, 0)
 
 const PIPELINE_TIPS = [
   'Reform rebuilds structure, not styling — your brand colors and voice stay intact.',
@@ -128,55 +131,80 @@ function PipelineProgress({
     }
   }, [])
 
+  // Monotonic high-water mark — the bar MUST NEVER regress. Before this,
+  // when a backend stage override arrived with a lower implied percent than
+  // the time-based estimate, the bar would visually snap back and then
+  // re-fill, making it look like the pipeline ran twice.
+  const maxProgressRef = useRef(0)
+  const maxStageIdxRef = useRef(0)
+
   // Derived directly from wall-clock — never stored in state, so there's
   // no staleness after tab-switch, HMR, or throttling.
   const elapsedMs = Math.max(0, Date.now() - startedAt)
   const elapsed = Math.floor(elapsedMs / 1000)
 
-  // Find the current substage by consuming durations left-to-right — the
-  // time-based fallback when the backend hasn't surfaced a stage yet.
-  let acc = 0
-  let currentIdx = PIPELINE_STAGES.length - 1
+  // Time-based stage guess, used as a floor when the backend hasn't
+  // surfaced a stage yet. We compute it first, then let a backend stage
+  // override bump us forward (never backward).
+  let timeBasedIdx = PIPELINE_STAGES.length - 1
+  let timeAcc = 0
   for (let i = 0; i < PIPELINE_STAGES.length; i++) {
-    acc += PIPELINE_STAGES[i].duration
-    if (elapsed < acc) { currentIdx = i; break }
+    timeAcc += PIPELINE_STAGES[i].duration
+    if (elapsed < timeAcc) { timeBasedIdx = i; break }
   }
 
-  // Prefer an explicit stage from the backend when available — map it onto
-  // the closest PIPELINE_STAGES index so the step list still lines up.
+  // Backend-reported stage → PIPELINE_STAGES index.
+  let backendIdx: number | null = null
   if (overrideStage) {
     const key = overrideStage.toLowerCase().trim()
     const mapping: Record<string, number> = {
       cloning: 0, ingesting: 0, clone: 0,
-      discovering: 1, discover: 1,
+      discovering: 1, discovering_pages: 1, discover: 1,
       evaluating: 2, evaluate: 2, scoring: 2,
       planning: 3, plan: 3,
       transforming: 4, rebuild: 4, rebuilding: 4,
-      rendering: 5, render: 5, saving: 5,
+      rendering: 5, render: 5, saving: 5, uploading: 5,
+      done: PIPELINE_STAGES.length - 1,
     }
     const mapped = mapping[key]
-    if (typeof mapped === 'number') currentIdx = mapped
+    if (typeof mapped === 'number') backendIdx = mapped
   }
 
-  // Stage-based progress: every completed stage bumps the bar by 1/N, and the
-  // active stage contributes fractional progress based on how far through
-  // its estimated duration we are. Purely time-based progress was dishonest
-  // because stage durations are inaccurate — the bar would max out while
-  // the pipeline was still grinding through "Render preview".
+  // Effective stage = max(time-based, backend-reported, any prior high).
+  // Taking the max instead of the backend value unconditionally avoids the
+  // visual regression that caused the "fills twice" bug.
+  let currentIdx = Math.max(timeBasedIdx, backendIdx ?? 0, maxStageIdxRef.current)
+  if (currentIdx >= PIPELINE_STAGES.length) currentIdx = PIPELINE_STAGES.length - 1
+  maxStageIdxRef.current = currentIdx
+
+  // Recompute accumulated duration up through (and including) currentIdx
+  // so elapsedInCurrentStage is correct regardless of how currentIdx was
+  // chosen. The old code computed `acc` in the time-based loop and reused
+  // it after overriding currentIdx, which produced nonsense numbers.
+  let accToStageEnd = 0
+  for (let i = 0; i <= currentIdx; i++) accToStageEnd += PIPELINE_STAGES[i].duration
+
   const stageCount = PIPELINE_STAGES.length
-  const elapsedInCurrentStage = Math.max(0, elapsed - (acc - PIPELINE_STAGES[currentIdx].duration))
-  const currentStageRatio = Math.min(0.95, elapsedInCurrentStage / PIPELINE_STAGES[currentIdx].duration)
+  const stageDuration = PIPELINE_STAGES[currentIdx].duration
+  const elapsedInCurrentStage = Math.max(0, elapsed - (accToStageEnd - stageDuration))
+  const currentStageRatio = Math.min(0.95, elapsedInCurrentStage / stageDuration)
+
   // Cap the per-stage contribution so the bar never reaches 100% until the
   // pipeline actually completes and the component unmounts.
   const stageProgress = Math.min(95, ((currentIdx + currentStageRatio) / stageCount) * 100)
-  const overallProgress = typeof overrideProgress === 'number'
+  const rawProgress = typeof overrideProgress === 'number'
     ? Math.max(stageProgress, Math.min(95, overrideProgress))
     : stageProgress
+
+  // Monotonic clamp — never decrease.
+  if (rawProgress > maxProgressRef.current) maxProgressRef.current = rawProgress
+  const overallProgress = maxProgressRef.current
+
   // Estimate remaining from the stages that haven't started + time left in
   // the current stage. When elapsed exceeds the full estimate (pipeline is
   // taking longer than expected), surface "finishing up" instead of 0s.
   const stagesLeft = PIPELINE_STAGES.slice(currentIdx + 1).reduce((s, st) => s + st.duration, 0)
-  const timeLeftInCurrentStage = Math.max(0, PIPELINE_STAGES[currentIdx].duration - elapsedInCurrentStage)
+  const timeLeftInCurrentStage = Math.max(0, stageDuration - elapsedInCurrentStage)
   const remaining = stagesLeft + timeLeftInCurrentStage
 
   const tipIdx = Math.floor(elapsed / 8) % PIPELINE_TIPS.length
