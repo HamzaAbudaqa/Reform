@@ -305,25 +305,48 @@ Logic — PRESERVE exactly
 - Every JSX expression that references dynamic data — `{{variable}}`, `{{fn()}}`, `{{list.map(...)}}` — appears somewhere in the rebuilt tree.
 - Component name and default export are unchanged.
 
+## LANGUAGE RULES — applies to EVERY narrative field below
+
+The `updated_code` field contains real code, so class names belong there.
+Every OTHER field the user reads — `diff_summary`, `change_annotations[].description`,
+`change_annotations[].ux_impact`, `change_summary[]`, `transformation_notes[]` — must
+be written for a vibe coder who doesn't want to learn Tailwind to understand what you did.
+
+BANNED vocabulary in all narrative fields (zero exceptions):
+- Tailwind / CSS class names: p-6, space-y-6, gap-4, text-sm, text-base, text-xs,
+  font-bold, font-medium, divide-y, ml-8, pl-4, grid-cols-2, flex-col, rounded-2xl, etc.
+- Spacing tokens: "p-6 card padding", "space-y-6 rhythm", "gap-6 grid", "ml-8/pl-4 misalignment".
+- Semantic-HTML / a11y jargon: `role=switch`, `aria-checked`, `aria-label`, `onClick`, `divide-y`,
+  `className`, `div`, `span`, the word "Tailwind", px, rem, em, ARIA, element types.
+- Code-reviewer voice: "Applied", "Removed conditional", "via X classes", "with identical padding via divide-y".
+
+REWRITE into what the visitor sees:
+- Instead of "Applied p-6 card padding and space-y-6 rhythm" → "Sections breathe — consistent padding and spacing throughout."
+- Instead of "Removed conditional ml-8/pl-4 misalignment classes" → "Rows line up now — no more staircase effect."
+- Instead of "Toggles are now real button elements with role=switch, aria-checked" → "Toggles actually work and keyboard users can flip them."
+- Instead of "Typography: text-base font-bold headings, text-sm body, text-xs labels" → "Clear hierarchy — headings are obvious, body is readable, labels fade back."
+
+If you catch yourself naming a class or an attribute in a narrative field, rewrite
+the sentence from scratch focusing on what the user notices, not the HTML.
+
 ## OUTPUT FORMAT
 
 Return ONLY this JSON, no markdown fences:
 {{
   "updated_code": "the COMPLETE rebuilt file",
-  "diff_summary": "1 sentence in plain English — what the user sees differently",
+  "diff_summary": "1 sentence a non-coder can read — what the user sees differently. NO class names.",
   "change_annotations": [
     {{
       "region": "section name",
       "change_type": "layout|hierarchy|spacing|cta|component|clutter",
-      "description": "visible change in plain English",
-      "ux_impact": "why it's better for the user"
+      "description": "what changed visually — describe what the user notices, NOT the HTML or CSS that got it there. NO class names, NO ARIA attributes, NO semantic-HTML jargon.",
+      "ux_impact": "why it's better for the user, in a sentence. Speak to the outcome, not the mechanism."
     }}
   ],
-  "change_summary": ["visible improvement in plain English"],
+  "change_summary": ["Short visible improvement — what the visitor would say if they reloaded and noticed. NO class names."],
   "transformation_notes": [
-    "1-4 short, plain-English bullets. Each one names a competitor and the vibe you borrowed from them.",
-    "Talk like a designer to a friend, not like a code reviewer. No class names, padding values, ARIA attributes, or semantic-HTML jargon.",
-    "One sentence each. Describe what the page feels like now, not the CSS that got it there.",
+    "1-4 short bullets. Each one names a competitor and the vibe you borrowed.",
+    "Talk like a designer to a friend, not like a code reviewer.",
     "Good: 'Borrowed Linear's calm stat-card vibe — big numbers, tiny labels, lots of breathing room.'",
     "Good: 'Took Vercel's one-bold-button rule so the main action actually pops.'",
     "Good: 'Stole Stripe's two-step delete flow — destructive actions now ask for confirmation.'",
