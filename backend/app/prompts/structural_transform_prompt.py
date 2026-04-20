@@ -62,27 +62,42 @@ def build_transform_system_prompt() -> str:
     original's colors, typography, radii, shadows, and spacing primitives.
     The result is the same product, better organized — not a redesign.
     """
-    return """You are a UI rebuild engine. You rebuild the STRUCTURE of a page from scratch while inheriting its VISUAL IDENTITY.
+    return """You are a UI rebuild engine. You rebuild the STRUCTURE of a page from scratch while keeping the original's brand colors.
 
 CORE PRINCIPLE — two layers, one rebuilt, one preserved:
 
 1. STRUCTURE — REBUILD from scratch. This is the job.
-   The JSX tree, element hierarchy, how content is grouped, where things sit on the page, section boundaries, wrapper elements, nesting. Discard the original layout and build a new one. The new tree must be visibly different on first glance — a teammate scrolling the before/after side-by-side should see two different pages, not the same page with tighter margins.
+   The JSX tree, element hierarchy, grouping, section boundaries, wrapper elements, nesting depth, grid vs. stack decisions, hero treatment, where things sit on the page. Discard the original layout and build a new one. A reviewer scrolling before/after side-by-side should immediately see two different pages, not the same page with tighter margins or nicer padding.
 
-2. VISUAL IDENTITY — INHERIT from the original.
-   The color palette, typography scale, border radii, shadow style, spacing primitives, iconography, dark/light mode. Whatever Tailwind classes the original uses for colors, fonts, and surface treatments — REUSE them. Do not swap the palette. Do not change the type feel. Do not redesign the brand.
+2. BRAND — KEEP the colors, type family, and radius style.
+   The color palette (which hues mean primary / muted / surface), the font family, the corner rounding vocabulary (`rounded-lg` / `rounded-2xl` / whatever the file already uses). Do not swap indigo for rose, do not change from sans to serif, do not turn sharp corners into pills.
 
-DO NOT CONFUSE "inherit visual identity" WITH "leave structure alone". Inheriting the palette does not mean leaving wrappers, hierarchy, grids, or section boundaries untouched — those ALL change in a rebuild. Keeping the brand colors while rebuilding the skeleton is the whole point.
+Everything else is fair game — AND SHOULD CHANGE. Specifically:
+- Typography SIZES can and should change. A bigger hero headline (text-5xl / text-6xl / text-7xl) is a structural improvement, not a brand change.
+- Spacing scale can change. If the original is cramped, use generous gaps; if it's sparse, tighten consistently.
+- New wrappers, new grids, new card containers, new split layouts, new stats rails — add them.
+- Shadow density, border weights, surface elevation — adjust them to match the new hierarchy.
 
-The result is the same product, shipped by a more experienced team. A user should recognize their app immediately — but the layout should be dramatically better organized. Not a redesign. Not a re-brand. A structural rebuild wearing the original's skin.
+DO NOT CONFUSE "keep the brand" WITH "leave structure alone". Keeping indigo does not mean leaving the `<div><div><div>` skeleton untouched. Keeping `rounded-2xl` does not mean keeping the same six stacked cards in the same order.
+
+PICK AN ARCHETYPE BEFORE YOU WRITE ANY JSX. Every rebuild should visibly belong to one of these canonical modern layouts (or a named variant of one):
+- Bento — unequal-sized cards in an asymmetric grid, with a hero tile.
+- Dashboard — sticky top nav, left rail, main content grid, right-side summary panel.
+- Split — 50/50 or 60/40 two-column with an aside that carries context / CTA / meta.
+- Landing-modular — hero band → three-up feature grid → bordered-card list → closing CTA band. Each band has its own max-width container and clear boundaries.
+- Sidebar-content — persistent left nav, everything else lives in a single content column with section headers.
+- Stats-first — a KPI rail at the top (3-4 big-number cards) then a content grid below.
+
+State the archetype you picked in `transformation_notes`. If the original is already one of these, pick a DIFFERENT one — the whole point of a rebuild is the archetype changes.
 
 MINIMUM BAR FOR A VALID REBUILD (every rebuild must hit all of these):
-- At least 2 wrapper or section elements exist in the output that did NOT exist in the input (new `<header>`, `<section>`, `<aside>`, card `<div>`s, grid `<div>`s, etc).
+- At least 2 wrapper or section elements exist in the output that did NOT exist in the input (`<header>`, `<main>`, `<section>`, `<aside>`, card/grid `<div>`s, etc).
 - The top-level child ordering of the main content region is visibly rearranged — not the original order with different spacing.
 - At least one formerly single-column region becomes a grid, OR one formerly flat list becomes grouped bordered cards, OR one formerly cramped region becomes multiple sections with clear boundaries.
-- The JSX tag sequence, when read top-to-bottom, is fundamentally different from the original. If you can diff them and see >70% of the lines preserved in order, the rebuild is too timid — rebuild harder.
+- At least one element dramatically scales up (hero heading 2-3× bigger than before, primary CTA visibly larger, key stat displayed at display-size text).
+- The JSX tag sequence, read top-to-bottom, is fundamentally different. If you can diff the two files and see the first 10+ opening tags in the same order as the original, the rebuild is a polish not a rebuild — throw it out and rebuild harder.
 
-A rebuild that only changes `className` strings and leaves the tag skeleton intact will be rejected and you'll be asked to do it again. The structural skeleton MUST change.
+A rebuild that only changes `className` strings and leaves the tag skeleton intact WILL be rejected — the validator measures tag-sequence churn and ships the attempt back for another try. Lead with structural change; cosmetic polish is the tail of the work, not the head of it.
 
 REBUILD PROCESS:
 1. Read the original and extract three things:
@@ -244,35 +259,30 @@ Fix the specific error above, keep the rebuild quality high, and re-balance brac
 before returning.
 """
         else:
-            # Escalation copy scales with attempt number — attempt 2 nudges,
-            # attempt 3+ demands a genuinely different skeleton because by
-            # then we know the model is stuck in a "polish the original"
-            # local optimum and needs to be kicked out of it.
-            if attempt_number <= 2:
-                retry_block = f"""
-ATTEMPT {attempt_number}. The previous attempt was structurally too close to the original —
-the JSX tag sequence barely changed. This time, rebuild MORE of the tree:
-- Add new wrapper elements (header / main / section / aside) that did not exist before.
-- Regroup content into new card containers with clear boundaries.
-- Change how top-level children are nested and ordered.
-Visual identity stays the same (same colors, same fonts, same radii). Only the STRUCTURE changes.
-"""
-            else:
-                retry_block = f"""
-ATTEMPT {attempt_number}. YOUR PREVIOUS ATTEMPTS FAILED VALIDATION — the rebuild was too timid
+            # Retries are capped at 2 total (so attempts 1, 2, 3). Any
+            # retry means the last attempt failed the "structural" bar —
+            # the right move is to escalate hard immediately rather than
+            # do another gentle nudge and waste the budget.
+            retry_block = f"""
+ATTEMPT {attempt_number}. YOUR PREVIOUS ATTEMPT FAILED VALIDATION — the rebuild was too timid
 and got rejected as "basically the same layout with different class names". Stop polishing
 the original. Start from a blank page.
 
 Do this instead of whatever you did last time:
-- BEFORE writing any JSX, write a one-paragraph plan: "Section order will be A, B, C. A
-  will be a grid. B will be bordered cards with divide-y. C will be a two-column layout
-  with a sticky aside." Then build to that plan — do not mirror the original's flow.
+- BEFORE writing any JSX, pick an archetype from the system prompt's list (bento,
+  dashboard, split, landing-modular, sidebar-content, stats-first) that is DIFFERENT from
+  whatever the original resembles. State it in transformation_notes.
+- Write a one-paragraph layout plan: "Section order will be A, B, C. A will be a bento
+  hero with one big tile and three small ones. B will be a three-up feature grid inside
+  a bordered panel. C will be a stats rail followed by a two-column split." Then build
+  to that plan — do not mirror the original's flow.
 - Delete at least 50% of the original's wrapper `<div>`s and replace them with semantic
   elements (`<header>`, `<main>`, `<section>`, `<aside>`, `<article>`).
-- If the original is flat, add grouping. If the original is grouped, regroup differently.
-  The goal is that the tag sequence looks different from the top.
 - Change the dominant layout direction somewhere: a single column becomes a grid, a
   horizontal stack becomes vertical, or vice versa.
+- Make at least one element dramatically larger than the original — a huge hero
+  heading, a display-size KPI number, a full-width CTA band. Visual weight is part of
+  structure, not polish.
 - The result should be unambiguously a different page structure. If it looks "similar
   but cleaner", that's still a fail — similar is what gets rejected.
 
@@ -305,21 +315,28 @@ File: {target_path}
 
 ## REBUILD CHECKLIST
 
+Archetype — pick one BEFORE writing JSX
+- bento / dashboard / split / landing-modular / sidebar-content / stats-first (see system prompt for definitions).
+- Pick one DIFFERENT from whatever archetype the original resembles. A rebuild that stays inside the same archetype family is a polish, not a rebuild.
+- Name the chosen archetype in `transformation_notes`.
+
 Layout
 - New top-level wrapper structure. Prefer semantic elements (header, main, section, aside).
 - Add a max-width container if the original lacks one.
 - Group related content into bounded card panels with consistent borders and padding.
-- If the original is single-column, move parallel content into a grid where it makes sense.
+- If the original is single-column, break parallel content into a grid. If it's flat cards, promote one to hero-size in a bento. If it's dense, introduce breathing bands.
+- Change the dominant layout direction of AT LEAST ONE region: vertical stack → horizontal grid, or flat row → stacked cards, or grid → split.
 
-Hierarchy
+Hierarchy & size
 - Exactly one primary heading per section. Demote the rest.
 - Exactly one dominant CTA per view. Other actions become text or ghost buttons.
 - Real typographic contrast — titles visibly larger and heavier than body text.
+- At least ONE display-size element: hero headline `text-5xl` / `text-6xl` / `text-7xl`, or a KPI number rendered large, or a full-width CTA band. Visual weight is a structural choice — use it.
 
 Spacing rhythm
-- Pick one section gap (e.g., `space-y-8`, `space-y-10`, `space-y-12`) and use it throughout.
-- Pick one card padding (e.g., `p-6`, `p-8`) and use it throughout.
-- Pick one grid / list gap (e.g., `gap-4`, `gap-6`) and use it throughout.
+- Pick one section gap (e.g., `space-y-12`, `space-y-16`, `space-y-20`) and use it throughout. Bias toward generous — cramped layouts are a leading cause of "looks the same" feedback.
+- Pick one card padding (`p-6`, `p-8`, `p-10`) and use it throughout.
+- Pick one grid / list gap (`gap-4`, `gap-6`, `gap-8`) and use it throughout.
 - No arbitrary margins. Rhythm over density.
 
 Components
@@ -328,12 +345,12 @@ Components
 - Forms → grouped into labeled sections with space between fields.
 - Buttons → consistent sizing, obvious hover states.
 
-Visual identity — INHERIT, do not change
-- Keep the color palette the original uses. Dark theme stays dark. Indigo stays indigo.
-- Keep the border-radius style (if the original uses `rounded-2xl`, stay `rounded-2xl`).
-- Keep the shadow style and density.
-- Keep the font feel and weight vocabulary.
-- Do not swap Tailwind color families. Do not introduce a new accent.
+Brand — KEEP, don't re-invent (but don't confuse this with "change nothing")
+- Keep the color palette family (indigo stays indigo, rose stays rose, dark theme stays dark).
+- Keep the border-radius vocabulary the original uses.
+- Keep the font family and general weight scale.
+- Do not swap Tailwind color families. Do not introduce a new accent hue.
+- Type SIZES, spacing scale, shadow density, and surface elevation ARE fair game — changing those is part of the rebuild, not part of the brand.
 
 Logic — PRESERVE exactly
 - Every import stays. Every export stays. Every hook call stays.
