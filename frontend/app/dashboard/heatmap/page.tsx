@@ -242,7 +242,12 @@ function HeatmapPageInner() {
       const res = await fetch(apiUrl(`/api/heatmap/pages/${selectedPageId}/screenshot`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ github_user_id: githubUserId }),
+        body: JSON.stringify({
+          github_user_id: githubUserId,
+          // Passed through to the repo-based fallback when the live URL
+          // returns 4xx — needed so the clone works on private repos.
+          access_token: session?.accessToken ?? null,
+        }),
       })
 
       if (!res.ok) {
@@ -272,7 +277,7 @@ function HeatmapPageInner() {
     } finally {
       setRefreshingShots(false)
     }
-  }, [site, githubUserId, selectedPageId])
+  }, [site, githubUserId, selectedPageId, session?.accessToken])
 
   const totalSessions = heatmap?.totalSessions ?? 0
   const hasEnoughData = totalSessions >= MIN_SESSIONS_FOR_HEATMAP
@@ -371,7 +376,7 @@ function HeatmapPageInner() {
                   onClick={refreshScreenshots}
                   disabled={refreshingShots}
                   className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[10.5px] font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-wait disabled:opacity-60"
-                  title="Re-capture from the latest deployed version of your site"
+                  title="Re-capture from your live site. Falls back to building your repo locally if a route only works via client-side navigation (can take ~1-2 minutes)."
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="23 4 23 10 17 10" />

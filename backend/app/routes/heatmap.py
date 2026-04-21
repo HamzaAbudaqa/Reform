@@ -671,11 +671,45 @@ async def capture_screenshot(
     page, site = await _load_page_scoped(db, page_id, req.github_user_id)
     url = site.domain + (page.path if page.path.startswith("/") else f"/{page.path}")
 
-    b64, _status = await take_screenshot_b64_if_live(url)
+    b64, status = await take_screenshot_b64_if_live(url)
+
+    # Fallback: when the live URL returned a 4xx, it's almost always a
+    # SPA route that only exists via client-side navigation — real
+    # visitors reach `/dashboard` by clicking a nav link from `/` rather
+    # than typing the URL, so Vercel/Next.js returns the app's 404 page
+    # for our direct Playwright hit. Rebuild against the user's repo
+    # (same strategy the UI Transformation pipeline uses — next dev
+    # serves every routed file correctly) and screenshot that.
+    #
+    # Skipped when we don't have the info we need to clone (no repo URL
+    # on the project) — we fall through with whatever the live capture
+    # produced, even if it's a 404 page image.
+    if status and status >= 400:
+        from app.services.heatmap_repo_capture import capture_path_from_repo
+        project = (
+            await db.execute(select(Project).where(Project.id == site.project_id))
+        ).scalar_one_or_none()
+        if project and project.repo_url:
+            logger.info(
+                "capture_screenshot: live URL returned %s for %s, falling back to repo capture",
+                status, url,
+            )
+            repo_b64 = await capture_path_from_repo(
+                repo_clone_url=project.repo_url,
+                branch=project.branch or "main",
+                path=page.path,
+                access_token=(
+                    # Allow the frontend to pass a token for private
+                    # repos. The request model already carries it on
+                    # this endpoint (CaptureScreenshotRequest).
+                    getattr(req, "access_token", "") or ""
+                ),
+            )
+            if repo_b64:
+                b64 = repo_b64
+                status = 200  # mark as "we got something good" for the downstream branches
+
     if not b64:
-        # With the screenshot helper now tolerating 4xx responses, the
-        # only empty-b64 case is a total connection failure (DNS, TCP
-        # refused, navigation timeout). Report that plainly.
         raise HTTPException(
             status_code=502,
             detail="Browser couldn't reach your site — check the URL is reachable from the public internet.",

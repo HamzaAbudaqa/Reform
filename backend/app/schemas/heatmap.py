@@ -127,6 +127,10 @@ class HeatmapDataResponse(BaseModel):
 class CaptureScreenshotRequest(BaseModel):
     github_user_id: str
     path: str = "/"
+    # Optional GitHub token — only used by the repo-based fallback
+    # capture path when the live URL returns 4xx and we need to clone
+    # the user's repo. Public repos don't need it.
+    access_token: str | None = None
 
 
 class CaptureScreenshotResponse(BaseModel):
