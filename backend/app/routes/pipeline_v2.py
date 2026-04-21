@@ -57,9 +57,15 @@ async def transform_repo_v2(
         await increment_scan_usage(db, sub)
 
     async def event_stream():
-        # Kick off the real work as a background task so we can yield
-        # heartbeats on a timer while it runs. asyncio.shield prevents
-        # wait_for's timeout from cancelling the underlying task.
+        # Stage updates emitted by the orchestrator get pushed through
+        # this queue so we can tee them into the NDJSON response.
+        # Replaces the fake 6s-per-step timer the frontend modal used to
+        # fall back to — honest progress, no guessing.
+        progress_queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+
+        async def on_progress(stage: str, percent: int) -> None:
+            await progress_queue.put((stage, percent))
+
         task = asyncio.create_task(run_pipeline_v2(
             github_url=req.github_url,
             branch=req.branch,
@@ -72,17 +78,55 @@ async def transform_repo_v2(
             mode=effective_mode,
             project_id=req.project_id,
             commit_sha=req.commit_sha,
+            on_progress=on_progress,
         ))
 
         while not task.done():
+            # Race the pipeline, the queue, and the heartbeat timer.
+            # Whichever resolves first decides what we yield this tick.
+            queue_wait = asyncio.create_task(progress_queue.get())
             try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=_HEARTBEAT_INTERVAL_SECONDS)
-            except asyncio.TimeoutError:
+                done, _pending = await asyncio.wait(
+                    [asyncio.shield(task), queue_wait],
+                    timeout=_HEARTBEAT_INTERVAL_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                if not queue_wait.done():
+                    queue_wait.cancel()
+
+            if queue_wait.done() and not queue_wait.cancelled():
+                try:
+                    stage, percent = queue_wait.result()
+                    yield json.dumps({
+                        "type": "stage",
+                        "stage": stage,
+                        "percent": percent,
+                    }) + "\n"
+                except asyncio.CancelledError:
+                    pass
+
+            # Drain any further stage events that accumulated while we
+            # were sending the first one. Keeps the stream caught up
+            # without spamming one yield per event.
+            drained = 0
+            while not progress_queue.empty() and drained < 20:
+                try:
+                    stage, percent = progress_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                drained += 1
+                yield json.dumps({
+                    "type": "stage",
+                    "stage": stage,
+                    "percent": percent,
+                }) + "\n"
+
+            if not done:
+                # Neither the task nor a queue event resolved within the
+                # heartbeat window — emit a heartbeat to keep mobile
+                # NATs / proxies from dropping the idle socket.
                 yield json.dumps({"type": "heartbeat"}) + "\n"
-            except Exception:
-                # Task finished with an exception during wait_for —
-                # fall through so task.result() below handles it.
-                break
 
         try:
             result = task.result()

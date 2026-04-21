@@ -990,6 +990,12 @@ function TransformPage() {
     mode: RunMode | null
     banner: string
   } | null>(null)
+  // Live stream-fed stage/progress for fresh runs. Backend emits
+  // {type: "stage", stage, percent} events on the NDJSON pipe; we feed
+  // these into PipelineProgress so the bar reflects actual work, not
+  // the time-based fallback.
+  const [streamStage, setStreamStage] = useState<string | null>(null)
+  const [streamPercent, setStreamPercent] = useState<number | null>(null)
   // Transformation notes from the latest completed run — rendered beneath
   // the result header so users see which competitor patterns were applied.
   const [transformationNotes, setTransformationNotes] = useState<string[]>([])
@@ -1423,6 +1429,8 @@ function TransformPage() {
   ) {
     setPipelineError(''); setGateError(null); setRepoName(repo.full_name); setRepoBranch(repo.default_branch || 'main')
     setResumeState(null)
+    setStreamStage(null)
+    setStreamPercent(null)
     setTransformationNotes([])
     setResultMode(null)
     const branch = repo.default_branch || 'main'
@@ -1566,6 +1574,15 @@ function TransformPage() {
               continue
             }
             if (msg.type === 'heartbeat') continue
+            if (msg.type === 'stage') {
+              // Real-time stage signal from the orchestrator. Overrides
+              // the time-based PipelineProgress estimates so the bar
+              // reflects actual backend work.
+              const m = msg as { stage?: string; percent?: number }
+              if (m.stage) setStreamStage(m.stage)
+              if (typeof m.percent === 'number') setStreamPercent(m.percent)
+              continue
+            }
             if (msg.type === 'error') {
               throw new Error(msg.detail || 'Transform failed')
             }
@@ -2021,8 +2038,10 @@ function TransformPage() {
             repoName={repoName}
             startedAt={pipelineStartedAt ?? Date.now()}
             resumeLabel={resumeState?.banner || null}
-            overrideProgress={resumeState?.progressPercent ?? null}
-            overrideStage={resumeState?.stage ?? null}
+            // Prefer streamed events (fresh runs) over resume-poll state —
+            // they're both valid signals; streamed ones are more recent.
+            overrideProgress={streamPercent ?? resumeState?.progressPercent ?? null}
+            overrideStage={streamStage ?? resumeState?.stage ?? null}
           />
         )}
 

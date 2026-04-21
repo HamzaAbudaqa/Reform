@@ -450,8 +450,27 @@ async def _update_run_progress(
     run_id: str | None,
     stage: str,
     percent: int,
+    on_progress=None,
 ) -> None:
-    """Update current_stage / progress_percent on the run row. Non-fatal on errors."""
+    """Update current_stage / progress_percent on the run row. Non-fatal on errors.
+
+    `on_progress` is an optional callback (async-callable) that gets the
+    latest (stage, percent) whenever a stage transitions. The pipeline_v2
+    route uses this to tee stage updates into the NDJSON response stream
+    so frontends can render honest progress instead of a fake timer —
+    without requiring them to poll the DB separately.
+    """
+    # Fan out the update BEFORE the DB write. The DB path is the truth
+    # for post-run lookups and resume flows; the callback is for live
+    # streaming. Either can fail without blocking the other — stream
+    # listeners care about freshness and a lost write just means one
+    # fewer tick in the UI, not a broken run.
+    if on_progress is not None:
+        try:
+            await on_progress(stage, percent)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("progress callback raised (%s @ %d): %s", stage, percent, e)
+
     if not run_id:
         return
     from app.db import async_session
@@ -569,6 +588,7 @@ async def run_pipeline_v2(
     mode: str = STABLE,
     project_id: str | None = None,
     commit_sha: str | None = None,
+    on_progress=None,
 ) -> dict:
     """
     Full multi-page transformation pipeline.
@@ -632,7 +652,7 @@ async def run_pipeline_v2(
 
     try:
         # ── Step 1: Ingest ──────────────────────────────────────────────
-        await _update_run_progress(run_id, "ingesting", 5)
+        await _update_run_progress(run_id, "ingesting", 5, on_progress)
         logger.info("Pipeline v2: Ingesting %s (branch: %s)", github_url, branch)
         repo_data = await ingest_github_repo(github_url, branch, access_token)
         files = repo_data["files"]
@@ -643,7 +663,7 @@ async def run_pipeline_v2(
             raise ValueError("No frontend files found in repository.")
 
         # ── Step 2: Discover pages ──────────────────────────────────────
-        await _update_run_progress(run_id, "discovering_pages", 15)
+        await _update_run_progress(run_id, "discovering_pages", 15, on_progress)
         logger.info("Pipeline v2: Discovering pages")
         pages, framework, dependency_map = discover_pages(files, file_tree)
 
@@ -656,7 +676,7 @@ async def run_pipeline_v2(
         logger.info("Pipeline v2: Found %d pages (%s)", len(pages), framework)
 
         # ── Step 3: Evaluate all pages ──────────────────────────────────
-        await _update_run_progress(run_id, "evaluating", 25)
+        await _update_run_progress(run_id, "evaluating", 25, on_progress)
         logger.info("Pipeline v2: Evaluating %d pages", len(pages))
         evaluations = await evaluate_all_pages(
             pages, files, dependency_map, di, profile=mode,
@@ -668,7 +688,7 @@ async def run_pipeline_v2(
             )
 
         # ── Step 4: Plan transformations ────────────────────────────────
-        await _update_run_progress(run_id, "planning", 40)
+        await _update_run_progress(run_id, "planning", 40, on_progress)
 
         # On a stable re-run with a cached plan, replay the same targets so
         # the model receives the same evaluation inputs it did before —
@@ -713,7 +733,7 @@ async def run_pipeline_v2(
         }
 
         # ── Step 5: Transform selected pages (in parallel) ──────────────
-        await _update_run_progress(run_id, "transforming", 50)
+        await _update_run_progress(run_id, "transforming", 50, on_progress)
         content_lookup = {f["path"]: f["content"] for f in files}
         transform_results: dict[str, dict] = {}
 
@@ -768,7 +788,7 @@ async def run_pipeline_v2(
             if result.get("error") and not result.get("updated_code"):
                 pipeline_errors.append(f"Transform failed for {path}: {result['error']}")
 
-        await _update_run_progress(run_id, "rendering", 75)
+        await _update_run_progress(run_id, "rendering", 75, on_progress)
 
         # ── Step 6: Render screenshots ──────────────────────────────────
         # Build list of successful transforms for screenshotting
@@ -812,7 +832,7 @@ async def run_pipeline_v2(
             logger.info("Screenshots for %s: before=%s after=%s error=%s", path, has_before, has_after, perr or "none")
 
         # ── Step 6.5: Upload screenshots to S3 ─────────────────────────
-        await _update_run_progress(run_id, "uploading", 90)
+        await _update_run_progress(run_id, "uploading", 90, on_progress)
         # Replace the inline base64 blobs with presigned URLs so the
         # response payload stays small (a 5-page run with screenshots
         # was ~6-12 MB of base64; this drops it to a few KB of URLs).

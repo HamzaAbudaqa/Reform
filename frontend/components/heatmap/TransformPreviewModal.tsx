@@ -59,6 +59,26 @@ const STAGE_STEPS: { key: string; label: string }[] = [
   { key: 'rendering',    label: 'Rendering preview' },
 ]
 
+// Map backend stage names (from _update_run_progress) onto STAGE_STEPS
+// indices. Backend stages use snake_case / multiple words per phase; the
+// modal only shows four coarse buckets. Unmapped stages leave the index
+// alone rather than snapping backwards.
+const BACKEND_STAGE_TO_INDEX: Record<string, number> = {
+  ingesting: 0,
+  cloning: 0,
+  discovering_pages: 1,
+  discovering: 1,
+  evaluating: 1,
+  scoring: 1,
+  planning: 1,
+  transforming: 2,
+  rebuilding: 2,
+  rendering: 3,
+  uploading: 3,
+  saving: 3,
+  done: 3,
+}
+
 export default function TransformPreviewModal({
   stagedSuggestions,
   sourcePagePath,
@@ -126,46 +146,54 @@ export default function TransformPreviewModal({
       }
       if (!res.body) throw new Error('Transform returned no stream body')
 
-      // NDJSON reader. Heartbeats keep mobile NATs happy; `result` is the
-      // real payload. We can't bind heartbeat counts to real pipeline
-      // stages without a richer stream, so we tick the stage indicator on
-      // each heartbeat as a proxy — capped at the last step.
+      // NDJSON reader. The backend now emits three message types that
+      // matter here:
+      //   heartbeat — keep socket warm, nothing to do
+      //   stage     — {stage: "transforming", percent: 50}, drives the UI
+      //   result    — final payload, terminates the loop
+      //   error     — throws
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let finalResult: MultiPageTransformResult | null = null
 
-      // Simple, deterministic fake progress: advance one step every ~6s.
-      // Mirrors the real pipeline's coarse timing enough to feel alive.
-      const tickTimer = window.setInterval(() => {
-        setCurrentStep(s => Math.min(s + 1, STAGE_STEPS.length - 1))
-      }, 6000)
-
-      try {
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          let newlineIdx = buffer.indexOf('\n')
-          while (newlineIdx !== -1) {
-            const line = buffer.slice(0, newlineIdx).trim()
-            buffer = buffer.slice(newlineIdx + 1)
-            newlineIdx = buffer.indexOf('\n')
-            if (!line) continue
-            let msg: { type: string; data?: MultiPageTransformResult; detail?: string }
-            try {
-              msg = JSON.parse(line)
-            } catch {
-              continue
-            }
-            if (msg.type === 'heartbeat') continue
-            if (msg.type === 'error') throw new Error(msg.detail || 'Transform failed')
-            if (msg.type === 'result' && msg.data) finalResult = msg.data
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newlineIdx = buffer.indexOf('\n')
+        while (newlineIdx !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim()
+          buffer = buffer.slice(newlineIdx + 1)
+          newlineIdx = buffer.indexOf('\n')
+          if (!line) continue
+          let msg: {
+            type: string
+            data?: MultiPageTransformResult
+            detail?: string
+            stage?: string
+            percent?: number
           }
+          try {
+            msg = JSON.parse(line)
+          } catch {
+            continue
+          }
+          if (msg.type === 'heartbeat') continue
+          if (msg.type === 'stage' && msg.stage) {
+            const mapped = BACKEND_STAGE_TO_INDEX[msg.stage.toLowerCase()]
+            if (typeof mapped === 'number') {
+              // Clamp to monotonic-forward so a late "ingesting" event
+              // (e.g., a resumed run re-emitting from earlier) doesn't
+              // snap the UI backwards.
+              setCurrentStep(prev => Math.max(prev, mapped))
+            }
+            continue
+          }
+          if (msg.type === 'error') throw new Error(msg.detail || 'Transform failed')
+          if (msg.type === 'result' && msg.data) finalResult = msg.data
         }
-      } finally {
-        window.clearInterval(tickTimer)
       }
 
       if (!finalResult) throw new Error('Stream ended without a result')
