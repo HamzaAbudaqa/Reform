@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import AIRecommendations from '@/components/heatmap/AIRecommendations'
@@ -113,36 +113,56 @@ function HeatmapPageInner() {
 
   const shouldPoll = !!site?.verifiedAt
 
-  // Fetch pages (and poll while empty).
+  // Current pages, kept as a ref so the poll interval can read the
+  // latest value without `pages` going in its deps (which would
+  // re-create the interval on every state update — worst case an
+  // infinite loop, best case extra network churn).
+  const pagesRef = useRef<HeatmapPage[]>([])
+  useEffect(() => { pagesRef.current = pages }, [pages])
+
+  // Exposed so the refresh-screenshots button can trigger an immediate
+  // fetch without duplicating the fetch body.
+  const fetchPagesRef = useRef<(() => Promise<HeatmapPage[] | null>) | null>(null)
+
+  // Fetch pages (and poll while empty OR while any screenshot is missing).
   useEffect(() => {
     if (!site || !githubUserId) return
     let cancelled = false
-    async function fetchPages() {
-      if (!site) return
+    const siteId = site.id
+    async function fetchPages(): Promise<HeatmapPage[] | null> {
       try {
-        const res = await fetch(apiUrl(`/api/heatmap/pages?github_user_id=${encodeURIComponent(githubUserId)}&site_id=${encodeURIComponent(site.id)}`))
-        if (!res.ok) return
+        const res = await fetch(apiUrl(`/api/heatmap/pages?github_user_id=${encodeURIComponent(githubUserId)}&site_id=${encodeURIComponent(siteId)}`))
+        if (!res.ok) return null
         const raw = await res.json() as Array<Record<string, unknown>>
-        if (cancelled) return
+        if (cancelled) return null
         const next = raw.map(mapPage)
         setPages(next)
         if (next.length && !selectedPageId) {
           setSelectedPageId(next[0].id)
         }
+        return next
       } catch {
-        /* noop */
+        return null
       }
     }
+    fetchPagesRef.current = fetchPages
     fetchPages()
     if (!shouldPoll) return
+    // Keep polling while (a) no pages yet or (b) some page is still
+    // missing its screenshot — the refresh-from-live flow relies on
+    // this to pick up Playwright captures without manual refresh.
     const interval = window.setInterval(() => {
-      if (pages.length === 0) fetchPages()
+      const current = pagesRef.current
+      if (current.length === 0 || current.some((p: HeatmapPage) => !p.screenshotUrl)) {
+        void fetchPages()
+      }
     }, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
+      fetchPagesRef.current = null
       window.clearInterval(interval)
     }
-  }, [site, githubUserId, shouldPoll, pages.length, selectedPageId])
+  }, [site, githubUserId, shouldPoll, selectedPageId])
 
   // Fetch heatmap data when inputs change.
   useEffect(() => {
@@ -188,22 +208,38 @@ function HeatmapPageInner() {
 
   const [refreshingShots, setRefreshingShots] = useState(false)
   // Kick every page's screenshot back to "unset" and schedule fresh
-  // Playwright captures server-side. Used after a deploy — the stored
-  // image can be days stale, but the dashboard couldn't previously
-  // surface that to the user.
+  // Playwright captures server-side, then tight-poll /pages until the
+  // captures finish so the UI swaps stale → fresh without the user
+  // needing to reload.
   const refreshScreenshots = useCallback(async () => {
     if (!site || !githubUserId) return
     setRefreshingShots(true)
     try {
-      await fetch(apiUrl(`/api/heatmap/sites/${site.id}/refresh-screenshots`), {
+      const res = await fetch(apiUrl(`/api/heatmap/sites/${site.id}/refresh-screenshots`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_user_id: githubUserId }),
       })
+      if (!res.ok) return
       // Optimistically blank the local screenshot URLs so the "Capturing…"
-      // affordance kicks in immediately — the poll loop below will refetch
-      // the pages once the background Playwright capture finishes.
+      // affordance kicks in immediately.
       setPages(prev => prev.map(p => ({ ...p, screenshotUrl: '' })))
+
+      // Tight-poll /pages until every page has a fresh screenshot URL
+      // or we hit the 90s ceiling. Playwright captures run in parallel
+      // in the background, so a small site typically finishes inside
+      // 20s; the wider window covers slower cold-starts. We can't rely
+      // solely on the main 10s poll — the request succeeded but the
+      // user's tab would sit on the stale "Capturing…" state for up to
+      // a full interval.
+      const deadline = Date.now() + 90_000
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 3_000))
+        const fetchPages = fetchPagesRef.current
+        if (!fetchPages) break
+        const next = await fetchPages()
+        if (next && next.length > 0 && next.every((p: HeatmapPage) => !!p.screenshotUrl)) break
+      }
     } catch { /* non-fatal — user can retry */ } finally {
       setRefreshingShots(false)
     }
