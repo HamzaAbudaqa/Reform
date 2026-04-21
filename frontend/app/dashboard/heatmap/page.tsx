@@ -208,65 +208,65 @@ function HeatmapPageInner() {
 
   const [refreshingShots, setRefreshingShots] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  // Force a fresh Playwright capture of the currently-selected page and
-  // any other pages in parallel. We hit the SYNCHRONOUS per-page endpoint
-  // (/pages/{id}/screenshot) for the visible page so the user gets a
-  // guaranteed response — either a new screenshot URL or a real error —
-  // within one Playwright cycle. The fire-and-forget site-wide endpoint
-  // was failing silently when the background capture hit an issue (Vercel
-  // preview returning a redirect, Playwright binary missing on the
-  // worker, S3 creds drift, etc.) and leaving the UI stuck on "Capturing…"
-  // forever with nothing to surface.
+  // Force a fresh Playwright capture. Strategy:
+  //
+  //   1. Synchronously capture JUST the currently-visible page via the
+  //      per-page endpoint — the user gets a guaranteed response in one
+  //      Playwright cycle (~6-10s) and sees their card update. This is the
+  //      only capture the user is blocked on.
+  //   2. Fire the bulk /refresh-screenshots endpoint for everything else
+  //      as a background task. The next /pages poll picks up the new
+  //      URLs when those captures finish — the user doesn't wait.
+  //
+  // We DO NOT optimistically blank the screenshot URL before the request
+  // resolves — on capture failure (404, dev-server-down, etc.) the old
+  // screenshot stays visible rather than the UI falling back to "No
+  // screenshot yet" forever.
   const refreshScreenshots = useCallback(async () => {
     if (!site || !githubUserId) return
     setRefreshingShots(true)
     setRefreshError(null)
 
-    // Page-list to re-capture. Prioritize the selected page first so the
-    // visible card flips fresh ASAP; do the rest after so the full
-    // dashboard isn't stuck on a one-page sync.
-    const current = pagesRef.current
-    const ordered = selectedPageId
-      ? [
-          ...current.filter(p => p.id === selectedPageId),
-          ...current.filter(p => p.id !== selectedPageId),
-        ]
-      : current
-
     try {
-      let firstError: string | null = null
-      for (const p of ordered) {
-        // Optimistic blank so the spinner kicks in per-row.
-        setPages(prev => prev.map(row => row.id === p.id ? { ...row, screenshotUrl: '' } : row))
+      // ── Fire the background bulk refresh for every page except the
+      // selected one. Doesn't wait — the main /pages poll handles the
+      // update when those captures finish.
+      void fetch(apiUrl(`/api/heatmap/sites/${site.id}/refresh-screenshots`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_user_id: githubUserId }),
+      }).catch(() => { /* non-fatal */ })
 
-        const res = await fetch(apiUrl(`/api/heatmap/pages/${p.id}/screenshot`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ github_user_id: githubUserId }),
-        })
-        if (!res.ok) {
-          // Parse a useful error — the backend returns 502 with
-          // {"detail": "..."} for "page is 404ing / unreachable".
-          let detail = `Capture failed (${res.status})`
-          try {
-            const body = await res.json() as { detail?: string }
-            if (body?.detail) detail = body.detail
-          } catch { /* body wasn't JSON */ }
-          if (!firstError) firstError = `${p.path}: ${detail}`
-          // Keep the blanked state — the next refresh attempt can retry.
-          continue
-        }
-        const data = await res.json() as {
-          screenshot_url: string
-          page_height_px: number
-        }
-        setPages(prev => prev.map(row =>
-          row.id === p.id
-            ? { ...row, screenshotUrl: data.screenshot_url, pageHeightPx: data.page_height_px }
-            : row,
-        ))
+      // ── Synchronously capture the selected page.
+      if (!selectedPageId) return
+      const res = await fetch(apiUrl(`/api/heatmap/pages/${selectedPageId}/screenshot`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_user_id: githubUserId }),
+      })
+
+      if (!res.ok) {
+        // Parse the backend detail for a useful error. 502 with
+        // "Live URL returned HTTP 404" is the common case when a route
+        // got removed between deploys.
+        let detail = `Capture failed (HTTP ${res.status})`
+        try {
+          const body = await res.json() as { detail?: string }
+          if (body?.detail) detail = body.detail
+        } catch { /* body wasn't JSON */ }
+        setRefreshError(detail)
+        return
       }
-      if (firstError) setRefreshError(firstError)
+
+      const data = await res.json() as {
+        screenshot_url: string
+        page_height_px: number
+      }
+      setPages(prev => prev.map(row =>
+        row.id === selectedPageId
+          ? { ...row, screenshotUrl: data.screenshot_url, pageHeightPx: data.page_height_px }
+          : row,
+      ))
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
     } finally {
@@ -390,6 +390,11 @@ function HeatmapPageInner() {
                   <div className="flex-1 min-w-0">
                     <span className="font-medium">Couldn&apos;t refresh — </span>
                     <span>{refreshError}</span>
+                    {/^.*HTTP 404/i.test(refreshError) && (
+                      <span className="block mt-0.5 text-amber-800">
+                        This route may have been removed in your latest deploy, or your site needs a redirect set up for it. The previous screenshot is still shown.
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => setRefreshError(null)}
