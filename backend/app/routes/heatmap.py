@@ -671,17 +671,15 @@ async def capture_screenshot(
     page, site = await _load_page_scoped(db, page_id, req.github_user_id)
     url = site.domain + (page.path if page.path.startswith("/") else f"/{page.path}")
 
-    b64, status = await take_screenshot_b64_if_live(url)
+    b64, _status = await take_screenshot_b64_if_live(url)
     if not b64:
-        # Surface the status code so the dashboard/UI can show something
-        # better than a generic "capture failed" when the live URL itself
-        # is broken (404, auth wall, etc.).
-        detail = (
-            f"Live URL returned HTTP {status} — nothing to capture"
-            if status
-            else "Browser could not reach the live URL"
+        # With the screenshot helper now tolerating 4xx responses, the
+        # only empty-b64 case is a total connection failure (DNS, TCP
+        # refused, navigation timeout). Report that plainly.
+        raise HTTPException(
+            status_code=502,
+            detail="Browser couldn't reach your site — check the URL is reachable from the public internet.",
         )
-        raise HTTPException(status_code=502, detail=detail)
 
     key = upload_screenshot(str(site.id), _slug(page.path), "heatmap", b64)
     if not key:

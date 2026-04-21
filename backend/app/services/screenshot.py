@@ -62,17 +62,31 @@ async def take_screenshot_b64(url: str) -> str:
 
 
 async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
-    """Screenshot `url` only when the server answered with a 2xx/3xx status.
+    """Screenshot `url` and return the bytes plus the HTTP status.
 
-    Returns `(b64, status)` on success, `("", status)` when the page exists
-    but didn't render cleanly, and `("", 0)` when the browser never got a
-    response at all (DNS, timeout, refused connection). Callers should
-    treat any status outside 200-399 as "skip this capture" — otherwise a
-    Next.js 404 or Vercel password-protection page gets stored as the
-    heatmap's "live screenshot", which is what prompted this helper.
+    Returns `(b64, status)` whenever navigation produced *some* rendered
+    output, and `("", 0)` only when the browser couldn't reach the server
+    at all (DNS, timeout, refused connection).
 
-    The 2s settle + domcontentloaded strategy is copied from
-    `take_screenshot_b64` — rationale in that function's body comment.
+    Why we no longer reject 4xx: many SPA deployments — React Router
+    without Vercel rewrites, Next.js without a generateStaticParams /
+    fallback, or any site that treats `/` as the only server route —
+    return HTTP 404 when Playwright loads a client-side path directly,
+    but the full app shell still renders. Real visitors navigate there
+    via `pushState` from `/` and never see the 404; our heatmap tracker
+    records the route, so we want the screenshot too. The old "skip
+    anything >=400" gate was turning all those legitimate captures into
+    "nothing to capture" dead-ends in the dashboard.
+
+    The trade-off: a Vercel password-protection page or a hard-static
+    404 will now get screenshotted. That's acceptable — users see the
+    image in their dashboard and immediately understand what's wrong
+    (infinitely better than a permanent "Capturing…" spinner with no
+    explanation).
+
+    Navigation failure with no response (status == 0) still returns
+    empty — there's nothing to screenshot if the browser never
+    connected.
     """
     logger.info("Taking live-URL screenshot of %s", url)
     from playwright.async_api import async_playwright
@@ -86,9 +100,14 @@ async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
                 logger.warning("Screenshot skipped — navigation failed url=%s err=%s", url, exc)
                 return "", 0
             status = resp.status if resp is not None else 0
-            if status == 0 or status >= 400:
-                logger.warning("Screenshot skipped — HTTP %s from %s", status, url)
-                return "", status
+            if status == 0:
+                logger.warning("Screenshot skipped — no HTTP response from %s", url)
+                return "", 0
+            if status >= 400:
+                logger.info(
+                    "Capturing %s despite HTTP %s — SPA routes often 404 while still rendering",
+                    url, status,
+                )
             await page.wait_for_timeout(2000)
             screenshot = await page.screenshot(type="png", full_page=True)
             return base64.b64encode(screenshot).decode("utf-8"), status
