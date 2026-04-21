@@ -61,6 +61,12 @@ async def take_screenshot_b64(url: str) -> str:
             await browser.close()
 
 
+_REAL_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+
 async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
     """Screenshot `url` and return the bytes plus the HTTP status.
 
@@ -68,37 +74,53 @@ async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
     output, and `("", 0)` only when the browser couldn't reach the server
     at all (DNS, timeout, refused connection).
 
-    Why we no longer reject 4xx: many SPA deployments — React Router
-    without Vercel rewrites, Next.js without a generateStaticParams /
-    fallback, or any site that treats `/` as the only server route —
-    return HTTP 404 when Playwright loads a client-side path directly,
-    but the full app shell still renders. Real visitors navigate there
-    via `pushState` from `/` and never see the 404; our heatmap tracker
-    records the route, so we want the screenshot too. The old "skip
-    anything >=400" gate was turning all those legitimate captures into
-    "nothing to capture" dead-ends in the dashboard.
+    Plays-real-browser tricks (learned the hard way from Vercel deployments
+    returning 404 to default Playwright but the real site to real users):
+      - Real Chrome User-Agent, not "HeadlessChrome/..." (Vercel edge
+        middlewares / Cloudflare bot filters flag the default).
+      - `networkidle` + a 3s settle so SPAs that fetch data after
+        domcontentloaded have rendered the actual page. Many dashboards
+        show a placeholder or an auth skeleton at DCL and swap in the
+        real content a second later once `/api/me` resolves.
+      - Accept-Language + sec-ch-ua hints matching a real Chrome so
+        middleware that fingerprints the full header set passes us.
 
-    The trade-off: a Vercel password-protection page or a hard-static
-    404 will now get screenshotted. That's acceptable — users see the
-    image in their dashboard and immediately understand what's wrong
-    (infinitely better than a permanent "Capturing…" spinner with no
-    explanation).
-
-    Navigation failure with no response (status == 0) still returns
-    empty — there's nothing to screenshot if the browser never
-    connected.
+    4xx responses are still captured (SPA routes often return 404 while
+    rendering the app shell). Caller decides whether to fall back to a
+    repo-based capture based on the status.
     """
     logger.info("Taking live-URL screenshot of %s", url)
     from playwright.async_api import async_playwright
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+        context = await browser.new_context(
+            viewport={"width": 1440, "height": 900},
+            user_agent=_REAL_USER_AGENT,
+            locale="en-US",
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+                "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"macOS"',
+            },
+        )
+        page = await context.new_page()
         try:
             try:
-                resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            except Exception as exc:  # noqa: BLE001 — playwright raises many shapes
-                logger.warning("Screenshot skipped — navigation failed url=%s err=%s", url, exc)
-                return "", 0
+                # networkidle + 3s settle gives SPAs the chance to finish
+                # their initial data fetch. domcontentloaded fires before
+                # most dashboards have resolved `/api/me` or their first
+                # swr/query, so we'd screenshot a loading shell.
+                resp = await page.goto(url, wait_until="networkidle", timeout=30000)
+            except Exception:
+                # networkidle can legitimately time out on chatty apps
+                # (long-poll websockets etc). Fall back to the cheaper
+                # condition and let the settle wait do its work.
+                try:
+                    resp = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                except Exception as exc:
+                    logger.warning("Screenshot skipped — navigation failed url=%s err=%s", url, exc)
+                    return "", 0
             status = resp.status if resp is not None else 0
             if status == 0:
                 logger.warning("Screenshot skipped — no HTTP response from %s", url)
@@ -108,7 +130,11 @@ async def take_screenshot_b64_if_live(url: str) -> tuple[str, int]:
                     "Capturing %s despite HTTP %s — SPA routes often 404 while still rendering",
                     url, status,
                 )
-            await page.wait_for_timeout(2000)
+            # 3s instead of 2s — most data-fetching dashboards finish
+            # their first paint in well under that, but a second saved
+            # here isn't worth a blank render banner for every user
+            # whose app hits /api/me on first mount.
+            await page.wait_for_timeout(3000)
             screenshot = await page.screenshot(type="png", full_page=True)
             return base64.b64encode(screenshot).decode("utf-8"), status
         finally:
