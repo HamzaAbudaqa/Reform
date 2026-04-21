@@ -207,43 +207,72 @@ function HeatmapPageInner() {
   }, [])
 
   const [refreshingShots, setRefreshingShots] = useState(false)
-  // Kick every page's screenshot back to "unset" and schedule fresh
-  // Playwright captures server-side, then tight-poll /pages until the
-  // captures finish so the UI swaps stale → fresh without the user
-  // needing to reload.
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+  // Force a fresh Playwright capture of the currently-selected page and
+  // any other pages in parallel. We hit the SYNCHRONOUS per-page endpoint
+  // (/pages/{id}/screenshot) for the visible page so the user gets a
+  // guaranteed response — either a new screenshot URL or a real error —
+  // within one Playwright cycle. The fire-and-forget site-wide endpoint
+  // was failing silently when the background capture hit an issue (Vercel
+  // preview returning a redirect, Playwright binary missing on the
+  // worker, S3 creds drift, etc.) and leaving the UI stuck on "Capturing…"
+  // forever with nothing to surface.
   const refreshScreenshots = useCallback(async () => {
     if (!site || !githubUserId) return
     setRefreshingShots(true)
-    try {
-      const res = await fetch(apiUrl(`/api/heatmap/sites/${site.id}/refresh-screenshots`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ github_user_id: githubUserId }),
-      })
-      if (!res.ok) return
-      // Optimistically blank the local screenshot URLs so the "Capturing…"
-      // affordance kicks in immediately.
-      setPages(prev => prev.map(p => ({ ...p, screenshotUrl: '' })))
+    setRefreshError(null)
 
-      // Tight-poll /pages until every page has a fresh screenshot URL
-      // or we hit the 90s ceiling. Playwright captures run in parallel
-      // in the background, so a small site typically finishes inside
-      // 20s; the wider window covers slower cold-starts. We can't rely
-      // solely on the main 10s poll — the request succeeded but the
-      // user's tab would sit on the stale "Capturing…" state for up to
-      // a full interval.
-      const deadline = Date.now() + 90_000
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 3_000))
-        const fetchPages = fetchPagesRef.current
-        if (!fetchPages) break
-        const next = await fetchPages()
-        if (next && next.length > 0 && next.every((p: HeatmapPage) => !!p.screenshotUrl)) break
+    // Page-list to re-capture. Prioritize the selected page first so the
+    // visible card flips fresh ASAP; do the rest after so the full
+    // dashboard isn't stuck on a one-page sync.
+    const current = pagesRef.current
+    const ordered = selectedPageId
+      ? [
+          ...current.filter(p => p.id === selectedPageId),
+          ...current.filter(p => p.id !== selectedPageId),
+        ]
+      : current
+
+    try {
+      let firstError: string | null = null
+      for (const p of ordered) {
+        // Optimistic blank so the spinner kicks in per-row.
+        setPages(prev => prev.map(row => row.id === p.id ? { ...row, screenshotUrl: '' } : row))
+
+        const res = await fetch(apiUrl(`/api/heatmap/pages/${p.id}/screenshot`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ github_user_id: githubUserId }),
+        })
+        if (!res.ok) {
+          // Parse a useful error — the backend returns 502 with
+          // {"detail": "..."} for "page is 404ing / unreachable".
+          let detail = `Capture failed (${res.status})`
+          try {
+            const body = await res.json() as { detail?: string }
+            if (body?.detail) detail = body.detail
+          } catch { /* body wasn't JSON */ }
+          if (!firstError) firstError = `${p.path}: ${detail}`
+          // Keep the blanked state — the next refresh attempt can retry.
+          continue
+        }
+        const data = await res.json() as {
+          screenshot_url: string
+          page_height_px: number
+        }
+        setPages(prev => prev.map(row =>
+          row.id === p.id
+            ? { ...row, screenshotUrl: data.screenshot_url, pageHeightPx: data.page_height_px }
+            : row,
+        ))
       }
-    } catch { /* non-fatal — user can retry */ } finally {
+      if (firstError) setRefreshError(firstError)
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
+    } finally {
       setRefreshingShots(false)
     }
-  }, [site, githubUserId])
+  }, [site, githubUserId, selectedPageId])
 
   const totalSessions = heatmap?.totalSessions ?? 0
   const hasEnoughData = totalSessions >= MIN_SESSIONS_FOR_HEATMAP
@@ -334,7 +363,7 @@ function HeatmapPageInner() {
                   {!selectedPage.screenshotUrl && (
                     <span className="inline-flex items-center gap-1.5 text-neutral-400">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
-                      Capturing…
+                      {refreshingShots ? 'Capturing from live site…' : 'Capturing…'}
                     </span>
                   )}
                 </div>
@@ -351,6 +380,26 @@ function HeatmapPageInner() {
                   {refreshingShots ? 'Refreshing…' : 'Refresh from live site'}
                 </button>
               </div>
+              {refreshError && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900">
+                  <svg className="mt-0.5 shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium">Couldn&apos;t refresh — </span>
+                    <span>{refreshError}</span>
+                  </div>
+                  <button
+                    onClick={() => setRefreshError(null)}
+                    className="flex-shrink-0 text-amber-700 hover:text-amber-950"
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               {loadingHeatmap && (
                 <div className="mt-3 text-[11px] text-neutral-400">Updating heatmap…</div>
               )}
