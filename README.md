@@ -70,3 +70,6 @@ Reform was built collaboratively for LotusHacks 2026 in Vietnam, where the team 
 ## Contributors
 
 Built by the Reform team. See the repository's contributor list and commit history for individual contributions.
+
+
+<img width="1045" height="692" alt="Screenshot 2026-11-16 at 11 35 45 AM" src="https://github.com/user-attachments/assets/204ce12a-9006-4562-9919-313dd4d078ef" />
